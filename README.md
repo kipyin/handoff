@@ -19,8 +19,10 @@ Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
 uv sync
 
 # Run the app
-uv run streamlit run app.py
+uv run streamlit run app.py --server.baseUrlPath todo
 ```
+
+For local development, pass `--server.baseUrlPath todo` so the app is served under `/todo` (for example: `http://localhost:8501/todo`).
 
 By default, the SQLite database is stored in your per-user data directory so app updates do not overwrite your data (for example on Windows: `%APPDATA%\todo-app\todo.db`). You can override the location by setting the `TODO_APP_DB_PATH` environment variable before starting the app.
 
@@ -52,7 +54,7 @@ The app uses **loguru** for logging (to standard output by default).
 - **During development**, run the app from a terminal to see logs as you interact:
 
   ```bash
-  uv run streamlit run app.py
+  uv run streamlit run app.py --server.baseUrlPath todo
   ```
 
 - **What gets logged** (non-exhaustive):
@@ -71,7 +73,7 @@ On Windows you can build a self-contained zip that bundles an embedded Python ru
 uv run python build_zip.py
 ```
 
-This produces a zip under `dist/` (named like `todo-app-2026.2.0-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app. The SQLite database is still stored in your user data directory, not inside the extracted folder.
+This produces a zip under `dist/` (named like `todo-app-2026.2.0-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app (the launcher already includes `--server.baseUrlPath todo`). The SQLite database is still stored in your user data directory, not inside the extracted folder.
 
 ## Development
 

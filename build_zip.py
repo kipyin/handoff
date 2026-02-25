@@ -205,7 +205,7 @@ def _write_run_bat() -> None:
         set PYTHONHOME=%SCRIPT_DIR%python
         set PYTHONPATH=%SCRIPT_DIR%;%SCRIPT_DIR%src
 
-        "%SCRIPT_DIR%python\python.exe" -m streamlit run app.py
+        "%SCRIPT_DIR%python\python.exe" -m streamlit run app.py --server.baseUrlPath todo
         endlocal
         """
     ).lstrip()
