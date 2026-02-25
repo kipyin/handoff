@@ -3,7 +3,7 @@ name = "todo-app"
 version = "2026.2.0"
 description = "Minimal to-do app for managing tasks across engagements (projects)."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "streamlit>=1.40.0",
     "sqlmodel>=0.0.22",
