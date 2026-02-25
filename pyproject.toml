@@ -1,0 +1,39 @@
+[project]
+name = "todo-app"
+version = "2026.2.0"
+description = "Minimal to-do app for managing tasks across engagements (projects)."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit>=1.40.0",
+    "sqlmodel>=0.0.22",
+    "loguru>=0.7.0",
+    "platformdirs>=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.8.0", "pytest>=8.0.0"]
+
+[dependency-groups]
+dev = ["ruff>=0.8.0", "pytest>=8.0.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/todo_app"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
