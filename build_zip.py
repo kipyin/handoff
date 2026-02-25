@@ -1,7 +1,19 @@
-"""Build a Windows-only zip distribution with an embedded Python runtime.
+"""Build a Windows-only zip with an embedded Python runtime.
+
+This script creates a self-contained Windows folder that bundles:
+
+- A Python embedded distribution matching the host interpreter version.
+- All runtime dependencies needed by the Streamlit to-do app.
+- The application code (`app.py` and `src/todo_app`).
+- A `run.bat` launcher that starts the app with `streamlit run app.py`.
 
 Usage:
     uv run python build_zip.py
+
+Prerequisites:
+- Windows host.
+- `uv` CLI available on PATH.
+- Host Python version compatible with the embedded distribution (e.g. 3.13.7).
 """
 
 from __future__ import annotations
@@ -24,8 +36,7 @@ APP_FOLDER_NAME = "todo-app"
 APP_BUILD_DIR = BUILD_ROOT / APP_FOLDER_NAME
 PYTHON_DIR = APP_BUILD_DIR / "python"
 
-# Keep in sync with pyproject requires-python (>=3.11)
-PY_VERSION = "3.11.9"
+PY_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
 EMBED_ZIP_NAME = f"python-{PY_VERSION}-embed-amd64.zip"
 EMBED_ZIP_URL = f"https://www.python.org/ftp/python/{PY_VERSION}/{EMBED_ZIP_NAME}"
 EMBED_ZIP_PATH = BUILD_ROOT / EMBED_ZIP_NAME
@@ -42,7 +53,26 @@ def _read_project_metadata() -> tuple[str, str]:
     return name, version
 
 
+def _get_runtime_deps() -> list[str]:
+    """Return the list of runtime dependencies from pyproject.toml.
+
+    Reads `[project.dependencies]` so the embedded environment matches the
+    main application's runtime requirements.
+    """
+    pyproject = ROOT / "pyproject.toml"
+    with pyproject.open("rb") as f:
+        data = tomllib.load(f)
+    project = data.get("project", {})
+    deps = project.get("dependencies", []) or []
+    return list(deps)
+
+
 def _prepare_dirs() -> None:
+    """Create a clean build directory and ensure dist directory exists.
+
+    Removes the existing application build directory under `build/` and then
+    recreates it, along with the `dist/` output directory.
+    """
     if APP_BUILD_DIR.exists():
         shutil.rmtree(APP_BUILD_DIR, ignore_errors=True)
     APP_BUILD_DIR.mkdir(parents=True, exist_ok=True)
@@ -50,6 +80,11 @@ def _prepare_dirs() -> None:
 
 
 def _download_embedded_python() -> None:
+    """Download the embedded Python zip for the configured version if missing.
+
+    The archive is cached under `build/` so subsequent runs reuse it unless
+    it is manually deleted.
+    """
     BUILD_ROOT.mkdir(parents=True, exist_ok=True)
     if EMBED_ZIP_PATH.exists():
         return
@@ -58,13 +93,8 @@ def _download_embedded_python() -> None:
         shutil.copyfileobj(resp, f)
 
 
-def _extract_embedded_python() -> None:
-    print("Extracting embedded Python...")
-    PYTHON_DIR.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(EMBED_ZIP_PATH, "r") as zf:
-        zf.extractall(PYTHON_DIR)
-
-    # Configure pythonXX._pth so that Lib/site-packages is on sys.path.
+def _configure_pth_file() -> None:
+    """Configure `pythonXX._pth` so Lib/site-packages and current dir are on sys.path."""
     major_minor = "".join(PY_VERSION.split(".")[:2])
     pth_name = f"python{major_minor}._pth"
     pth_path = PYTHON_DIR / pth_name
@@ -86,6 +116,21 @@ def _extract_embedded_python() -> None:
             new_lines.append("import site")
         pth_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
+
+def _extract_embedded_python() -> None:
+    """Extract the embedded Python zip and ensure site-packages is usable.
+
+    Unpacks the embedded distribution into `PYTHON_DIR`, adjusts the
+    `pythonXX._pth` file to allow imports from `Lib/site-packages`, and
+    ensures the `Lib/site-packages` directory exists for dependency installs.
+    """
+    print("Extracting embedded Python...")
+    PYTHON_DIR.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(EMBED_ZIP_PATH, "r") as zf:
+        zf.extractall(PYTHON_DIR)
+
+    _configure_pth_file()
+
     # Ensure Lib/site-packages exists for target installs.
     site_packages = PYTHON_DIR / "Lib" / "site-packages"
     site_packages.mkdir(parents=True, exist_ok=True)
@@ -99,7 +144,6 @@ def _install_deps_into_embedded() -> None:
     used to run this script.
     """
     site_packages = PYTHON_DIR / "Lib" / "site-packages"
-    reqs = ["streamlit>=1.40.0", "sqlmodel>=0.0.22", "loguru>=0.7.0", "platformdirs>=4.0.0"]
     print("Installing dependencies into embedded Python site-packages...")
 
     uv_cmd = shutil.which("uv")
@@ -110,23 +154,25 @@ def _install_deps_into_embedded() -> None:
         )
 
     embedded_python = PYTHON_DIR / "python.exe"
-
+    reqs = _get_runtime_deps()
     for req in reqs:
         print(f"  - {req}")
-        cmd = [
-            uv_cmd,
-            "pip",
-            "install",
-            "--python",
-            str(embedded_python),
-            req,
-            "-t",
-            str(site_packages),
-        ]
-        subprocess.run(cmd, check=True)
+
+    cmd = [
+        uv_cmd,
+        "pip",
+        "install",
+        "--python",
+        str(embedded_python),
+        "-t",
+        str(site_packages),
+        *reqs,
+    ]  # noqa: E501
+    subprocess.run(cmd, check=True)
 
 
 def _copy_app_code() -> None:
+    """Copy application entrypoint and package into the build directory."""
     print("Copying application code...")
     shutil.copy2(ROOT / "app.py", APP_BUILD_DIR / "app.py")
     src_pkg = ROOT / "src" / "todo_app"
@@ -137,6 +183,7 @@ def _copy_app_code() -> None:
 
 
 def _write_run_bat() -> None:
+    """Write a `run.bat` launcher that starts the Streamlit app."""
     print("Writing run.bat launcher...")
     content = textwrap.dedent(
         r"""
@@ -157,6 +204,12 @@ def _write_run_bat() -> None:
 
 
 def _make_zip(name: str, version: str) -> Path:
+    """Create the final zip archive under `dist/` and return its path.
+
+    Args:
+        name: Application name from `pyproject.toml`.
+        version: Application version from `pyproject.toml`.
+    """
     zip_name = f"{name}-{version}-windows-embed.zip"
     dist_path = DIST_ROOT / zip_name
     if dist_path.exists():
@@ -171,6 +224,7 @@ def _make_zip(name: str, version: str) -> Path:
 
 
 def main() -> None:
+    """Build the Windows embedded zip distribution for the to-do app."""
     name, version = _read_project_metadata()
     print(f"Building {name} {version} (Windows embedded Python zip)...")
     _prepare_dirs()
