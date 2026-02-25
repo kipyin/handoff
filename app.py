@@ -116,13 +116,15 @@ def view_by_project() -> None:
     else:
         df = pd.DataFrame(columns=["id", "name", "status", "helper", "deadline", "notes"])
 
+    orig_ids = df["id"].copy() if "id" in df.columns else pd.Series(dtype="float64")
+    df_display = df.drop(columns=["id"]) if "id" in df.columns else df
+
     edited_df = st.data_editor(
-        df,
+        df_display,
         num_rows="dynamic",
         key=f"todos_project_{project_id}",
         hide_index=True,
         column_config={
-            "id": st.column_config.NumberColumn("ID", disabled=True),
             "name": st.column_config.TextColumn("Name"),
             "status": st.column_config.SelectboxColumn(
                 "Status",
@@ -136,7 +138,8 @@ def view_by_project() -> None:
     )
 
     if st.button("Save changes", type="primary"):
-        for _, row in edited_df.iterrows():
+        id_by_index = orig_ids.reindex(edited_df.index)
+        for idx, row in edited_df.iterrows():
             name_val = (row.get("name") or "").strip()
             if not name_val:
                 # Ignore completely empty rows
@@ -166,7 +169,7 @@ def view_by_project() -> None:
             status_str = (row.get("status") or TodoStatus.DELEGATED.value).strip()
             status_val = TodoStatus(status_str)
 
-            todo_id = row.get("id")
+            todo_id = id_by_index.get(idx)
             if pd.isna(todo_id) or todo_id is None:
                 # New todo
                 create_todo(
@@ -196,10 +199,19 @@ def _save_editable_table_with_project(
     edited_df: pd.DataFrame,
     projects: list,
     default_project_id: int | None,
+    orig_ids: pd.Series | None = None,
 ) -> None:
-    """Save edited table rows that have a project column. Creates or updates todos."""
+    """Save edited table rows that have a project column. Creates or updates todos.
+
+    Args:
+        edited_df: DataFrame returned from the editable table (without ID column).
+        projects: List of available projects.
+        default_project_id: Fallback project ID if none is set on the row.
+        orig_ids: Optional Series mapping original row index to todo IDs.
+    """
     project_by_name = {p.name: p.id for p in projects}
-    for _, row in edited_df.iterrows():
+    id_by_index = orig_ids.reindex(edited_df.index) if orig_ids is not None else None
+    for idx, row in edited_df.iterrows():
         name_val = (row.get("name") or "").strip()
         if not name_val:
             continue
@@ -222,7 +234,7 @@ def _save_editable_table_with_project(
         status_str = (row.get("status") or TodoStatus.DELEGATED.value).strip()
         status_val = TodoStatus(status_str)
 
-        todo_id = row.get("id")
+        todo_id = id_by_index.get(idx) if id_by_index is not None else None
         if pd.isna(todo_id) or todo_id is None:
             create_todo(
                 project_id=project_id,
@@ -300,8 +312,10 @@ def view_by_helper() -> None:
             columns=["id", "project", "name", "status", "helper", "deadline", "notes"]
         )
 
+    orig_ids = df["id"].copy() if "id" in df.columns else pd.Series(dtype="float64")
+    df_display = df.drop(columns=["id"]) if "id" in df.columns else df
+
     column_config = {
-        "id": st.column_config.NumberColumn("ID", disabled=True),
         "project": st.column_config.SelectboxColumn(
             "Project",
             options=project_names,
@@ -319,7 +333,7 @@ def view_by_helper() -> None:
     }
 
     edited_df = st.data_editor(
-        df,
+        df_display,
         num_rows="dynamic",
         key="todos_helper",
         hide_index=True,
@@ -328,7 +342,10 @@ def view_by_helper() -> None:
 
     if st.button("Save changes", type="primary", key="save_helper"):
         _save_editable_table_with_project(
-            edited_df, projects, default_project_id=projects[0].id if projects else None
+            edited_df,
+            projects,
+            default_project_id=projects[0].id if projects else None,
+            orig_ids=orig_ids,
         )
         st.success("Todos saved.")
         st.rerun()
@@ -382,8 +399,10 @@ def view_by_timeframe() -> None:
             columns=["id", "project", "name", "status", "helper", "deadline", "notes"]
         )
 
+    orig_ids = df["id"].copy() if "id" in df.columns else pd.Series(dtype="float64")
+    df_display = df.drop(columns=["id"]) if "id" in df.columns else df
+
     column_config = {
-        "id": st.column_config.NumberColumn("ID", disabled=True),
         "project": st.column_config.SelectboxColumn(
             "Project",
             options=project_names,
@@ -401,7 +420,7 @@ def view_by_timeframe() -> None:
     }
 
     edited_df = st.data_editor(
-        df,
+        df_display,
         num_rows="dynamic",
         key="todos_timeframe",
         hide_index=True,
@@ -410,7 +429,10 @@ def view_by_timeframe() -> None:
 
     if st.button("Save changes", type="primary", key="save_timeframe"):
         _save_editable_table_with_project(
-            edited_df, projects, default_project_id=projects[0].id if projects else None
+            edited_df,
+            projects,
+            default_project_id=projects[0].id if projects else None,
+            orig_ids=orig_ids,
         )
         st.success("Todos saved.")
         st.rerun()
