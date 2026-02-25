@@ -14,7 +14,7 @@ The app uses **SQLite** (single file, no server). It’s a good fit for:
 
 ## Setup
 
-Requires Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 # Install dependencies (creates .venv and installs packages)
@@ -24,7 +24,7 @@ uv sync
 uv run streamlit run app.py
 ```
 
-The database file is created at `src/todo_app/todo.db` on first run.
+By default, the SQLite database is stored in your per-user data directory so app updates do not overwrite your data (for example on Windows: `%APPDATA%\todo-app\todo.db`). You can override the location by setting the `TODO_APP_DB_PATH` environment variable before starting the app.
 
 ## Features
 
@@ -40,6 +40,16 @@ The database file is created at `src/todo_app/todo.db` on first run.
    - **By project** – Select a project; done todos are grayed out; due today or overdue are highlighted in red.
    - **By helper** – Type a helper name to see all their tasks across projects.
    - **By timeframe** – Choose “Today”, “This week”, or a custom range to see all tasks in that period.
+
+## Windows embedded zip build (optional)
+
+On Windows you can build a self-contained zip that bundles an embedded Python runtime, dependencies, and the app code:
+
+```bash
+uv run python build_zip.py
+```
+
+This produces a zip under `dist/` (named like `todo-app-2026.2.0-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app. The SQLite database is still stored in your user data directory, not inside the extracted folder.
 
 ## Development
 
