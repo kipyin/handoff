@@ -100,8 +100,11 @@ def _configure_pth_file() -> None:
     pth_path = PYTHON_DIR / pth_name
     if pth_path.exists():
         lines = pth_path.read_text(encoding="utf-8").splitlines()
-        # Ensure Lib\site-packages and current dir are listed, and import site is enabled.
-        wanted_paths = {"Lib\\site-packages", "."}
+        # Include app root and src so `import todo_app` resolves from bundled source.
+        # In embedded Python mode, `PYTHONPATH` is ignored when a `pythonXX._pth`
+        # file is present, and relative entries are resolved from the `python/`
+        # directory (where this file lives), not from the current working dir.
+        wanted_paths = {"Lib\\site-packages", ".", "..", "..\\src"}
         new_lines: list[str] = []
         for line in lines:
             stripped = line.strip()
@@ -166,19 +169,25 @@ def _install_deps_into_embedded() -> None:
         str(embedded_python),
         "-t",
         str(site_packages),
+        "--link-mode=copy",
         *reqs,
     ]  # noqa: E501
     subprocess.run(cmd, check=True)
 
 
 def _copy_app_code() -> None:
-    """Copy application entrypoint and package into the build directory."""
+    """Copy application entrypoint and package into the build directory.
+
+    Any existing copy under the build directory is removed first. The removal
+    ignores errors to tolerate transient Windows file locks (for example on
+    `__pycache__`), mirroring a `Remove-Item -Recurse -Force` style cleanup.
+    """
     print("Copying application code...")
     shutil.copy2(ROOT / "app.py", APP_BUILD_DIR / "app.py")
     src_pkg = ROOT / "src" / "todo_app"
     dst_pkg = APP_BUILD_DIR / "src" / "todo_app"
     if dst_pkg.exists():
-        shutil.rmtree(dst_pkg)
+        shutil.rmtree(dst_pkg, ignore_errors=True)
     shutil.copytree(src_pkg, dst_pkg)
 
 
