@@ -10,8 +10,6 @@ The app uses **SQLite** (single file, no server). It’s a good fit for:
 - Simple CRUD (projects + todos)
 - No extra setup
 
-**DuckDB** is better for analytics and large read-heavy workloads; for this app SQLite is simpler and sufficient.
-
 ## Setup
 
 Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
