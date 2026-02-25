@@ -3,6 +3,7 @@
 from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
+from loguru import logger
 import streamlit as st
 
 from todo_app.data import (
@@ -46,10 +47,15 @@ def render_todo_row(todo, project_name: str | None = None, show_project: bool = 
 
     with st.container():
         if bg:
-            st.markdown(f'<div style="background: {bg}; padding: 0.5rem 0.75rem; border-radius: 6px; margin-bottom: 4px;">', unsafe_allow_html=True)
+            st.markdown(
+                f'<div style="background: {bg}; padding: 0.5rem 0.75rem; border-radius: 6px; margin-bottom: 4px;">',
+                unsafe_allow_html=True,
+            )
         cols = st.columns([3, 1, 1, 1, 1])
         with cols[0]:
-            name_style = "opacity: 0.6; text-decoration: line-through;" if (is_done or is_canceled) else ""
+            name_style = (
+                "opacity: 0.6; text-decoration: line-through;" if (is_done or is_canceled) else ""
+            )
             label = todo.name
             if show_project and project_name:
                 label = f"[{project_name}] {todo.name}"
@@ -75,6 +81,7 @@ def view_by_project() -> None:
     st.subheader("View by project")
     projects = list_projects()
     if not projects:
+        logger.info("View by project loaded with no projects")
         st.info("No projects yet. Create one below.")
         return
 
@@ -88,12 +95,16 @@ def view_by_project() -> None:
                 break
     sel = st.selectbox("Project", options, index=idx, key="proj_sel")
     if sel == "-- Select a project --":
+        logger.info("No project selected in project view")
         st.session_state.selected_project_id = None
         return
     project_id = next(p.id for p in projects if p.name == sel)
     st.session_state.selected_project_id = project_id
     project = get_project(project_id)
     if not project:
+        logger.warning(
+            "Project {project_id} not found when rendering project view", project_id=project_id
+        )
         return
     todos = get_todos_by_project(project_id)
     st.markdown(f"**{project.name}** — {len(todos)} todo(s)")
@@ -138,6 +149,11 @@ def view_by_project() -> None:
     )
 
     if st.button("Save changes", type="primary"):
+        logger.info(
+            "Saving todos for project view for project {project_id} with {row_count} rows",
+            project_id=project_id,
+            row_count=len(edited_df),
+        )
         id_by_index = orig_ids.reindex(edited_df.index)
         for idx, row in edited_df.iterrows():
             name_val = (row.get("name") or "").strip()
@@ -180,6 +196,14 @@ def view_by_project() -> None:
                     helper=helper_val,
                     notes=notes_val,
                 )
+                logger.info(
+                    "Created todo in project {project_id}: {name} (status={status}, helper={helper}, deadline={deadline})",
+                    project_id=project_id,
+                    name=name_val,
+                    status=status_val.value,
+                    helper=helper_val,
+                    deadline=dl_dt,
+                )
             else:
                 # Existing todo update
                 update_todo(
@@ -189,6 +213,14 @@ def view_by_project() -> None:
                     deadline=dl_dt,
                     helper=helper_val,
                     notes=notes_val,
+                )
+                logger.info(
+                    "Updated todo {todo_id} in project {project_id} (status={status}, helper={helper}, deadline={deadline})",
+                    todo_id=int(todo_id),
+                    project_id=project_id,
+                    status=status_val.value,
+                    helper=helper_val,
+                    deadline=dl_dt,
                 )
 
         st.success("Todos saved.")
@@ -244,6 +276,14 @@ def _save_editable_table_with_project(
                 helper=helper_val,
                 notes=notes_val,
             )
+            logger.info(
+                "Created todo in project {project_id}: {name} (status={status}, helper={helper}, deadline={deadline})",
+                project_id=project_id,
+                name=name_val,
+                status=status_val.value,
+                helper=helper_val,
+                deadline=dl_dt,
+            )
         else:
             update_todo(
                 int(todo_id),
@@ -254,6 +294,14 @@ def _save_editable_table_with_project(
                 helper=helper_val,
                 notes=notes_val,
             )
+            logger.info(
+                "Updated todo {todo_id} in project {project_id} (status={status}, helper={helper}, deadline={deadline})",
+                todo_id=int(todo_id),
+                project_id=project_id,
+                status=status_val.value,
+                helper=helper_val,
+                deadline=dl_dt,
+            )
 
 
 def view_by_helper() -> None:
@@ -261,6 +309,7 @@ def view_by_helper() -> None:
     st.subheader("View by helper")
     projects = list_projects()
     if not projects:
+        logger.info("View by helper loaded with no projects")
         st.info("No projects yet. Create one in the sidebar.")
         return
 
@@ -288,6 +337,7 @@ def view_by_helper() -> None:
         st.info("Choose a helper or type a name to see all their tasks across projects.")
         return
 
+    logger.info("Viewing todos by helper {helper}", helper=query_name)
     todos = get_todos_by_helper(query_name)
     project_names = [p.name for p in projects]
 
@@ -341,6 +391,11 @@ def view_by_helper() -> None:
     )
 
     if st.button("Save changes", type="primary", key="save_helper"):
+        logger.info(
+            "Saving todos from helper view for helper {helper} with {row_count} rows",
+            helper=query_name,
+            row_count=len(edited_df),
+        )
         _save_editable_table_with_project(
             edited_df,
             projects,
@@ -350,7 +405,9 @@ def view_by_helper() -> None:
         st.success("Todos saved.")
         st.rerun()
 
-    st.caption(f"**Tasks for “{query_name}”** — add rows below to create todos in the chosen project.")
+    st.caption(
+        f"**Tasks for “{query_name}”** — add rows below to create todos in the chosen project."
+    )
 
 
 def view_by_timeframe() -> None:
@@ -362,7 +419,9 @@ def view_by_timeframe() -> None:
         return
 
     today = datetime.now(timezone.utc).date()
-    preset = st.radio("Period", ["Today", "This week", "Custom"], horizontal=True, key="timeframe_preset")
+    preset = st.radio(
+        "Period", ["Today", "This week", "Custom"], horizontal=True, key="timeframe_preset"
+    )
     if preset == "Today":
         start = datetime.combine(today, datetime.min.time())
         end = datetime.combine(today, datetime.max.time())
@@ -375,6 +434,12 @@ def view_by_timeframe() -> None:
         start = datetime.combine(start_d, datetime.min.time())
         end = datetime.combine(end_d, datetime.max.time())
 
+    logger.info(
+        "Viewing todos by timeframe preset {preset} from {start} to {end}",
+        preset=preset,
+        start=start,
+        end=end,
+    )
     todos = get_todos_by_timeframe(start, end)
     project_names = [p.name for p in projects]
 
@@ -428,6 +493,12 @@ def view_by_timeframe() -> None:
     )
 
     if st.button("Save changes", type="primary", key="save_timeframe"):
+        logger.info(
+            "Saving todos from timeframe view with {row_count} rows for range {start} to {end}",
+            row_count=len(edited_df),
+            start=start,
+            end=end,
+        )
         _save_editable_table_with_project(
             edited_df,
             projects,
@@ -448,13 +519,16 @@ def sidebar() -> None:
         ["By project", "By helper", "By timeframe"],
         key="view_radio",
     )
+    logger.info("Switched main view to {view}", view=st.session_state.view)
     st.sidebar.divider()
     st.sidebar.subheader("Create project")
     with st.sidebar.form("new_project"):
         new_name = st.text_input("Project name", key="new_proj_name")
         if st.form_submit_button("Create"):
             if new_name and new_name.strip():
-                create_project(new_name.strip())
+                project_name = new_name.strip()
+                create_project(project_name)
+                logger.info("Created project {name}", name=project_name)
                 st.sidebar.success("Project created.")
                 st.rerun()
 

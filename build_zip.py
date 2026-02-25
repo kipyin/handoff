@@ -250,9 +250,10 @@ def main() -> None:
     print("  1. Extract the zip.")
     print("  2. Open the extracted folder.")
     print("  3. Double-click run.bat.")
-    print("Your SQLite database will be stored in your user data directory (e.g. %APPDATA%\\todo-app\\todo.db).")
+    print(
+        "Your SQLite database will be stored in your user data directory (e.g. %APPDATA%\\todo-app\\todo.db)."
+    )
 
 
 if __name__ == "__main__":
     main()
-

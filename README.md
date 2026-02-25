@@ -39,6 +39,30 @@ By default, the SQLite database is stored in your per-user data directory so app
    - **By helper** – Type a helper name to see all their tasks across projects.
    - **By timeframe** – Choose “Today”, “This week”, or a custom range to see all tasks in that period.
 
+## Main flows
+
+- **By project**: Select a project in the main view to see all its todos. Edit fields inline in the table and click **Save changes** to create new todos or update existing ones for that project.
+- **By helper**: Choose or type a helper name to see their tasks across all projects. Use the editable table (including the Project column) to adjust status, deadlines, and assignments, then save.
+- **By timeframe**: Pick a preset (Today/This week) or a custom date range to list todos whose deadlines fall in that window. Edits in the table are applied back to the underlying projects when you save.
+
+## Logging & debugging
+
+The app uses **loguru** for logging (to standard output by default).
+
+- **During development**, run the app from a terminal to see logs as you interact:
+
+  ```bash
+  uv run streamlit run app.py
+  ```
+
+- **What gets logged** (non-exhaustive):
+  - View switches (By project / By helper / By timeframe)
+  - Project creation
+  - Creating and updating todos from any of the editable views
+  - High-level query info (for example, how many todos were fetched for a helper, project, or timeframe)
+
+For deeper diagnostics you can extend the existing `loguru` calls in `app.py`, `src/todo_app/data.py`, or `src/todo_app/db.py`.
+
 ## Windows embedded zip build (optional)
 
 On Windows you can build a self-contained zip that bundles an embedded Python runtime, dependencies, and the app code:

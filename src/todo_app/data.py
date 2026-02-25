@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
+from loguru import logger
 from sqlmodel import Session, select
 
 from todo_app.db import session_context
@@ -23,6 +24,9 @@ def create_project(name: str) -> Project:
         session.add(project)
         session.commit()
         session.refresh(project)
+        logger.info(
+            "Created project {project_id}: {name}", project_id=project.id, name=project.name
+        )
         return project
 
 
@@ -93,6 +97,7 @@ def update_todo(
     with session_context() as session:
         todo = session.get(Todo, todo_id)
         if not todo:
+            logger.warning("Todo {todo_id} not found for update", todo_id=todo_id)
             return None
         if project_id is not None:
             todo.project_id = project_id
@@ -109,6 +114,14 @@ def update_todo(
         session.add(todo)
         session.commit()
         session.refresh(todo)
+        logger.info(
+            "Updated todo {todo_id} in project {project_id} (status={status}, helper={helper}, deadline={deadline})",
+            todo_id=todo.id,
+            project_id=todo.project_id,
+            status=todo.status.value,
+            helper=todo.helper,
+            deadline=todo.deadline,
+        )
         return todo
 
 
@@ -120,7 +133,13 @@ def get_todos_by_project(project_id: int) -> list[Todo]:
             .where(Todo.project_id == project_id)
             .order_by(Todo.deadline.asc().nulls_last(), Todo.created_at.asc())
         )
-        return list(session.exec(stmt).all())
+        todos = list(session.exec(stmt).all())
+        logger.info(
+            "Fetched {count} todos for project {project_id}",
+            count=len(todos),
+            project_id=project_id,
+        )
+        return todos
 
 
 def get_todos_by_helper(helper_name: str) -> list[Todo]:
@@ -135,6 +154,11 @@ def get_todos_by_helper(helper_name: str) -> list[Todo]:
         # Load project for display
         for t in todos:
             t.project = session.get(Project, t.project_id)
+        logger.info(
+            "Fetched {count} todos for helper {helper}",
+            count=len(todos),
+            helper=helper_name,
+        )
         return todos
 
 
@@ -155,6 +179,12 @@ def get_todos_by_timeframe(
         todos = list(session.exec(stmt).all())
         for t in todos:
             t.project = session.get(Project, t.project_id)
+        logger.info(
+            "Fetched {count} todos between {start} and {end}",
+            count=len(todos),
+            start=start,
+            end=end,
+        )
         return todos
 
 

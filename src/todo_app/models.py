@@ -8,7 +8,10 @@ from sqlmodel import Field, Relationship, SQLModel
 
 
 class TodoStatus(str, Enum):
-    """Status of a todo item."""
+    """Status of a todo item.
+
+    Values are persisted as strings in the database and used for filtering and display.
+    """
 
     DELEGATED = "delegated"
     DONE = "done"
@@ -29,7 +32,11 @@ class Project(SQLModel, table=True):
 
 
 class Todo(SQLModel, table=True):
-    """A single todo item belonging to a project."""
+    """A single todo item belonging to a project.
+
+    The ``helper`` field is the person responsible for the todo; ``delegated`` status
+    typically means the task is outstanding and assigned to that helper.
+    """
 
     __tablename__ = "todo"
     __table_args__ = {"extend_existing": True}
