@@ -1,4 +1,30 @@
-"""Streamlit UI composition for the engagement to-do app."""
+"""Streamlit UI composition for the engagement to-do app.
+
+This module wires together the Streamlit layout and the data layer:
+
+- ``main(app_version)`` sets page config, initialises the database and session
+  state, renders the sidebar, and shows the single todos view.
+- ``sidebar()`` hosts project creation, rename/delete, and backup download
+  actions in the Streamlit sidebar.
+- ``view()`` renders a unified, filterable todos table and saves edits back
+  through helpers in :mod:`todo_app.data`.
+
+High-level flow:
+
+```mermaid
+flowchart TD
+    main --> sidebar
+    main --> view
+    view --> buildDataFrame["build todo DataFrame"]
+    buildDataFrame --> renderTable["render editable table"]
+    renderTable --> applyFilters["apply native filters"]
+    renderTable --> saveRows["validate & persist rows"]
+```
+
+The ``notes`` column supports free-form text. You can paste Markdown including
+links (for example ``[label](https://example.com)``) or image URLs; attachments
+or pictures should be stored as links inside the notes text.
+"""
 
 import json
 from datetime import date, datetime, timedelta
@@ -64,7 +90,6 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "deadline": todo.deadline.date() if todo.deadline else None,
             "notes": todo.notes or "",
             "created_at": todo.created_at,
-            "delete": False,
         }
         if include_project:
             row["project"] = todo.project.name if todo.project else ""
@@ -80,7 +105,6 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
         "deadline",
         "notes",
         "created_at",
-        "delete",
     ]
     if include_project:
         cols = [
@@ -92,7 +116,6 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "deadline",
             "notes",
             "created_at",
-            "delete",
         ]
     return pd.DataFrame(columns=cols)
 
@@ -232,36 +255,20 @@ def _save_rows(
     """Validate and persist edited rows, returning operation summary."""
     project_by_name = {project.name: project.id for project in projects}
 
-    summary = {"created": 0, "updated": 0, "deleted": 0, "skipped": 0, "errors": []}
+    summary = {
+        "created": 0,
+        "updated": 0,
+        "deleted": 0,
+        "skipped": 0,
+        "errors": [],
+        "created_ids": [],
+        "updated_ids": [],
+    }
 
     for row_no, row in enumerate(edited_df.to_dict("records"), start=1):
         todo_id_raw = row.get("__todo_id")
         is_existing = todo_id_raw is not None and not pd.isna(todo_id_raw)
         todo_id = int(todo_id_raw) if is_existing else None
-        is_delete = bool(row.get("delete", False))
-
-        if is_delete:
-            if not is_existing:
-                summary["skipped"] += 1
-                summary["errors"].append(f"Row {row_no}: cannot delete unsaved row.")
-                continue
-            delete_ok = delete_todo(int(todo_id))
-            if delete_ok:
-                summary["deleted"] += 1
-            else:
-                summary["skipped"] += 1
-                summary["errors"].append(
-                    f"Row {row_no}: todo id {int(todo_id)} not found for delete."
-                )
-            logger.info(
-                "Save action delete context={context} "
-                "row={row_no} todo_id={todo_id} success={success}",
-                context=context_label,
-                row_no=row_no,
-                todo_id=int(todo_id) if is_existing else None,
-                success=delete_ok,
-            )
-            continue
 
         name_val = (row.get("name") or "").strip()
         if not name_val:
@@ -312,11 +319,14 @@ def _save_rows(
                 summary["errors"].append(f"Row {row_no}: todo id {todo_id} not found for update.")
             else:
                 summary["updated"] += 1
+                summary["updated_ids"].append(todo_id)
                 logger.info(
-                    "Save action update context={context} row={row_no} todo_id={todo_id}",
+                    "Save action update context={context} row={row_no} "
+                    "todo_id={todo_id} name={name!r}",
                     context=context_label,
                     row_no=row_no,
                     todo_id=todo_id,
+                    name=name_val,
                 )
         else:
             created = create_todo(
@@ -328,11 +338,13 @@ def _save_rows(
                 notes=notes_val,
             )
             summary["created"] += 1
+            summary["created_ids"].append(created.id)
             logger.info(
-                "Save action create context={context} row={row_no} todo_id={todo_id}",
+                "Save action create context={context} row={row_no} todo_id={todo_id} name={name!r}",
                 context=context_label,
                 row_no=row_no,
                 todo_id=created.id,
+                name=name_val,
             )
 
     return summary
@@ -424,9 +436,7 @@ def _render_editable_table(
             st.rerun()
 
     column_order = ["project", "name", "status", "helper", "deadline", "notes"]
-    st.caption(
-        "Use the column menu (eye icon) to show the Delete column. Filter using the controls above."
-    )
+    st.caption("Filter using the controls above. Use row deletion in the table to remove todos.")
     edited_df = st.data_editor(
         display_df,
         num_rows="dynamic",
@@ -456,7 +466,6 @@ def _render_editable_table(
             ),
             "deadline": st.column_config.DateColumn("Deadline", format="distance"),
             "notes": st.column_config.TextColumn("Notes"),
-            "delete": st.column_config.CheckboxColumn("Delete"),
         },
     )
 
@@ -466,19 +475,71 @@ def _render_editable_table(
             context=context_label,
             rows=len(edited_df),
         )
+        deleted = 0
+        skipped_for_delete = 0
+        deleted_ids: list[int] = []
+        delete_errors: list[str] = []
+
+        editor_state_key = f"{key_prefix}_table"
+        editor_state = st.session_state.get(editor_state_key)
+        deleted_rows_indices: list[int] = []
+        if hasattr(editor_state, "get"):
+            deleted_rows_indices = editor_state.get("deleted_rows") or []
+
+        if deleted_rows_indices:
+            normalized_indices: list[int] = []
+            for raw_idx in deleted_rows_indices:
+                try:
+                    normalized_indices.append(int(raw_idx))
+                except (TypeError, ValueError):
+                    continue
+
+            seen_ids: set[int] = set()
+            for row_idx in normalized_indices:
+                if not 0 <= row_idx < len(display_df):
+                    continue
+                raw_id = display_df.iloc[row_idx].get("__todo_id")
+                if raw_id is None or pd.isna(raw_id):
+                    # Deleted row was never persisted; nothing to do.
+                    continue
+                todo_id = int(raw_id)
+                if todo_id in seen_ids:
+                    continue
+                seen_ids.add(todo_id)
+                delete_ok = delete_todo(todo_id)
+                if delete_ok:
+                    deleted += 1
+                    deleted_ids.append(todo_id)
+                else:
+                    skipped_for_delete += 1
+                    delete_errors.append(
+                        f"Row {row_idx + 1}: todo id {todo_id} not found for delete."
+                    )
+
         summary = _save_rows(
             edited_df,
             projects=projects,
             default_project_id=default_project_id,
             context_label=context_label,
         )
+        summary["deleted"] = summary.get("deleted", 0) + deleted
+        summary["skipped"] = summary.get("skipped", 0) + skipped_for_delete
+        if delete_errors:
+            summary.setdefault("errors", []).extend(delete_errors)
+
+        created_ids = summary.get("created_ids", [])
+        updated_ids = summary.get("updated_ids", [])
         logger.info(
-            "Save summary context={context} created={created} updated={updated} "
-            "deleted={deleted} skipped={skipped}",
+            "Save result context={context}: created={created} ids={created_ids}, "
+            "updated={updated} ids={updated_ids}, deleted={deleted} ids={deleted_ids}, "
+            "skipped={skipped}",
             context=context_label,
             created=summary["created"],
+            created_ids=created_ids,
             updated=summary["updated"],
+            updated_ids=updated_ids,
             deleted=summary["deleted"],
+            deleted_ids=deleted_ids,
             skipped=summary["skipped"],
         )
         success_msg = (
@@ -491,8 +552,8 @@ def _render_editable_table(
         st.rerun()
 
 
-def view_unified() -> None:
-    """View and edit todos in one unified table."""
+def view() -> None:
+    """View and edit todos in a single table."""
     st.subheader("Todos")
     projects = list_projects()
     if not projects:
@@ -504,8 +565,8 @@ def view_unified() -> None:
     _render_editable_table(
         source_df=df,
         projects=projects,
-        key_prefix="unified",
-        context_label="view=unified",
+        key_prefix="main",
+        context_label="view=main",
     )
 
 
@@ -608,5 +669,5 @@ def main(*, app_version: str) -> None:
     init_db()
     _init_session_state()
     sidebar(app_version=app_version)
-    logger.info("Rendering unified todo table view")
-    view_unified()
+    logger.info("Rendering main todo table view")
+    view()

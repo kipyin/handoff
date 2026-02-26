@@ -157,9 +157,10 @@ def delete_todo(todo_id: int) -> bool:
         if not todo:
             logger.warning("Todo {todo_id} not found for delete", todo_id=todo_id)
             return False
+        name = todo.name
         session.delete(todo)
         session.commit()
-        logger.info("Deleted todo {todo_id}", todo_id=todo_id)
+        logger.info("Deleted todo {todo_id} name={name!r}", todo_id=todo_id, name=name)
         return True
 
 
@@ -218,16 +219,37 @@ def query_todos(
         todos = list(session.exec(stmt).all())
         for todo in todos:
             todo.project = session.get(Project, todo.project_id)
-        logger.info(
-            "Queried {count} todos with project_ids={project_ids} helper={helper} "
-            "statuses={statuses} start={start} end={end}",
-            count=len(todos),
-            project_ids=project_ids,
-            helper=normalized_helper,
-            statuses=[s.value for s in statuses] if statuses else None,
-            start=start,
-            end=end,
+
+        filters_applied = any(
+            [
+                project_ids,
+                normalized_helper,
+                statuses,
+                start is not None,
+                end is not None,
+                normalized_search,
+            ]
         )
+        if filters_applied:
+            parts = []
+            if project_ids:
+                parts.append(f"project_ids={project_ids}")
+            if normalized_helper:
+                parts.append(f"helper={normalized_helper!r}")
+            if statuses:
+                parts.append(f"statuses={[s.value for s in statuses]}")
+            if start is not None:
+                parts.append(f"start={start.date()!s}")
+            if end is not None:
+                parts.append(f"end={end.date()!s}")
+            if normalized_search:
+                parts.append(f"search={normalized_search!r}")
+            logger.info(
+                "query_todos filters: {filters} -> {count} todos",
+                filters=", ".join(parts),
+                count=len(todos),
+            )
+
         return todos
 
 
