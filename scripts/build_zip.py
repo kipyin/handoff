@@ -1,19 +1,9 @@
 """Build a Windows-only zip with an embedded Python runtime.
 
-This script creates a self-contained Windows folder that bundles:
+This script is the moved version of the original `build_zip.py` and is
+intended to be used via the Typer CLI:
 
-- A Python embedded distribution matching the host interpreter version.
-- All runtime dependencies needed by the Streamlit to-do app.
-- The application code (`app.py` and `src/todo_app`).
-- A `run.bat` launcher that starts the app with `streamlit run app.py`.
-
-Usage:
-    uv run python build_zip.py
-
-Prerequisites:
-- Windows host.
-- `uv` CLI available on PATH.
-- Host Python version compatible with the embedded distribution (e.g. 3.13.7).
+    uv run python -m scripts.cli build-zip
 """
 
 from __future__ import annotations
@@ -28,8 +18,9 @@ from pathlib import Path
 
 import tomllib
 
+from . import ROOT
 
-ROOT = Path(__file__).resolve().parent
+
 BUILD_ROOT = ROOT / "build"
 DIST_ROOT = ROOT / "dist"
 APP_FOLDER_NAME = "todo-app"

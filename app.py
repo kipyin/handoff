@@ -15,9 +15,8 @@ from todo_app.ui_facade import (
     render_todos_page,
     setup,
 )
-
-# Keep this in sync with `[project].version` in pyproject.toml.
-APP_VERSION = "2026.2.7"
+from todo_app.updater import render_update_panel
+from todo_app.version import __version__ as APP_VERSION
 
 
 def _todos_page() -> None:
@@ -40,6 +39,7 @@ def _calendar_page() -> None:
 
 def main() -> None:
     """Run the Chaos Queue app using the Streamlit navigation API."""
+    render_update_panel(APP_VERSION)
     pages = [
         st.Page(_todos_page, title="Todos", icon="✅"),
         st.Page(_projects_page, title="Projects", icon="📁"),

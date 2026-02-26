@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT_PATH = ROOT / "pyproject.toml"
-APP_PATH = ROOT / "app.py"
+VERSION_PATH = ROOT / "src" / "todo_app" / "version.py"
 
 
 def _validate_version(value: str) -> str:
@@ -65,19 +65,36 @@ def _replace_project_version(pyproject_text: str, new_version: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _replace_app_version(app_text: str, new_version: str) -> str:
-    """Replace APP_VERSION literal in app.py."""
-    pattern = r'(?m)^(APP_VERSION\s*=\s*)"[^"]*"\s*$'
-    updated, count = re.subn(pattern, rf'\1"{new_version}"', app_text)
+def _replace_version_constant(version_text: str, new_version: str) -> str:
+    """Replace __version__ literal in the version module."""
+    pattern = r'(?m)^(__version__\s*=\s*)"[^"]*"\s*$'
+    updated, count = re.subn(pattern, rf'\1"{new_version}"', version_text)
     if count != 1:
-        raise RuntimeError("Could not find a unique APP_VERSION assignment in app.py.")
+        raise RuntimeError("Could not find a unique __version__ assignment in version.py.")
     return updated
+
+
+def bump_version(new_version: str) -> None:
+    """Update pyproject and version module to the given value.
+
+    Args:
+        new_version: Target version string (for example, ``2026.3.0``).
+    """
+    pyproject_original = PYPROJECT_PATH.read_text(encoding="utf-8")
+    version_original = VERSION_PATH.read_text(encoding="utf-8")
+
+    pyproject_updated = _replace_project_version(pyproject_original, new_version)
+    version_updated = _replace_version_constant(version_original, new_version)
+
+    PYPROJECT_PATH.write_text(pyproject_updated, encoding="utf-8")
+    VERSION_PATH.write_text(version_updated, encoding="utf-8")
+    print(f"Updated version to {new_version} in pyproject.toml and src/todo_app/version.py")
 
 
 def main() -> None:
     """CLI entrypoint for synchronizing version strings."""
     parser = argparse.ArgumentParser(
-        description="Bump version in pyproject.toml and app.py together.",
+        description="Bump version in pyproject.toml and src/todo_app/version.py together.",
     )
     parser.add_argument(
         "version",
@@ -85,16 +102,7 @@ def main() -> None:
         help="New version string (e.g. 2026.3.0)",
     )
     args = parser.parse_args()
-
-    pyproject_original = PYPROJECT_PATH.read_text(encoding="utf-8")
-    app_original = APP_PATH.read_text(encoding="utf-8")
-
-    pyproject_updated = _replace_project_version(pyproject_original, args.version)
-    app_updated = _replace_app_version(app_original, args.version)
-
-    PYPROJECT_PATH.write_text(pyproject_updated, encoding="utf-8")
-    APP_PATH.write_text(app_updated, encoding="utf-8")
-    print(f"Updated version to {args.version} in pyproject.toml and app.py")
+    bump_version(args.version)
 
 
 if __name__ == "__main__":
