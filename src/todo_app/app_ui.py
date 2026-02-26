@@ -1,7 +1,7 @@
 """Streamlit UI composition for the engagement to-do app."""
 
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -83,8 +83,41 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
         "delete",
     ]
     if include_project:
-        cols.insert(1, "project")
+        cols = [
+            "id", "project", "name", "status", "helper", "deadline",
+            "notes", "created_at", "delete",
+        ]
     return pd.DataFrame(columns=cols)
+
+
+DEADLINE_ANY = "Any"
+DEADLINE_TODAY = "Today"
+DEADLINE_TOMORROW = "Tomorrow"
+DEADLINE_THIS_WEEK = "This week"
+DEADLINE_CUSTOM = "Custom range"
+
+DEADLINE_PRESETS = [
+    DEADLINE_ANY, DEADLINE_TODAY, DEADLINE_TOMORROW, DEADLINE_THIS_WEEK, DEADLINE_CUSTOM,
+]
+
+
+def _deadline_preset_bounds(preset: str) -> tuple[date | None, date | None]:
+    """Return (start_date, end_date) for a deadline preset, or (None, None) for Any."""
+    today = date.today()
+    if preset == DEADLINE_ANY:
+        return None, None
+    if preset == DEADLINE_TODAY:
+        return today, today
+    if preset == DEADLINE_TOMORROW:
+        tomorrow = today + timedelta(days=1)
+        return tomorrow, tomorrow
+    if preset == DEADLINE_THIS_WEEK:
+        # ISO week: Monday = 0
+        weekday = today.weekday()
+        monday = today - timedelta(days=weekday)
+        sunday = monday + timedelta(days=6)
+        return monday, sunday
+    return None, None
 
 
 def _apply_native_filters(
@@ -92,8 +125,8 @@ def _apply_native_filters(
     *,
     key_prefix: str,
     project_names: list[str],
-) -> pd.DataFrame:
-    """Apply compact native Streamlit filters for unified table view."""
+) -> tuple[pd.DataFrame, dict]:
+    """Apply compact native Streamlit filters; return (filtered_df, filter_state)."""
     cols = st.columns([2.2, 1.5, 1.5, 1.5, 1.1])
     with cols[0]:
         query = st.text_input(
@@ -115,17 +148,40 @@ def _apply_native_filters(
             key=f"{key_prefix}_projects",
         )
     with cols[3]:
-        helper_options = ["-- All helpers --"] + list_helpers()
-        selected_helper = st.selectbox(
+        helper_filters = st.multiselect(
             "Helper",
-            options=helper_options,
+            options=list_helpers(),
             key=f"{key_prefix}_helper",
         )
-        helper_filter = None if selected_helper == "-- All helpers --" else selected_helper
-    with cols[4], st.popover("Deadline"):
-        use_deadline_range = st.checkbox("Enable range", key=f"{key_prefix}_deadline_on")
-        start_date = st.date_input("From", key=f"{key_prefix}_deadline_from")
-        end_date = st.date_input("To", key=f"{key_prefix}_deadline_to")
+    with cols[4]:
+        deadline_preset = st.selectbox(
+            "Deadline",
+            options=DEADLINE_PRESETS,
+            key=f"{key_prefix}_deadline_preset",
+        )
+        start_date: date | None = None
+        end_date: date | None = None
+        if deadline_preset == DEADLINE_CUSTOM:
+            range_value = st.date_input(
+                "Range",
+                value=(date.today(), date.today() + timedelta(days=7)),
+                key=f"{key_prefix}_deadline_range",
+            )
+            if isinstance(range_value, (list, tuple)) and len(range_value) == 2:
+                start_date, end_date = range_value[0], range_value[1]
+                if start_date > end_date:
+                    st.error("From must be before or equal to To.")
+                    start_date = end_date = None
+            else:
+                start_date = end_date = None
+        else:
+            start_date, end_date = _deadline_preset_bounds(deadline_preset)
+
+    filter_state = {
+        "project_filters": project_filters,
+        "status_filters": status_filters,
+        "helper_filters": helper_filters,
+    }
 
     filtered_df = source_df.copy()
     if query:
@@ -141,21 +197,18 @@ def _apply_native_filters(
         filtered_df = filtered_df[filtered_df["status"].isin(status_filters)]
     if project_filters:
         filtered_df = filtered_df[filtered_df["project"].isin(project_filters)]
-    if helper_filter:
-        filtered_df = filtered_df[filtered_df["helper"].fillna("") == helper_filter]
-    if use_deadline_range:
-        if start_date > end_date:
-            st.error("Deadline range is invalid: From must be before or equal to To.")
-            filtered_df = filtered_df.head(0)
-        else:
-            deadline_series = pd.to_datetime(filtered_df["deadline"], errors="coerce").dt.date
-            mask = (
-                deadline_series.notna()
-                & (deadline_series >= start_date)
-                & (deadline_series <= end_date)
-            )
-            filtered_df = filtered_df[mask]
-    return filtered_df
+    if helper_filters:
+        filtered_df = filtered_df[filtered_df["helper"].fillna("").isin(helper_filters)]
+    if start_date is not None and end_date is not None:
+        deadline_series = pd.to_datetime(filtered_df["deadline"], errors="coerce").dt.date
+        mask = (
+            deadline_series.notna()
+            & (deadline_series >= start_date)
+            & (deadline_series <= end_date)
+        )
+        filtered_df = filtered_df[mask]
+
+    return filtered_df, filter_state
 
 
 def _save_rows(
@@ -278,13 +331,13 @@ def _render_editable_table(
     *,
     source_df: pd.DataFrame,
     projects: list,
-    default_project_id: int | None,
     key_prefix: str,
     context_label: str,
 ) -> None:
     """Render native editable table and persist on save."""
     project_names = [project.name for project in projects]
-    filtered_df = _apply_native_filters(
+    project_by_name = {p.name: p for p in projects}
+    filtered_df, filter_state = _apply_native_filters(
         source_df,
         key_prefix=key_prefix,
         project_names=project_names,
@@ -293,6 +346,44 @@ def _render_editable_table(
         st.info("No rows match filters. You can still add rows and save.")
         filtered_df = source_df.head(0).copy()
 
+    # Defaults for new rows from active filters (single selection)
+    project_filters = filter_state.get("project_filters", [])
+    status_filters = filter_state.get("status_filters", [])
+    helper_filters = filter_state.get("helper_filters", [])
+    default_project_id: int | None = None
+    default_project_name: str | None = None
+    if len(project_filters) == 1 and project_filters[0] in project_by_name:
+        default_project_name = project_filters[0]
+        default_project_id = project_by_name[default_project_name].id
+    if default_project_id is None and projects:
+        default_project_id = projects[0].id
+        default_project_name = projects[0].name
+    default_status = status_filters[0] if len(status_filters) == 1 else TodoStatus.DELEGATED.value
+    helpers_list = list_helpers()
+    default_helper = helper_filters[0] if len(helper_filters) == 1 else ""
+
+    # Sort state and apply sort
+    sort_col_key = f"{key_prefix}_sort_column"
+    sort_asc_key = f"{key_prefix}_sort_asc"
+    if sort_col_key not in st.session_state:
+        st.session_state[sort_col_key] = "deadline"
+    if sort_asc_key not in st.session_state:
+        st.session_state[sort_asc_key] = True
+    sortable_cols = [
+        c for c in ["project", "name", "status", "helper", "deadline"]
+        if c in filtered_df.columns
+    ]
+    sort_col = st.session_state[sort_col_key]
+    if sort_col not in sortable_cols:
+        sort_col = sortable_cols[0] if sortable_cols else "name"
+    sort_asc = st.session_state[sort_asc_key]
+    if not filtered_df.empty and sort_col in filtered_df.columns:
+        filtered_df = filtered_df.sort_values(
+            by=sort_col,
+            ascending=sort_asc,
+            na_position="last",
+        ).reset_index(drop=True)
+
     working_df = filtered_df.reset_index(drop=True).copy()
     working_df["__todo_id"] = working_df.get("id")
     working_df["__created_at"] = working_df.get("created_at")
@@ -300,29 +391,61 @@ def _render_editable_table(
         drop=True
     )
 
-    st.caption("Sort by clicking column headers. Filter using the controls above.")
+    # Sort controls
+    with st.container():
+        sc1, sc2, _ = st.columns([1, 1, 4])
+        with sc1:
+            new_sort_col = st.selectbox(
+                "Sort by",
+                options=sortable_cols,
+                index=sortable_cols.index(sort_col) if sort_col in sortable_cols else 0,
+                key=f"{key_prefix}_sort_select",
+            )
+        with sc2:
+            new_sort_asc = st.selectbox(
+                "Order",
+                options=["Ascending", "Descending"],
+                index=0 if sort_asc else 1,
+                key=f"{key_prefix}_order_select",
+            )
+        if new_sort_col != sort_col or new_sort_asc != ("Ascending" if sort_asc else "Descending"):
+            st.session_state[sort_col_key] = new_sort_col
+            st.session_state[sort_asc_key] = new_sort_asc == "Ascending"
+            st.rerun()
+
+    column_order = ["project", "name", "status", "helper", "deadline", "notes"]
+    st.caption(
+        "Use the column menu (eye icon) to show the Delete column. "
+        "Filter using the controls above."
+    )
     edited_df = st.data_editor(
         display_df,
         num_rows="dynamic",
         key=f"{key_prefix}_table",
         hide_index=True,
+        column_order=column_order,
         column_config={
             "__todo_id": None,
             "__created_at": None,
             "project": st.column_config.SelectboxColumn(
                 "Project",
                 options=project_names,
+                default=default_project_name,
                 required=True,
             ),
             "name": st.column_config.TextColumn("Name", required=True),
             "status": st.column_config.SelectboxColumn(
                 "Status",
                 options=[status.value for status in TodoStatus],
-                default=TodoStatus.DELEGATED.value,
+                default=default_status,
                 required=True,
             ),
-            "helper": st.column_config.TextColumn("Helper"),
-            "deadline": st.column_config.DateColumn("Deadline"),
+            "helper": st.column_config.SelectboxColumn(
+                "Helper",
+                options=helpers_list,
+                default=default_helper if default_helper in helpers_list else None,
+            ),
+            "deadline": st.column_config.DateColumn("Deadline", format="distance"),
             "notes": st.column_config.TextColumn("Notes"),
             "delete": st.column_config.CheckboxColumn("Delete"),
         },
@@ -368,12 +491,10 @@ def view_unified() -> None:
         return
 
     todos = query_todos()
-    st.caption("Use each column's header menu for filtering and sorting.")
     df = _build_todo_dataframe(todos, include_project=True)
     _render_editable_table(
         source_df=df,
         projects=projects,
-        default_project_id=projects[0].id if projects else None,
         key_prefix="unified",
         context_label="view=unified",
     )
