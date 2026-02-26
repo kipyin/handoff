@@ -32,28 +32,26 @@ By default, the SQLite database is stored in your per-user data directory so app
 
 1. **Projects** ? Create engagements/projects in the sidebar.
 2. **Todos per project** ? Each project has many todos. Each todo has:
-   - Name
-   - Deadline (optional)
-   - Creation timestamp (auto)
-   - Status: `delegated` | `done` | `canceled`
-   - Helper (assignee)
-   - Notes (text; you can paste links, file paths, etc.)
+  - Name
+  - Deadline (optional)
+  - Creation timestamp (auto)
+  - Status: `delegated` | `done` | `canceled`
+  - Helper (assignee)
+  - Notes (text; you can paste links, file paths, etc.)
 3. **Unified table view** ? One main table lists todos across all projects (columns: Project, name, status, helper, deadline, notes; use the column menu eye icon to show the Delete column). Use the filter bar to narrow by:
-   - **Search** ? Text in name, notes, helper, or project.
-   - **Statuses** ? Multiselect (defaults to delegated).
-   - **Projects** ? Multiselect. **Helper** ? Multiselect.
-   - **Deadline** ? Any, Today, Tomorrow, This week, or custom range (single calendar). New rows default to the single selected filter when one is active. Sort via controls above the table.
+  - **Search** ? Text in name, notes, helper, or project.
+  - **Statuses** ? Multiselect (defaults to delegated).
+  - **Projects** ? Multiselect. **Helper** ? Multiselect.
+  - **Deadline** ? Any, Today, Tomorrow, This week, or custom range (single calendar). New rows default to the single selected filter when one is active. Sort via controls above the table.
 
 ## Logging & debugging
 
 The app uses **loguru** for logging (to standard output by default).
 
 - **During development**, run the app from a terminal to see logs as you interact:
-
   ```bash
-  uv run streamlit run app.py --server.baseUrlPath todo
+  uv run streamlit run app.py
   ```
-
 - **What gets logged** (non-exhaustive):
   - Project creation
   - Creating, updating, and deleting todos (with context and row/todo id)
@@ -87,7 +85,6 @@ Version sync guard:
 - `pyproject.toml` contains `[project].version`.
 - `tests/test_version_sync.py` enforces they match.
 - `scripts/bump_version.py` updates both together:
-
   ```bash
   uv run python scripts/bump_version.py 2026.3.0
   ```
@@ -98,3 +95,4 @@ Version sync guard:
 - `src/todo_app/app_ui.py` ? Streamlit UI composition and view logic
 - `src/todo_app/` ? Package: `models.py`, `db.py`, `data.py`
 - `tests/` ? Pytest tests
+

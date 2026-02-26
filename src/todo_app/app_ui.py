@@ -84,8 +84,15 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
     ]
     if include_project:
         cols = [
-            "id", "project", "name", "status", "helper", "deadline",
-            "notes", "created_at", "delete",
+            "id",
+            "project",
+            "name",
+            "status",
+            "helper",
+            "deadline",
+            "notes",
+            "created_at",
+            "delete",
         ]
     return pd.DataFrame(columns=cols)
 
@@ -97,7 +104,11 @@ DEADLINE_THIS_WEEK = "This week"
 DEADLINE_CUSTOM = "Custom range"
 
 DEADLINE_PRESETS = [
-    DEADLINE_ANY, DEADLINE_TODAY, DEADLINE_TOMORROW, DEADLINE_THIS_WEEK, DEADLINE_CUSTOM,
+    DEADLINE_ANY,
+    DEADLINE_TODAY,
+    DEADLINE_TOMORROW,
+    DEADLINE_THIS_WEEK,
+    DEADLINE_CUSTOM,
 ]
 
 
@@ -370,8 +381,7 @@ def _render_editable_table(
     if sort_asc_key not in st.session_state:
         st.session_state[sort_asc_key] = True
     sortable_cols = [
-        c for c in ["project", "name", "status", "helper", "deadline"]
-        if c in filtered_df.columns
+        c for c in ["project", "name", "status", "helper", "deadline"] if c in filtered_df.columns
     ]
     sort_col = st.session_state[sort_col_key]
     if sort_col not in sortable_cols:
@@ -415,8 +425,7 @@ def _render_editable_table(
 
     column_order = ["project", "name", "status", "helper", "deadline", "notes"]
     st.caption(
-        "Use the column menu (eye icon) to show the Delete column. "
-        "Filter using the controls above."
+        "Use the column menu (eye icon) to show the Delete column. Filter using the controls above."
     )
     edited_df = st.data_editor(
         display_df,
