@@ -1,6 +1,7 @@
 """In-app update panel and patch application helpers."""
 
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 
@@ -104,8 +105,24 @@ def render_update_panel(current_version: str) -> None:
     app_root = _get_app_root()
     with st.sidebar.expander("Update app"):
         st.caption(f"Current version: {current_version}")
+
         uploaded = st.file_uploader("Upload update.zip", type="zip", key="update_zip")
-        if not uploaded:
+
+        # Persist the uploaded file across reruns (for example after clicking
+        # "Save changes" on the main table, which triggers st.rerun()). This
+        # ensures the "Apply and Restart" button remains available as long as a
+        # patch has been selected once in this session.
+        stored_bytes_key = "update_zip_bytes"
+        stored_name_key = "update_zip_name"
+
+        if uploaded is not None:
+            st.session_state[stored_bytes_key] = uploaded.getvalue()
+            st.session_state[stored_name_key] = uploaded.name
+
+        file_bytes: bytes | None = st.session_state.get(stored_bytes_key)
+
+        if file_bytes is None:
+            # No patch selected yet; show only the uploader.
             return
 
         has_unsaved_todos = bool(st.session_state.get("main_has_unsaved_changes", False))
@@ -116,7 +133,7 @@ def render_update_panel(current_version: str) -> None:
             )
 
         apply_clicked = st.button(
-            "Apply update",
+            "Apply and Restart",
             type="primary",
             key="apply_update_button",
             disabled=has_unsaved_todos,
@@ -125,11 +142,17 @@ def render_update_panel(current_version: str) -> None:
         if apply_clicked:
             with st.spinner("Applying update..."):
                 try:
-                    message = apply_patch_zip(uploaded, app_root=app_root)
+                    message = apply_patch_zip(BytesIO(file_bytes), app_root=app_root)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("Failed to apply patch zip: {}", exc)
                     st.error("Update failed. See logs for details.")
                 else:
+                    # Clear stored patch so the user must explicitly select the
+                    # next update they want to apply.
+                    for key in (stored_bytes_key, stored_name_key):
+                        if key in st.session_state:
+                            del st.session_state[key]
+
                     st.success(message)
                     st.info(
                         "Update applied. The app will close automatically in a moment; "
