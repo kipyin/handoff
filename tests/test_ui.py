@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 import pytest
 
-from todo_app.ui import (
+from todo_app.ui_facade import (
     DEADLINE_ANY,
     DEADLINE_CUSTOM,
     DEADLINE_THIS_WEEK,
@@ -49,4 +49,3 @@ def test_deadline_preset_bounds_this_week() -> None:
 def test_deadline_preset_bounds_custom_returns_none() -> None:
     """Custom preset returns (None, None); UI handles range separately."""
     assert _deadline_preset_bounds(DEADLINE_CUSTOM) == (None, None)
-

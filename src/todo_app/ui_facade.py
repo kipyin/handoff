@@ -1,7 +1,8 @@
-"""Public UI entrypoints for the engagement to-do app.
+"""Public UI entrypoints for the Chaos Queue app.
 
 This module provides a stable, concise import path for the Streamlit UI while
-delegating concrete page implementations to :mod:`todo_app.pages`.
+delegating concrete page implementations to :mod:`todo_app.pages` and shared
+components in :mod:`todo_app.ui_components`.
 """
 
 from __future__ import annotations

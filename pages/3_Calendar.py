@@ -1,7 +1,7 @@
 """Streamlit entry script for the Calendar page."""
 
 from app import APP_VERSION
-from todo_app.ui import render_calendar_page, setup
+from todo_app.ui_facade import render_calendar_page, setup
 
 
 def main() -> None:

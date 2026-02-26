@@ -1,7 +1,7 @@
 """Streamlit entry script for the Projects page."""
 
 from app import APP_VERSION
-from todo_app.ui import render_projects_page, setup
+from todo_app.ui_facade import render_projects_page, setup
 
 
 def main() -> None:
