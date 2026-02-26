@@ -92,6 +92,11 @@ Version sync guard:
 - `app.py` contains `APP_VERSION`.
 - `pyproject.toml` contains `[project].version`.
 - `tests/test_version_sync.py` enforces they match.
+- `scripts/bump_version.py` updates both together:
+
+  ```bash
+  uv run python scripts/bump_version.py 2026.3.0
+  ```
 
 ## Project layout
 
