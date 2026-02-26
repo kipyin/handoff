@@ -8,19 +8,19 @@ Unlike an ad-hoc Excel or Sheets tracker, this app is opinionated around
 **multi?project, helper-centric work**:
 
 - **Cross-project view**: All todos live in a single table so you can see your
-  entire workload across engagements at once, without maintaining separate
-  tabs.
+entire workload across engagements at once, without maintaining separate
+tabs.
 - **Helper dimension**: The `helper` field treats ?who is on the hook? as a
-  first-class axis for filtering and planning (for example, ?what have I
-  delegated to Alice this week??).
+first-class axis for filtering and planning (for example, ?what have I
+delegated to Alice this week??).
 - **Deadlines & focus presets**: Deadline filters (today, tomorrow, this week,
-  custom ranges) and sorting are tuned for short-horizon planning rather than
-  long-term Gantt charts.
+custom ranges) and sorting are tuned for short-horizon planning rather than
+long-term Gantt charts.
 - **Lightweight history & backups**: Todos and projects are stored in a local
-  SQLite database with a built-in JSON/CSV export, so you can safely experiment
-  without losing data.
+SQLite database with a built-in JSON/CSV export, so you can safely experiment
+without losing data.
 - **Streamlit-native UX**: The UI is optimised for quick inline editing,
-  filtering, and saving, not for cell-by-cell formulas or complex formatting.
+filtering, and saving, not for cell-by-cell formulas or complex formatting.
 
 If you find yourself stitching together multiple sheets or constantly
 re-filtering to answer ?what must ship this week across all projects??, this
@@ -43,10 +43,8 @@ Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
 uv sync
 
 # Run the app
-uv run streamlit run app.py --server.baseUrlPath todo
+uv run streamlit run app.py
 ```
-
-For local development, pass `--server.baseUrlPath todo` so the app is served under `/todo` (for example: `http://localhost:8501/todo`).
 
 By default, the SQLite database is stored in your per-user data directory so app updates do not overwrite your data (for example on Windows: `%APPDATA%\todo-app\todo.db`). You can override the location by setting the `TODO_APP_DB_PATH` environment variable before starting the app.
 
@@ -63,11 +61,11 @@ By default, the SQLite database is stored in your per-user data directory so app
   - Helper (assignee)
   - Notes (text; you can paste links, file paths, etc.)
 3. **Unified table view** ? One main table lists todos across all projects. Use the filter bar to narrow by:
-   - **Search** ? Text in name, notes, helper, or project.
-   - **Statuses** ? Multiselect (defaults to delegated).
-   - **Projects** ? Multiselect.
-   - **Helper** ? Dropdown of known helpers (or "All helpers").
-   - **Deadline** ? Optional date range (popover: enable range, then pick From/To dates).
+  - **Search** ? Text in name, notes, helper, or project.
+  - **Statuses** ? Multiselect (defaults to delegated).
+  - **Projects** ? Multiselect.
+  - **Helper** ? Dropdown of known helpers (or "All helpers").
+  - **Deadline** ? Optional date range (popover: enable range, then pick From/To dates).
    Sort by clicking column headers. Edit inline and click **Save changes** to create, update, or delete todos.
 
 ## Logging & debugging
@@ -76,14 +74,14 @@ The app uses **loguru** for logging, configured to write to:
 
 - **Standard output** (what you see in the terminal when running Streamlit).
 - **Rotating log file** under your user data directory (for example on Windows:
-  `%APPDATA%\todo-app\logs\todo-app.log`).
+`%APPDATA%\todo-app\logs\todo-app.log`).
 
 The configuration lives in `src/todo_app/logging.py` and is initialised from
-`todo_app.ui.setup()`.
+`todo_app.ui_facade.setup()`.
 
 - **During development**, run the app from a terminal to see logs live as you interact:
   ```bash
-  uv run streamlit run app.py --server.baseUrlPath todo
+  uv run streamlit run app.py
   ```
 - **What gets logged** (non-exhaustive):
   - Database initialisation and file location.
@@ -127,7 +125,7 @@ Version sync guard:
 ## Project layout
 
 - `app.py` ? Thin Streamlit entrypoint + `APP_VERSION`
-- `src/todo_app/ui.py` ? Public Streamlit UI entrypoints (implementation in `app_ui.py`)
+- `src/todo_app/ui_facade.py` ? Public Streamlit UI entrypoints
 - `src/todo_app/` ? Package: `models.py`, `db.py`, `data.py`
 - `tests/` ? Pytest tests
 
