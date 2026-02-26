@@ -27,7 +27,7 @@ or pictures should be stored as links inside the notes text.
 """
 
 import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -65,7 +65,9 @@ def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
     if isinstance(raw_value, datetime):
         return raw_value.replace(tzinfo=None), None
     if isinstance(raw_value, date):
-        return datetime.combine(raw_value, datetime.min.time()), None
+        # Store date-only deadlines at 18:00 local time instead of midnight so that
+        # "today" does not appear as already in the past in relative displays.
+        return datetime.combine(raw_value, time(hour=18, minute=0)), None
     if isinstance(raw_value, str):
         candidate = raw_value.strip()
         if not candidate:
@@ -382,7 +384,6 @@ def _render_editable_table(
         default_project_id = projects[0].id
         default_project_name = projects[0].name
     default_status = status_filters[0] if len(status_filters) == 1 else TodoStatus.DELEGATED.value
-    helpers_list = list_helpers()
     default_helper = helper_filters[0] if len(helper_filters) == 1 else ""
 
     # Sort state and apply sort
@@ -459,10 +460,9 @@ def _render_editable_table(
                 default=default_status,
                 required=True,
             ),
-            "helper": st.column_config.SelectboxColumn(
+            "helper": st.column_config.TextColumn(
                 "Helper",
-                options=helpers_list,
-                default=default_helper if default_helper in helpers_list else None,
+                default=default_helper or None,
             ),
             "deadline": st.column_config.DateColumn("Deadline", format="distance"),
             "notes": st.column_config.TextColumn("Notes"),

@@ -6,7 +6,7 @@ This file intentionally stays minimal so an updater can read APP_VERSION here.
 from todo_app.ui import render_todos_page, setup
 
 # Keep this in sync with `[project].version` in pyproject.toml.
-APP_VERSION = "2026.2.5"
+APP_VERSION = "2026.2.6"
 
 
 def main() -> None:
