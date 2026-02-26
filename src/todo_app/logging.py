@@ -1,0 +1,60 @@
+"""Central logging configuration for the todo app.
+
+This module configures loguru to:
+
+- Log structured messages to standard output (for Streamlit and CLI runs).
+- Write a rotating log file under the user's data directory (e.g. APPDATA on
+  Windows), alongside the SQLite database.
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from loguru import logger
+from platformdirs import user_data_dir
+
+
+_CONFIGURED = False
+
+
+def _get_logs_dir() -> Path:
+    """Return the directory where log files should be written."""
+    data_dir = Path(user_data_dir("todo-app", "todo-app"))
+    logs_dir = data_dir / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    return logs_dir
+
+
+def configure_logging() -> None:
+    """Configure loguru sinks for stdout and a rotating file.
+
+    Safe to call multiple times; configuration is applied only once.
+    """
+    global _CONFIGURED
+    if _CONFIGURED:
+        return
+
+    logs_dir = _get_logs_dir()
+    log_path = logs_dir / "todo-app.log"
+
+    # Remove the default loguru handler to avoid duplicate logs, then add our
+    # stdout + file sinks.
+    logger.remove()
+    logger.add(
+        sink=lambda msg: print(msg, end=""),
+        level="INFO",
+        backtrace=False,
+        diagnose=False,
+    )
+    logger.add(
+        log_path,
+        level="INFO",
+        rotation="10 MB",
+        retention="14 days",
+        compression="zip",
+        backtrace=False,
+        diagnose=False,
+    )
+
+    _CONFIGURED = True

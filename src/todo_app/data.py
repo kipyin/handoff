@@ -1,6 +1,6 @@
 """Data access helpers for projects/todos and common query workflows."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from loguru import logger
@@ -120,6 +120,7 @@ def update_todo(
             todo.project_id = project_id
         if name is not _UNSET:
             todo.name = name
+        previous_status = todo.status
         if status is not _UNSET:
             todo.status = status
         if deadline is not _UNSET:
@@ -128,6 +129,10 @@ def update_todo(
             todo.helper = normalize_helper_name(helper)
         if notes is not _UNSET:
             todo.notes = notes
+        # Track when a todo is marked as done.
+        if previous_status != todo.status and todo.status == TodoStatus.DONE:
+            todo.completed_at = datetime.now(timezone.utc)
+
         session.add(todo)
         session.commit()
         session.refresh(todo)
@@ -363,6 +368,7 @@ def get_export_payload() -> dict[str, Any]:
                     "helper": todo.helper,
                     "notes": todo.notes,
                     "created_at": todo.created_at.isoformat(),
+                    "completed_at": todo.completed_at.isoformat() if todo.completed_at else None,
                 }
                 for todo in todos
             ],

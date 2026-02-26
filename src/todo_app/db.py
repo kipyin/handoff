@@ -45,6 +45,15 @@ def init_db() -> None:
     Safe to call on every app start; only creates missing tables.
     """
     SQLModel.metadata.create_all(engine)
+
+    # Lightweight migration: ensure newer columns exist on existing tables.
+    with engine.connect() as conn:
+        result = conn.exec_driver_sql("PRAGMA table_info('todo')")
+        columns = {row[1] for row in result}  # row[1] = column name
+        if "completed_at" not in columns:
+            logger.info("Applying migration: adding completed_at column to todo table")
+            conn.exec_driver_sql("ALTER TABLE todo ADD COLUMN completed_at TIMESTAMP NULL")
+
     logger.info("Database initialized at {}", _DB_PATH)
 
 

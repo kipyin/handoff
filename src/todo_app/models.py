@@ -49,5 +49,6 @@ class Todo(SQLModel, table=True):
     helper: Optional[str] = Field(default=None, index=True)
     notes: Optional[str] = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = Field(default=None, index=True)
 
     project: Optional[Project] = Relationship(back_populates="todos")
