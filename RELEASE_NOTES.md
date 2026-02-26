@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.1
+
+- Refactor the Streamlit entrypoint by moving UI composition and view logic into `src/todo_app/app_ui.py`, keeping `app.py` intentionally minimal for runtime bootstrapping.
+- Expose a stable `APP_VERSION` constant in `app.py` for updater/version checks and add a test (`tests/test_version_sync.py`) to enforce parity with `pyproject.toml`.
+- Add `scripts/bump_version.py` to update `pyproject.toml` and `app.py` together in one command, reducing version drift risk.
+
 ## 2026.2.0
 
 - Refine build packaging and embedded Python setup, improving `build_zip.py` documentation, dependency management, and path configuration while making application code copying more resilient.
