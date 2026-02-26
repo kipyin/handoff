@@ -1,5 +1,13 @@
 # Release notes
 
+## 2026.2.11
+
+- **Updater cache cleanup:** After applying a code-only patch, the app now removes `__pycache__`
+  directories under the application root (including `src/` and `pages/`) so that Python regenerates
+  fresh bytecode for the updated sources on next start.
+- **Internal cleanup:** Modernise models and data access to use `UTC`/`StrEnum` and tidy imports and
+  type hints across scripts and tests; there are no user-facing behaviour changes.
+
 ## 2026.2.10
 
 - **Updater timing:** Fix the in-app **Update app** panel so that its "Apply and Restart" button
