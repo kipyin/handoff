@@ -38,5 +38,8 @@ quote-style = "double"
 testpaths = ["tests"]
 pythonpath = ["src"]
 
+[tool.uv]
+link-mode = "copy"
+
 [project.scripts]
 todo = "scripts.cli:main"

@@ -38,7 +38,7 @@ def main_callback(ctx: typer.Context) -> None:
 @app.command()
 def sync() -> None:
     """Install or update project dependencies using uv."""
-    run_cmd(["uv", "sync", "--link-mode", "copy"], cwd=ROOT, description="Syncing dependencies with uv...")
+    run_cmd(["uv", "sync"], cwd=ROOT, description="Syncing dependencies with uv...")
 
 
 @app.command()
