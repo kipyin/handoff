@@ -26,6 +26,8 @@ For local development, pass `--server.baseUrlPath todo` so the app is served und
 
 By default, the SQLite database is stored in your per-user data directory so app updates do not overwrite your data (for example on Windows: `%APPDATA%\todo-app\todo.db`). You can override the location by setting the `TODO_APP_DB_PATH` environment variable before starting the app.
 
+`app.py` is intentionally kept thin and exposes an `APP_VERSION` constant so external tooling (for example an updater) can read a stable version value from a single place.
+
 ## Features
 
 1. **Projects** – Create engagements/projects in the sidebar.
@@ -85,8 +87,15 @@ uv run ruff check . && uv run ruff format .
 uv run pytest
 ```
 
+Version sync guard:
+
+- `app.py` contains `APP_VERSION`.
+- `pyproject.toml` contains `[project].version`.
+- `tests/test_version_sync.py` enforces they match.
+
 ## Project layout
 
-- `app.py` – Streamlit UI entrypoint
+- `app.py` – Thin Streamlit entrypoint + `APP_VERSION`
+- `src/todo_app/app_ui.py` – Streamlit UI composition and view logic
 - `src/todo_app/` – Package: `models.py`, `db.py`, `data.py`
 - `tests/` – Pytest tests
