@@ -457,11 +457,14 @@ def _render_editable_table(
     )
 
     # Detect unsaved changes by comparing the current table state to the last
-    # saved snapshot for this view.
+    # saved snapshot for this view, and record the result in session state so
+    # other parts of the app (for example the updater panel) can warn before
+    # closing the app while edits are pending.
     snapshot_key = f"{key_prefix}_last_saved_snapshot"
     current_snapshot = edited_df.to_json(date_format="iso", orient="records")
     last_snapshot = st.session_state.get(snapshot_key)
     has_unsaved_changes = current_snapshot != last_snapshot
+    st.session_state[f"{key_prefix}_has_unsaved_changes"] = has_unsaved_changes
 
     status_col, button_col = st.columns([2, 1])
     with status_col:

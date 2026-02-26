@@ -1,11 +1,12 @@
 """In-app update panel and patch application helpers."""
 
-from __future__ import annotations
-
 from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO
+
+import os
 import shutil
+import threading
 import zipfile
 
 import streamlit as st
@@ -79,6 +80,25 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
     return "Update applied."
 
 
+def _schedule_shutdown(delay_seconds: float = 2.0) -> None:
+    """Schedule a hard process exit after a short delay.
+
+    This is used after applying a patch so that the Streamlit process – and any
+    wrapper like `run.bat` – terminate automatically without requiring the user
+    to manually close the terminal window.
+
+    Args:
+        delay_seconds: Number of seconds to wait before exiting.
+    """
+
+    def _shutdown() -> None:
+        os._exit(0)
+
+    timer = threading.Timer(delay_seconds, _shutdown)
+    timer.daemon = True
+    timer.start()
+
+
 def render_update_panel(current_version: str) -> None:
     """Render a sidebar panel for uploading and applying patch zips."""
     app_root = _get_app_root()
@@ -88,7 +108,21 @@ def render_update_panel(current_version: str) -> None:
         if not uploaded:
             return
 
-        if st.button("Apply update", type="primary", key="apply_update_button"):
+        has_unsaved_todos = bool(st.session_state.get("main_has_unsaved_changes", False))
+        if has_unsaved_todos:
+            st.warning(
+                "You have unsaved changes on the Todos table. "
+                "Please click **Save changes** there before applying an update."
+            )
+
+        apply_clicked = st.button(
+            "Apply update",
+            type="primary",
+            key="apply_update_button",
+            disabled=has_unsaved_todos,
+        )
+
+        if apply_clicked:
             with st.spinner("Applying update..."):
                 try:
                     message = apply_patch_zip(uploaded, app_root=app_root)
@@ -97,4 +131,8 @@ def render_update_panel(current_version: str) -> None:
                     st.error("Update failed. See logs for details.")
                 else:
                     st.success(message)
-                    st.info("Please close and reopen the app to use the updated version.")
+                    st.info(
+                        "Update applied. The app will close automatically in a moment; "
+                        "reopen it to use the new version."
+                    )
+                    _schedule_shutdown()
