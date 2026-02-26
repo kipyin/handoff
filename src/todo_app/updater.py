@@ -1,18 +1,16 @@
 """In-app update panel and patch application helpers."""
 
+import os
+import shutil
+import threading
+import zipfile
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import BinaryIO
 
-import os
-import shutil
-import threading
-import zipfile
-
 import streamlit as st
 from loguru import logger
-
 
 ALLOWED_PREFIXES = ("app.py", "src/", "pages/")
 
@@ -74,11 +72,28 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
             with zf.open(name) as src, target_path.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
 
+    _clear_pycache(app_root)
+
     if target_version:
         logger.info("Applied patch to update app to version {}", target_version)
         return f"Update applied. Target version: {target_version}."
     logger.info("Applied patch without explicit VERSION marker.")
     return "Update applied."
+
+
+def _clear_pycache(app_root: Path) -> None:
+    """Remove Python bytecode caches under the app root.
+
+    This clears ``__pycache__`` directories for the main code areas that are
+    updated by the patch so that Python regenerates fresh bytecode for the new
+    sources on next start.
+    """
+    for base in (app_root, app_root / "src", app_root / "pages"):
+        if not base.exists():
+            continue
+        for pycache_dir in base.rglob("__pycache__"):
+            if pycache_dir.is_dir():
+                shutil.rmtree(pycache_dir, ignore_errors=True)
 
 
 def _schedule_shutdown(delay_seconds: float = 2.0) -> None:
