@@ -1,5 +1,13 @@
 # Release notes
 
+## 2026.2.10
+
+- **Updater timing:** Fix the in-app **Update app** panel so that its "Apply and Restart" button
+  correctly reflects unsaved changes from the **current** rerun instead of lagging by one rerun.
+- **Persistent patch upload:** Keep the selected patch zip in memory across reruns (for example
+  after clicking **Save changes** on the main Todos table) so the update button does not disappear
+  until the patch has been applied or the app is restarted.
+
 ## 2026.2.9
 
 - **Updater UX:** The in-app **Update app** panel now blocks applying a patch while there are

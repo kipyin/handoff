@@ -945,7 +945,7 @@ wheels = [
 
 [[package]]
 name = "todo-app"
-version = "2026.2.8"
+version = "2026.2.9"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },

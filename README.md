@@ -5,25 +5,25 @@ Chaos-tinged to-do app for juggling tasks across different engagements (projects
 ## Why this over a spreadsheet?
 
 Unlike an ad-hoc Excel or Sheets tracker, this app is opinionated around
-**multi?project, helper-centric work**:
+**multi-project, helper-centric work**:
 
 - **Cross-project view**: All todos live in a single table so you can see your
-entire workload across engagements at once, without maintaining separate
-tabs.
-- **Helper dimension**: The `helper` field treats ?who is on the hook? as a
-first-class axis for filtering and planning (for example, ?what have I
-delegated to Alice this week??).
+  entire workload across engagements at once, without maintaining separate
+  tabs.
+- **Helper dimension**: The `helper` field treats "who is on the hook" as a
+  first-class axis for filtering and planning (for example, "what have I
+  delegated to Alice this week?").
 - **Deadlines & focus presets**: Deadline filters (today, tomorrow, this week,
-custom ranges) and sorting are tuned for short-horizon planning rather than
-long-term Gantt charts.
+  custom ranges) and sorting are tuned for short-horizon planning rather than
+  long-term Gantt charts.
 - **Lightweight history & backups**: Todos and projects are stored in a local
-SQLite database with a built-in JSON/CSV export, so you can safely experiment
-without losing data.
+  SQLite database with a built-in JSON/CSV export, so you can safely experiment
+  without losing data.
 - **Streamlit-native UX**: The UI is optimised for quick inline editing,
-filtering, and saving, not for cell-by-cell formulas or complex formatting.
+  filtering, and saving, not for cell-by-cell formulas or complex formatting.
 
 If you find yourself stitching together multiple sheets or constantly
-re-filtering to answer ?what must ship this week across all projects??, this
+re-filtering to answer "what must ship this week across all projects?", this
 app aims to make that view a single click instead.
 
 ## Database: SQLite
@@ -120,7 +120,7 @@ On a client machine:
 
 1. The user runs the app as usual (for example from the embedded zip via `run.bat`).
 2. In the Streamlit sidebar, they open **Update app**, upload the patch zip, and click
-   **Apply update**. If there are unsaved changes on the main Todos table, the button is
+   **Apply and Restart**. If there are unsaved changes on the main Todos table, the button is
    disabled until those changes are saved.
 3. After applying the patch, the app extracts the update into the app directory and then
    exits automatically; reopen `run.bat` to start the updated version.
@@ -160,7 +160,7 @@ uv run todo build-zip
 uv run todo build-patch
 
 # Bump version in pyproject.toml and todo_app.version
-uv run todo bump-version 2026.2.9
+uv run todo bump-version 2026.2.10
 ```
 
 Version sync guard:
