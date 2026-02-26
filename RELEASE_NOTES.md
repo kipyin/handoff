@@ -1,5 +1,13 @@
 # Release notes
 
+## 2026.2.9
+
+- **Updater UX:** The in-app **Update app** panel now blocks applying a patch while there are
+  unsaved changes in the main Todos table and shows a clear warning asking you to save first.
+- **Auto-restart flow:** After successfully applying a code-only patch, the app now exits
+  automatically so that the `run.bat` window closes; reopening `run.bat` starts the updated
+  version without requiring manual process termination.
+
 ## 2026.2.8
 
 - **CLI & scripts:** Add a Typer + Rich CLI under `scripts/cli.py` that wraps common developer commands (`run`, `sync`, `check`, `test`, `build-zip`, `build-patch`, `bump-version`), and move the embedded Windows build logic into `scripts/build_zip.py` with a small root-level shim for backwards compatibility.

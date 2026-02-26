@@ -101,7 +101,7 @@ dependencies, and the app code:
 uv run todo build-zip
 ```
 
-This produces a zip under `dist/` (named like `todo-app-2026.2.8-windows-embed.zip`).
+This produces a zip under `dist/` (named like `todo-app-<version>-windows-embed.zip`).
 Extract it, then double-click `run.bat` to start the app (the launcher already includes
 `--server.baseUrlPath todo`). The SQLite database is still stored in your user data
 directory, not inside the extracted folder.
@@ -120,8 +120,21 @@ On a client machine:
 
 1. The user runs the app as usual (for example from the embedded zip via `run.bat`).
 2. In the Streamlit sidebar, they open **Update app**, upload the patch zip, and click
-   **Apply update**.
-3. The app extracts the patch into the app directory and asks the user to restart.
+   **Apply update**. If there are unsaved changes on the main Todos table, the button is
+   disabled until those changes are saved.
+3. After applying the patch, the app extracts the update into the app directory and then
+   exits automatically; reopen `run.bat` to start the updated version.
+
+### Backups and future rollback
+
+When applying a code-only patch, the updater currently creates a **timestamped backup**
+of any overwritten files under a `backup/<YYYYMMDD-HHMMSS>/` directory inside the app
+root. Today, rollback is a **manual** process (for example, by copying files from a
+chosen backup folder back into the app directory).
+
+A future enhancement is planned to expose a **rollback/restore-from-backup** control in
+the app itself, so that an operator can select a backup snapshot from the UI and
+automatically restore the corresponding files without touching the filesystem directly.
 
 ## Development
 

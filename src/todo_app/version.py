@@ -6,4 +6,4 @@ both for packaging and for displaying the running app version in the UI.
 
 from __future__ import annotations
 
-__version__ = "2026.2.8"
+__version__ = "2026.2.9"
