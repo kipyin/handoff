@@ -1,5 +1,10 @@
 # Release notes
 
+## 2026.2.6
+
+- **Deadlines:** When you pick a date-only deadline in the todos table, it is now stored at 18:00 local time instead of midnight so that \"today\" does not show up as already in the past in relative views.
+- **Helpers:** The `Helper` column in the todos table is now a free-text field instead of a dropdown, while the Helper filter above the table still offers a dropdown of all known helpers (updated after new helpers are saved).
+
 ## 2026.2.5
 
 - **Projects page:** Add a dedicated Projects page with project creation, rename, delete, and per-project todo summaries.
@@ -17,9 +22,9 @@
 ## 2026.2.3
 
 - **Column order:** Project, name, status, helper, deadline, notes; Delete column hidden by default (show via table column menu eye icon).
-- **Filters:** Helper is a multiselect like Projects/Statuses (no "All helpers"); empty selection shows all. Deadline filter has label above dropdown with presets: Any, Today, Tomorrow, This week, Custom range. Custom range uses a single date-range picker (one calendar).
+- **Filters:** Helper is a multiselect like Projects/Statuses (no \"All helpers\"); empty selection shows all. Deadline filter has label above dropdown with presets: Any, Today, Tomorrow, This week, Custom range. Custom range uses a single date-range picker (one calendar).
 - **New row defaults:** When a single project, status, or helper is selected in the filter bar, new rows default to that value.
-- **Deadline column** displays in relative "distance" format by default.
+- **Deadline column** displays in relative \"distance\" format by default.
 - **Sorting:** Sort by column and order via controls above the table (session state + pre-sort).
 
 ## 2026.2.2
