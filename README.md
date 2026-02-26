@@ -30,7 +30,7 @@ By default, the SQLite database is stored in your per-user data directory so app
 
 ## Features
 
-1. **Projects** ? Create engagements/projects in the sidebar.
+1. **Projects** ? Create and manage engagements/projects on the Projects page.
 2. **Todos per project** ? Each project has many todos. Each todo has:
   - Name
   - Deadline (optional)

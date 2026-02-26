@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.5
+
+- **Projects page:** Add a dedicated Projects page with project creation, rename, delete, and per-project todo summaries.
+- **UI façade:** Introduce `todo_app.pages` for page implementations and a `todo_app.ui` façade with `setup`, `render_todos_page`, and `render_projects_page` entrypoints suitable for Streamlit multipage usage.
+- **Entry scripts:** Keep `app.py` as a thin entrypoint and add `pages/1_Todos.py` and `pages/2_Projects.py` as minimal Streamlit page shims.
+
 ## 2026.2.4
 
 - **Logging:** Log applied filters in `query_todos` and include todo ids/names in save and delete logs for better traceability.
