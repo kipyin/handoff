@@ -4,7 +4,6 @@
 
 - Unified todo view: single main table with Search, Statuses (default: delegated), Projects, Helper (dropdown), and Deadline range filters.
 - Native Streamlit table (`st.data_editor`) with column-header sorting; internal row-id mapping kept for reliable save/update/delete.
-- Remove streamlit-aggrid dependency; add `query_todos()` in data layer for unified filtering.
 
 ## 2026.2.1
 

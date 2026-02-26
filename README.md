@@ -35,19 +35,13 @@ By default, the SQLite database is stored in your per-user data directory so app
    - Name
    - Deadline (optional)
    - Creation timestamp (auto)
-   - Status: `delegated` | `done` | `cancelled`
+   - Status: `delegated` | `done` | `canceled`
    - Helper (assignee)
    - Notes (text; you can paste links, file paths, etc.)
-3. **Three views**
-   - **By project** – Select a project; done todos are grayed out; due today or overdue are highlighted in red.
-   - **By helper** – Type a helper name to see all their tasks across projects.
+3. **Unified table view** – One main table lists todos across all projects. Use the filter bar to narrow by:
+   - **Search** – Text in name, notes, helper, or project.
+   - **Statuses** – Multiselect (defaults to delegated).
    - **By timeframe** – Choose “Today”, “This week”, or a custom range to see all tasks in that period.
-
-## Main flows
-
-- **By project**: Select a project in the main view to see all its todos. Edit fields inline in the table and click **Save changes** to create new todos or update existing ones for that project.
-- **By helper**: Choose or type a helper name to see their tasks across all projects. Use the editable table (including the Project column) to adjust status, deadlines, and assignments, then save.
-- **By timeframe**: Pick a preset (Today/This week) or a custom date range to list todos whose deadlines fall in that window. Edits in the table are applied back to the underlying projects when you save.
 
 ## Logging & debugging
 
@@ -60,10 +54,9 @@ The app uses **loguru** for logging (to standard output by default).
   ```
 
 - **What gets logged** (non-exhaustive):
-  - View switches (By project / By helper / By timeframe)
   - Project creation
-  - Creating and updating todos from any of the editable views
-  - High-level query info (for example, how many todos were fetched for a helper, project, or timeframe)
+  - Creating, updating, and deleting todos (with context and row/todo id)
+  - Save summary counts and high-level query info
 
 For deeper diagnostics you can extend the existing `loguru` calls in `app.py`, `src/todo_app/data.py`, or `src/todo_app/db.py`.
 
@@ -75,7 +68,7 @@ On Windows you can build a self-contained zip that bundles an embedded Python ru
 uv run python build_zip.py
 ```
 
-This produces a zip under `dist/` (named like `todo-app-2026.2.0-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app (the launcher already includes `--server.baseUrlPath todo`). The SQLite database is still stored in your user data directory, not inside the extracted folder.
+This produces a zip under `dist/` (named like `todo-app-2026.2.2-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app (the launcher already includes `--server.baseUrlPath todo`). The SQLite database is still stored in your user data directory, not inside the extracted folder.
 
 ## Development
 
