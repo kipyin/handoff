@@ -14,7 +14,6 @@ from pathlib import Path
 from loguru import logger
 from platformdirs import user_data_dir
 
-
 _CONFIGURED = False
 
 

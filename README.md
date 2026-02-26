@@ -5,25 +5,25 @@ Chaos-tinged to-do app for juggling tasks across different engagements (projects
 ## Why this over a spreadsheet?
 
 Unlike an ad-hoc Excel or Sheets tracker, this app is opinionated around
-**multi?project, helper-centric work**:
+**multi-project, helper-centric work**:
 
 - **Cross-project view**: All todos live in a single table so you can see your
-entire workload across engagements at once, without maintaining separate
-tabs.
-- **Helper dimension**: The `helper` field treats ?who is on the hook? as a
-first-class axis for filtering and planning (for example, ?what have I
-delegated to Alice this week??).
+  entire workload across engagements at once, without maintaining separate
+  tabs.
+- **Helper dimension**: The `helper` field treats "who is on the hook" as a
+  first-class axis for filtering and planning (for example, "what have I
+  delegated to Alice this week?").
 - **Deadlines & focus presets**: Deadline filters (today, tomorrow, this week,
-custom ranges) and sorting are tuned for short-horizon planning rather than
-long-term Gantt charts.
+  custom ranges) and sorting are tuned for short-horizon planning rather than
+  long-term Gantt charts.
 - **Lightweight history & backups**: Todos and projects are stored in a local
-SQLite database with a built-in JSON/CSV export, so you can safely experiment
-without losing data.
+  SQLite database with a built-in JSON/CSV export, so you can safely experiment
+  without losing data.
 - **Streamlit-native UX**: The UI is optimised for quick inline editing,
-filtering, and saving, not for cell-by-cell formulas or complex formatting.
+  filtering, and saving, not for cell-by-cell formulas or complex formatting.
 
 If you find yourself stitching together multiple sheets or constantly
-re-filtering to answer ?what must ship this week across all projects??, this
+re-filtering to answer "what must ship this week across all projects?", this
 app aims to make that view a single click instead.
 
 ## Database: SQLite
@@ -101,7 +101,7 @@ dependencies, and the app code:
 uv run todo build-zip
 ```
 
-This produces a zip under `dist/` (named like `todo-app-2026.2.8-windows-embed.zip`).
+This produces a zip under `dist/` (named like `todo-app-<version>-windows-embed.zip`).
 Extract it, then double-click `run.bat` to start the app (the launcher already includes
 `--server.baseUrlPath todo`). The SQLite database is still stored in your user data
 directory, not inside the extracted folder.
@@ -120,8 +120,21 @@ On a client machine:
 
 1. The user runs the app as usual (for example from the embedded zip via `run.bat`).
 2. In the Streamlit sidebar, they open **Update app**, upload the patch zip, and click
-   **Apply update**.
-3. The app extracts the patch into the app directory and asks the user to restart.
+   **Apply and Restart**. If there are unsaved changes on the main Todos table, the button is
+   disabled until those changes are saved.
+3. After applying the patch, the app extracts the update into the app directory and then
+   exits automatically; reopen `run.bat` to start the updated version.
+
+### Backups and future rollback
+
+When applying a code-only patch, the updater currently creates a **timestamped backup**
+of any overwritten files under a `backup/<YYYYMMDD-HHMMSS>/` directory inside the app
+root. Today, rollback is a **manual** process (for example, by copying files from a
+chosen backup folder back into the app directory).
+
+A future enhancement is planned to expose a **rollback/restore-from-backup** control in
+the app itself, so that an operator can select a backup snapshot from the UI and
+automatically restore the corresponding files without touching the filesystem directly.
 
 ## Development
 
@@ -147,7 +160,7 @@ uv run todo build-zip
 uv run todo build-patch
 
 # Bump version in pyproject.toml and todo_app.version
-uv run todo bump-version 2026.2.9
+uv run todo bump-version 2026.2.10
 ```
 
 Version sync guard:

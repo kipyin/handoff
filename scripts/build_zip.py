@@ -12,14 +12,12 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import tomllib
 import urllib.request
 import zipfile
 from pathlib import Path
 
-import tomllib
-
 from . import ROOT
-
 
 BUILD_ROOT = ROOT / "build"
 DIST_ROOT = ROOT / "dist"
@@ -103,10 +101,10 @@ def _configure_pth_file() -> None:
             if stripped.startswith("import site"):
                 continue
             new_lines.append(line)
-        for p in sorted(wanted_paths):
-            if p not in [l.strip() for l in new_lines]:
-                new_lines.append(p)
-        if not any(l.strip().startswith("import site") for l in new_lines):
+        for path_entry in sorted(wanted_paths):
+            if path_entry not in [existing_line.strip() for existing_line in new_lines]:
+                new_lines.append(path_entry)
+        if not any(existing_line.strip().startswith("import site") for existing_line in new_lines):
             new_lines.append("import site")
         pth_path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
 
@@ -242,7 +240,8 @@ def main() -> None:
     print("  2. Open the extracted folder.")
     print("  3. Double-click run.bat.")
     print(
-        "Your SQLite database will be stored in your user data directory (e.g. %APPDATA%\\todo-app\\todo.db)."
+        "Your SQLite database will be stored in your user data directory "
+        "(e.g. %APPDATA%\\todo-app\\todo.db)."
     )
 
 

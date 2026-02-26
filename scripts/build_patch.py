@@ -14,7 +14,6 @@ from todo_app.version import __version__
 
 from . import ROOT
 
-
 DIST_ROOT = ROOT / "dist"
 
 

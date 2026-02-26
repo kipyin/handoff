@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import typer
 from rich.console import Console
 
@@ -12,7 +10,6 @@ from . import build_patch as build_patch_module
 from . import build_zip as build_zip_module
 from . import bump_version as bump_version_module
 from .subprocess_utils import run_cmd
-
 
 app = typer.Typer(help="Chaos Queue development and build commands.")
 console = Console()

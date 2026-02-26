@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import streamlit as st
 
+from .db import init_db
 from .logging import configure_logging
+from .pages.calendar import render_calendar_page as _render_calendar_page_impl
+from .pages.projects import render_projects_page as _render_projects_page_impl
+from .pages.todos import render_todos_page as _render_todos_page_impl
 from .ui_components import (
     DEADLINE_ANY,
     DEADLINE_CUSTOM,
@@ -20,10 +24,6 @@ from .ui_components import (
     _init_session_state,
     _render_sidebar_backup,
 )
-from .db import init_db
-from .pages.projects import render_projects_page as _render_projects_page_impl
-from .pages.todos import render_todos_page as _render_todos_page_impl
-from .pages.calendar import render_calendar_page as _render_calendar_page_impl
 
 
 def setup(app_version: str) -> None:

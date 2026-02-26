@@ -1,5 +1,29 @@
 # Release notes
 
+## 2026.2.11
+
+- **Updater cache cleanup:** After applying a code-only patch, the app now removes `__pycache__`
+  directories under the application root (including `src/` and `pages/`) so that Python regenerates
+  fresh bytecode for the updated sources on next start.
+- **Internal cleanup:** Modernise models and data access to use `UTC`/`StrEnum` and tidy imports and
+  type hints across scripts and tests; there are no user-facing behaviour changes.
+
+## 2026.2.10
+
+- **Updater timing:** Fix the in-app **Update app** panel so that its "Apply and Restart" button
+  correctly reflects unsaved changes from the **current** rerun instead of lagging by one rerun.
+- **Persistent patch upload:** Keep the selected patch zip in memory across reruns (for example
+  after clicking **Save changes** on the main Todos table) so the update button does not disappear
+  until the patch has been applied or the app is restarted.
+
+## 2026.2.9
+
+- **Updater UX:** The in-app **Update app** panel now blocks applying a patch while there are
+  unsaved changes in the main Todos table and shows a clear warning asking you to save first.
+- **Auto-restart flow:** After successfully applying a code-only patch, the app now exits
+  automatically so that the `run.bat` window closes; reopening `run.bat` starts the updated
+  version without requiring manual process termination.
+
 ## 2026.2.8
 
 - **CLI & scripts:** Add a Typer + Rich CLI under `scripts/cli.py` that wraps common developer commands (`run`, `sync`, `check`, `test`, `build-zip`, `build-patch`, `bump-version`), and move the embedded Windows build logic into `scripts/build_zip.py` with a small root-level shim for backwards compatibility.
