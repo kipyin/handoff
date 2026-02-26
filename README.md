@@ -38,11 +38,13 @@ By default, the SQLite database is stored in your per-user data directory so app
   - Status: `delegated` | `done` | `canceled`
   - Helper (assignee)
   - Notes (text; you can paste links, file paths, etc.)
-3. **Unified table view** ? One main table lists todos across all projects (columns: Project, name, status, helper, deadline, notes; use the column menu eye icon to show the Delete column). Use the filter bar to narrow by:
-  - **Search** ? Text in name, notes, helper, or project.
-  - **Statuses** ? Multiselect (defaults to delegated).
-  - **Projects** ? Multiselect. **Helper** ? Multiselect.
-  - **Deadline** ? Any, Today, Tomorrow, This week, or custom range (single calendar). New rows default to the single selected filter when one is active. Sort via controls above the table.
+3. **Unified table view** ? One main table lists todos across all projects. Use the filter bar to narrow by:
+   - **Search** ? Text in name, notes, helper, or project.
+   - **Statuses** ? Multiselect (defaults to delegated).
+   - **Projects** ? Multiselect.
+   - **Helper** ? Dropdown of known helpers (or "All helpers").
+   - **Deadline** ? Optional date range (popover: enable range, then pick From/To dates).
+   Sort by clicking column headers. Edit inline and click **Save changes** to create, update, or delete todos.
 
 ## Logging & debugging
 
@@ -50,7 +52,7 @@ The app uses **loguru** for logging (to standard output by default).
 
 - **During development**, run the app from a terminal to see logs as you interact:
   ```bash
-  uv run streamlit run app.py
+  uv run streamlit run app.py --server.baseUrlPath todo
   ```
 - **What gets logged** (non-exhaustive):
   - Project creation
@@ -67,7 +69,7 @@ On Windows you can build a self-contained zip that bundles an embedded Python ru
 uv run python build_zip.py
 ```
 
-This produces a zip under `dist/` (named like `todo-app-2026.2.3-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app (the launcher already includes `--server.baseUrlPath todo`). The SQLite database is still stored in your user data directory, not inside the extracted folder.
+This produces a zip under `dist/` (named like `todo-app-2026.2.4-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app (the launcher already includes `--server.baseUrlPath todo`). The SQLite database is still stored in your user data directory, not inside the extracted folder.
 
 ## Development
 
@@ -92,7 +94,7 @@ Version sync guard:
 ## Project layout
 
 - `app.py` ? Thin Streamlit entrypoint + `APP_VERSION`
-- `src/todo_app/app_ui.py` ? Streamlit UI composition and view logic
+- `src/todo_app/ui.py` ? Public Streamlit UI entrypoints (implementation in `app_ui.py`)
 - `src/todo_app/` ? Package: `models.py`, `db.py`, `data.py`
 - `tests/` ? Pytest tests
 
