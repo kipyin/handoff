@@ -1,7 +1,7 @@
 """Streamlit UI composition for the engagement to-do app."""
 
 import json
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime
 
 import pandas as pd
 import streamlit as st
@@ -13,13 +13,10 @@ from todo_app.data import (
     delete_project,
     delete_todo,
     get_export_payload,
-    get_project,
-    get_todos_by_helper,
-    get_todos_by_project,
-    get_todos_by_timeframe,
     list_helpers,
     list_projects,
     normalize_helper_name,
+    query_todos,
     rename_project,
     update_todo,
 )
@@ -29,15 +26,7 @@ from todo_app.models import TodoStatus
 
 def _init_session_state() -> None:
     """Initialize Streamlit session defaults."""
-    defaults = {
-        "view": "By project",
-        "selected_project_id": None,
-        "helper_select": "-- Select helper --",
-        "helper_search": "",
-        "timeframe_preset": "Today",
-        "tf_start": datetime.now(UTC).date(),
-        "tf_end": datetime.now(UTC).date() + timedelta(days=6),
-    }
+    defaults: dict[str, object] = {}
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
@@ -75,7 +64,6 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "deadline": todo.deadline.date() if todo.deadline else None,
             "notes": todo.notes or "",
             "created_at": todo.created_at,
-            "selected": False,
             "delete": False,
         }
         if include_project:
@@ -92,7 +80,6 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
         "deadline",
         "notes",
         "created_at",
-        "selected",
         "delete",
     ]
     if include_project:
@@ -100,63 +87,75 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
     return pd.DataFrame(columns=cols)
 
 
-def _apply_shared_filters(df: pd.DataFrame, *, key_prefix: str) -> pd.DataFrame:
-    """Apply shared search/filter/sort controls and return filtered rows."""
-    st.caption("Search, filter, and sort before saving.")
-    col1, col2, col3 = st.columns(3)
-    with col1:
+def _apply_native_filters(
+    source_df: pd.DataFrame,
+    *,
+    key_prefix: str,
+    project_names: list[str],
+) -> pd.DataFrame:
+    """Apply compact native Streamlit filters for unified table view."""
+    cols = st.columns([2.2, 1.5, 1.5, 1.5, 1.1])
+    with cols[0]:
         query = st.text_input(
             "Search",
-            placeholder="name, notes, helper",
+            placeholder="name, notes, helper, project",
             key=f"{key_prefix}_search",
         ).strip()
-    with col2:
+    with cols[1]:
         status_filters = st.multiselect(
             "Statuses",
             options=[status.value for status in TodoStatus],
+            default=[TodoStatus.DELEGATED.value],
             key=f"{key_prefix}_statuses",
         )
-    with col3:
-        sort_by = st.selectbox(
-            "Sort by",
-            options=["deadline", "status", "created_at"],
-            key=f"{key_prefix}_sort_by",
+    with cols[2]:
+        project_filters = st.multiselect(
+            "Projects",
+            options=project_names,
+            key=f"{key_prefix}_projects",
         )
+    with cols[3]:
+        helper_options = ["-- All helpers --"] + list_helpers()
+        selected_helper = st.selectbox(
+            "Helper",
+            options=helper_options,
+            key=f"{key_prefix}_helper",
+        )
+        helper_filter = None if selected_helper == "-- All helpers --" else selected_helper
+    with cols[4], st.popover("Deadline"):
+        use_deadline_range = st.checkbox("Enable range", key=f"{key_prefix}_deadline_on")
+        start_date = st.date_input("From", key=f"{key_prefix}_deadline_from")
+        end_date = st.date_input("To", key=f"{key_prefix}_deadline_to")
 
-    extra_col1, extra_col2 = st.columns(2)
-    with extra_col1:
-        descending = st.checkbox("Descending", value=False, key=f"{key_prefix}_sort_desc")
-    with extra_col2:
-        project_filters: list[str] = []
-        if "project" in df.columns:
-            project_filters = st.multiselect(
-                "Projects",
-                options=sorted({p for p in df["project"].dropna().tolist() if p}),
-                key=f"{key_prefix}_projects",
-            )
-
-    filtered = df.copy()
+    filtered_df = source_df.copy()
     if query:
-        searchable_cols = ["name", "notes", "helper"]
-        if "project" in filtered.columns:
-            searchable_cols.append("project")
+        searchable_cols = ["name", "notes", "helper", "project"]
         mask = (
-            filtered[searchable_cols]
+            filtered_df[searchable_cols]
             .fillna("")
             .agg(" ".join, axis=1)
-            .str.contains(query, case=False)
+            .str.contains(query, case=False, regex=False)
         )
-        filtered = filtered[mask]
-
+        filtered_df = filtered_df[mask]
     if status_filters:
-        filtered = filtered[filtered["status"].isin(status_filters)]
-
-    if project_filters and "project" in filtered.columns:
-        filtered = filtered[filtered["project"].isin(project_filters)]
-
-    if sort_by in filtered.columns:
-        filtered = filtered.sort_values(by=sort_by, ascending=not descending, na_position="last")
-    return filtered
+        filtered_df = filtered_df[filtered_df["status"].isin(status_filters)]
+    if project_filters:
+        filtered_df = filtered_df[filtered_df["project"].isin(project_filters)]
+    if helper_filter:
+        filtered_df = filtered_df[filtered_df["helper"].fillna("") == helper_filter]
+    if use_deadline_range:
+        if start_date > end_date:
+            st.error("Deadline range is invalid: From must be before or equal to To.")
+            filtered_df = filtered_df.head(0)
+        else:
+            deadline_series = pd.to_datetime(filtered_df["deadline"], errors="coerce").dt.date
+            mask = (
+                deadline_series.notna()
+                & (deadline_series >= start_date)
+                & (deadline_series <= end_date)
+            )
+            filtered_df = filtered_df[mask]
+    return filtered_df
 
 
 def _save_rows(
@@ -164,23 +163,17 @@ def _save_rows(
     *,
     projects: list,
     default_project_id: int | None,
-    orig_ids: pd.Series | None,
-    bulk_status: str | None,
+    context_label: str,
 ) -> dict[str, object]:
     """Validate and persist edited rows, returning operation summary."""
     project_by_name = {project.name: project.id for project in projects}
-    id_by_index = orig_ids.reindex(edited_df.index) if orig_ids is not None else None
 
     summary = {"created": 0, "updated": 0, "deleted": 0, "skipped": 0, "errors": []}
 
-    if bulk_status:
-        selected_mask = edited_df.get("selected", False).fillna(False).astype(bool)
-        edited_df.loc[selected_mask, "status"] = bulk_status
-
-    for idx, row in edited_df.iterrows():
-        row_no = int(idx) + 1
-        todo_id = id_by_index.get(idx) if id_by_index is not None else None
-        is_existing = todo_id is not None and not pd.isna(todo_id)
+    for row_no, row in enumerate(edited_df.to_dict("records"), start=1):
+        todo_id_raw = row.get("__todo_id")
+        is_existing = todo_id_raw is not None and not pd.isna(todo_id_raw)
+        todo_id = int(todo_id_raw) if is_existing else None
         is_delete = bool(row.get("delete", False))
 
         if is_delete:
@@ -188,13 +181,22 @@ def _save_rows(
                 summary["skipped"] += 1
                 summary["errors"].append(f"Row {row_no}: cannot delete unsaved row.")
                 continue
-            if delete_todo(int(todo_id)):
+            delete_ok = delete_todo(int(todo_id))
+            if delete_ok:
                 summary["deleted"] += 1
             else:
                 summary["skipped"] += 1
                 summary["errors"].append(
                     f"Row {row_no}: todo id {int(todo_id)} not found for delete."
                 )
+            logger.info(
+                "Save action delete context={context} "
+                "row={row_no} todo_id={todo_id} success={success}",
+                context=context_label,
+                row_no=row_no,
+                todo_id=int(todo_id) if is_existing else None,
+                success=delete_ok,
+            )
             continue
 
         name_val = (row.get("name") or "").strip()
@@ -233,7 +235,7 @@ def _save_rows(
 
         if is_existing:
             updated = update_todo(
-                int(todo_id),
+                todo_id,
                 project_id=project_id,
                 name=name_val,
                 status=status_val,
@@ -243,13 +245,17 @@ def _save_rows(
             )
             if updated is None:
                 summary["skipped"] += 1
-                summary["errors"].append(
-                    f"Row {row_no}: todo id {int(todo_id)} not found for update."
-                )
+                summary["errors"].append(f"Row {row_no}: todo id {todo_id} not found for update.")
             else:
                 summary["updated"] += 1
+                logger.info(
+                    "Save action update context={context} row={row_no} todo_id={todo_id}",
+                    context=context_label,
+                    row_no=row_no,
+                    todo_id=todo_id,
+                )
         else:
-            create_todo(
+            created = create_todo(
                 project_id=project_id,
                 name=name_val,
                 status=status_val,
@@ -258,6 +264,12 @@ def _save_rows(
                 notes=notes_val,
             )
             summary["created"] += 1
+            logger.info(
+                "Save action create context={context} row={row_no} todo_id={todo_id}",
+                context=context_label,
+                row_no=row_no,
+                todo_id=created.id,
+            )
 
     return summary
 
@@ -268,60 +280,74 @@ def _render_editable_table(
     projects: list,
     default_project_id: int | None,
     key_prefix: str,
+    context_label: str,
 ) -> None:
-    """Render table controls/editor and persist on save."""
-    filtered_df = _apply_shared_filters(source_df, key_prefix=key_prefix)
+    """Render native editable table and persist on save."""
+    project_names = [project.name for project in projects]
+    filtered_df = _apply_native_filters(
+        source_df,
+        key_prefix=key_prefix,
+        project_names=project_names,
+    )
     if filtered_df.empty:
-        st.info("No rows match the current filters. You can still add rows and save.")
+        st.info("No rows match filters. You can still add rows and save.")
         filtered_df = source_df.head(0).copy()
 
-    orig_ids = (
-        filtered_df["id"].copy() if "id" in filtered_df.columns else pd.Series(dtype="float64")
-    )
-    display_df = filtered_df.drop(columns=["id", "created_at"], errors="ignore")
-
-    project_names = [project.name for project in projects]
-    column_config = {
-        "name": st.column_config.TextColumn("Name", required=True),
-        "status": st.column_config.SelectboxColumn(
-            "Status",
-            options=[status.value for status in TodoStatus],
-            default=TodoStatus.DELEGATED.value,
-            required=True,
-        ),
-        "helper": st.column_config.TextColumn("Helper"),
-        "deadline": st.column_config.DateColumn("Deadline"),
-        "notes": st.column_config.TextColumn("Notes"),
-        "selected": st.column_config.CheckboxColumn("Selected"),
-        "delete": st.column_config.CheckboxColumn("Delete"),
-    }
-    if "project" in display_df.columns:
-        column_config["project"] = st.column_config.SelectboxColumn(
-            "Project", options=project_names, required=True
-        )
-
-    bulk_status = st.selectbox(
-        "Bulk status for selected rows (applies on save)",
-        options=["No bulk status"] + [status.value for status in TodoStatus],
-        key=f"{key_prefix}_bulk_status",
+    working_df = filtered_df.reset_index(drop=True).copy()
+    working_df["__todo_id"] = working_df.get("id")
+    working_df["__created_at"] = working_df.get("created_at")
+    display_df = working_df.drop(columns=["id", "created_at"], errors="ignore").reset_index(
+        drop=True
     )
 
+    st.caption("Sort by clicking column headers. Filter using the controls above.")
     edited_df = st.data_editor(
         display_df,
         num_rows="dynamic",
         key=f"{key_prefix}_table",
         hide_index=True,
-        column_config=column_config,
+        column_config={
+            "__todo_id": None,
+            "__created_at": None,
+            "project": st.column_config.SelectboxColumn(
+                "Project",
+                options=project_names,
+                required=True,
+            ),
+            "name": st.column_config.TextColumn("Name", required=True),
+            "status": st.column_config.SelectboxColumn(
+                "Status",
+                options=[status.value for status in TodoStatus],
+                default=TodoStatus.DELEGATED.value,
+                required=True,
+            ),
+            "helper": st.column_config.TextColumn("Helper"),
+            "deadline": st.column_config.DateColumn("Deadline"),
+            "notes": st.column_config.TextColumn("Notes"),
+            "delete": st.column_config.CheckboxColumn("Delete"),
+        },
     )
 
     if st.button("Save changes", type="primary", key=f"{key_prefix}_save"):
-        selected_bulk_status = bulk_status if bulk_status != "No bulk status" else None
+        logger.info(
+            "Save requested for {context} with rows={rows}",
+            context=context_label,
+            rows=len(edited_df),
+        )
         summary = _save_rows(
             edited_df,
             projects=projects,
             default_project_id=default_project_id,
-            orig_ids=orig_ids,
-            bulk_status=selected_bulk_status,
+            context_label=context_label,
+        )
+        logger.info(
+            "Save summary context={context} created={created} updated={updated} "
+            "deleted={deleted} skipped={skipped}",
+            context=context_label,
+            created=summary["created"],
+            updated=summary["updated"],
+            deleted=summary["deleted"],
+            skipped=summary["skipped"],
         )
         success_msg = (
             f"Saved. Created: {summary['created']}, updated: {summary['updated']}, "
@@ -333,126 +359,23 @@ def _render_editable_table(
         st.rerun()
 
 
-def view_by_project() -> None:
-    """View and edit todos in a selected project."""
-    st.subheader("View by project")
+def view_unified() -> None:
+    """View and edit todos in one unified table."""
+    st.subheader("Todos")
     projects = list_projects()
     if not projects:
         st.info("No projects yet. Create one in the sidebar.")
         return
 
-    options = ["-- Select a project --"] + [project.name for project in projects]
-    selected_index = 0
-    if st.session_state.selected_project_id is not None:
-        for idx, project in enumerate(projects):
-            if project.id == st.session_state.selected_project_id:
-                selected_index = idx + 1
-                break
-    selected_name = st.selectbox("Project", options=options, index=selected_index, key="proj_sel")
-    if selected_name == "-- Select a project --":
-        st.session_state.selected_project_id = None
-        st.info("Select a project to edit todos.")
-        return
-
-    project_id = next(project.id for project in projects if project.name == selected_name)
-    st.session_state.selected_project_id = project_id
-    project = get_project(project_id)
-    if not project:
-        st.error("Selected project was not found.")
-        return
-
-    todos = get_todos_by_project(project_id)
-    st.markdown(f"**{project.name}** - {len(todos)} todo(s)")
-    df = _build_todo_dataframe(todos, include_project=False)
-    _render_editable_table(
-        source_df=df,
-        projects=projects,
-        default_project_id=project_id,
-        key_prefix=f"project_{project_id}",
-    )
-
-
-def view_by_helper() -> None:
-    """View and edit todos assigned to a helper."""
-    st.subheader("View by helper")
-    projects = list_projects()
-    if not projects:
-        st.info("No projects yet. Create one in the sidebar.")
-        return
-
-    helpers = list_helpers()
-    col1, col2 = st.columns(2)
-    with col1:
-        selected_helper = st.selectbox(
-            "Helper (dropdown)",
-            options=["-- Select helper --"] + helpers,
-            key="helper_select",
-        )
-    with col2:
-        typed_helper = st.text_input(
-            "Or type helper name",
-            key="helper_search",
-            placeholder="Type helper name to search",
-        )
-
-    query_name = (typed_helper or "").strip()
-    if not query_name and selected_helper != "-- Select helper --":
-        query_name = selected_helper.strip()
-    query_name = normalize_helper_name(query_name) or ""
-
-    if not query_name:
-        st.info("Choose a helper or type a name to see tasks across projects.")
-        return
-
-    todos = get_todos_by_helper(query_name)
-    st.caption(f"Tasks for helper '{query_name}'.")
+    todos = query_todos()
+    st.caption("Use each column's header menu for filtering and sorting.")
     df = _build_todo_dataframe(todos, include_project=True)
     _render_editable_table(
         source_df=df,
         projects=projects,
         default_project_id=projects[0].id if projects else None,
-        key_prefix=f"helper_{query_name.lower()}",
-    )
-
-
-def view_by_timeframe() -> None:
-    """View and edit todos in a selected timeframe."""
-    st.subheader("View by timeframe")
-    projects = list_projects()
-    if not projects:
-        st.info("No projects yet. Create one in the sidebar.")
-        return
-
-    today = datetime.now(UTC).date()
-    preset = st.radio(
-        "Period",
-        ["Today", "This week", "Custom"],
-        horizontal=True,
-        key="timeframe_preset",
-    )
-    if preset == "Today":
-        start = datetime.combine(today, datetime.min.time())
-        end = datetime.combine(today, datetime.max.time())
-    elif preset == "This week":
-        start = datetime.combine(today - timedelta(days=today.weekday()), datetime.min.time())
-        end = datetime.combine(today + timedelta(days=6 - today.weekday()), datetime.max.time())
-    else:
-        start_d = st.date_input("From", value=st.session_state.tf_start, key="tf_start")
-        end_d = st.date_input("To", value=st.session_state.tf_end, key="tf_end")
-        if start_d > end_d:
-            st.error("From date must be before or equal to To date.")
-            return
-        start = datetime.combine(start_d, datetime.min.time())
-        end = datetime.combine(end_d, datetime.max.time())
-
-    todos = get_todos_by_timeframe(start, end)
-    st.caption(f"Tasks between {start.date().isoformat()} and {end.date().isoformat()}.")
-    df = _build_todo_dataframe(todos, include_project=True)
-    _render_editable_table(
-        source_df=df,
-        projects=projects,
-        default_project_id=projects[0].id if projects else None,
-        key_prefix=f"timeframe_{preset.lower()}",
+        key_prefix="unified",
+        context_label="view=unified",
     )
 
 
@@ -491,8 +414,6 @@ def _render_sidebar_project_management(projects: list) -> None:
     ):
         deleted = delete_project(selected_project_id)
         if deleted:
-            if st.session_state.selected_project_id == selected_project_id:
-                st.session_state.selected_project_id = None
             st.sidebar.success("Project deleted.")
             st.rerun()
         else:
@@ -531,12 +452,6 @@ def sidebar(*, app_version: str) -> None:
     """Render sidebar controls and project lifecycle actions."""
     st.sidebar.title("Engagement To-Do")
     st.sidebar.caption(f"Version: {app_version}")
-    st.session_state.view = st.sidebar.radio(
-        "View",
-        ["By project", "By helper", "By timeframe"],
-        key="view_radio",
-    )
-    st.sidebar.divider()
 
     st.sidebar.subheader("Create project")
     with st.sidebar.form("new_project"):
@@ -563,10 +478,5 @@ def main(*, app_version: str) -> None:
     init_db()
     _init_session_state()
     sidebar(app_version=app_version)
-    logger.info("Switched main view to {view}", view=st.session_state.view)
-    if st.session_state.view == "By project":
-        view_by_project()
-    elif st.session_state.view == "By helper":
-        view_by_helper()
-    else:
-        view_by_timeframe()
+    logger.info("Rendering unified todo table view")
+    view_unified()

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from loguru import logger
-from sqlmodel import select
+from sqlmodel import or_, select
 
 from todo_app.db import session_context
 from todo_app.models import Project, Todo, TodoStatus
@@ -163,42 +163,82 @@ def delete_todo(todo_id: int) -> bool:
         return True
 
 
-def get_todos_by_project(project_id: int) -> list[Todo]:
-    """Return all todos for a project, ordered by deadline (nulls last) then created_at."""
+def query_todos(
+    *,
+    project_ids: list[int] | None = None,
+    helper_name: str | None = None,
+    statuses: list[TodoStatus] | None = None,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    search_text: str | None = None,
+) -> list[Todo]:
+    """Return todos matching optional unified filters.
+
+    Args:
+        project_ids: Optional project ids to include.
+        helper_name: Optional helper substring filter.
+        statuses: Optional statuses to include.
+        start: Optional inclusive deadline lower bound.
+        end: Optional inclusive deadline upper bound.
+        search_text: Optional free-text search against name/notes/helper.
+
+    Returns:
+        Matching todos ordered by deadline then created_at.
+    """
     with session_context() as session:
-        stmt = (
-            select(Todo)
-            .where(Todo.project_id == project_id)
-            .order_by(Todo.deadline.asc().nulls_last(), Todo.created_at.asc())
-        )
+        stmt = select(Todo)
+
+        if project_ids:
+            stmt = stmt.where(Todo.project_id.in_(project_ids))
+
+        normalized_helper = normalize_helper_name(helper_name)
+        if normalized_helper:
+            stmt = stmt.where(Todo.helper.ilike(f"%{normalized_helper}%"))
+
+        if statuses:
+            stmt = stmt.where(Todo.status.in_(statuses))
+
+        if start is not None:
+            stmt = stmt.where(Todo.deadline.isnot(None)).where(Todo.deadline >= start)
+        if end is not None:
+            stmt = stmt.where(Todo.deadline.isnot(None)).where(Todo.deadline <= end)
+
+        normalized_search = (search_text or "").strip()
+        if normalized_search:
+            like_expr = f"%{normalized_search}%"
+            stmt = stmt.where(
+                or_(
+                    Todo.name.ilike(like_expr),
+                    Todo.notes.ilike(like_expr),
+                    Todo.helper.ilike(like_expr),
+                )
+            )
+
+        stmt = stmt.order_by(Todo.deadline.asc().nulls_last(), Todo.created_at.asc())
         todos = list(session.exec(stmt).all())
+        for todo in todos:
+            todo.project = session.get(Project, todo.project_id)
         logger.info(
-            "Fetched {count} todos for project {project_id}",
+            "Queried {count} todos with project_ids={project_ids} helper={helper} "
+            "statuses={statuses} start={start} end={end}",
             count=len(todos),
-            project_id=project_id,
+            project_ids=project_ids,
+            helper=normalized_helper,
+            statuses=[s.value for s in statuses] if statuses else None,
+            start=start,
+            end=end,
         )
         return todos
+
+
+def get_todos_by_project(project_id: int) -> list[Todo]:
+    """Return all todos for a project, ordered by deadline (nulls last) then created_at."""
+    return query_todos(project_ids=[project_id])
 
 
 def get_todos_by_helper(helper_name: str) -> list[Todo]:
     """Return all todos across all projects assigned to the given helper."""
-    with session_context() as session:
-        normalized = normalize_helper_name(helper_name) or ""
-        stmt = (
-            select(Todo)
-            .where(Todo.helper.ilike(f"%{normalized}%"))
-            .order_by(Todo.deadline.asc().nulls_last(), Todo.created_at.asc())
-        )
-        todos = list(session.exec(stmt).all())
-        # Load project for display
-        for t in todos:
-            t.project = session.get(Project, t.project_id)
-        logger.info(
-            "Fetched {count} todos for helper {helper}",
-            count=len(todos),
-            helper=normalized,
-        )
-        return todos
+    return query_todos(helper_name=helper_name)
 
 
 def get_todos_by_timeframe(
@@ -206,25 +246,7 @@ def get_todos_by_timeframe(
     end: datetime,
 ) -> list[Todo]:
     """Return all todos whose deadline falls within [start, end] (inclusive of day)."""
-    with session_context() as session:
-        # Compare by date; include todos with deadline on start or end day
-        stmt = (
-            select(Todo)
-            .where(Todo.deadline.isnot(None))
-            .where(Todo.deadline >= start)
-            .where(Todo.deadline <= end)
-            .order_by(Todo.deadline.asc())
-        )
-        todos = list(session.exec(stmt).all())
-        for t in todos:
-            t.project = session.get(Project, t.project_id)
-        logger.info(
-            "Fetched {count} todos between {start} and {end}",
-            count=len(todos),
-            start=start,
-            end=end,
-        )
-        return todos
+    return query_todos(start=start, end=end)
 
 
 def list_helpers() -> list[str]:
