@@ -1,5 +1,13 @@
 # Release notes
 
+## 2026.2.7
+
+- **Branding:** Rename the app to *Chaos Queue* and update titles, description, and navigation to better reflect multi-project, hectic-day usage.
+- **Logging:** Centralise loguru configuration so logs go to both stdout and a rotating file under the user data directory (e.g. `%APPDATA%\todo-app\logs`).
+- **Todo lifecycle:** Track when todos are marked as done via a new `completed_at` timestamp and apply a lightweight migration for existing SQLite databases.
+- **Calendar view:** Add a simple weekly calendar page that shows todos grouped by deadline day, annotated when completed this week.
+- **UI components:** Extract shared Streamlit UI helpers into `ui_components.py` and clean up imports for the todos and calendar pages.
+
 ## 2026.2.6
 
 - **Deadlines:** When you pick a date-only deadline in the todos table, it is now stored at 18:00 local time instead of midnight so that \"today\" does not show up as already in the past in relative views.

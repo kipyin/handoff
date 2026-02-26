@@ -1,7 +1,7 @@
 [project]
 name = "todo-app"
-version = "2026.2.6"
-description = "Minimal to-do app for managing tasks across engagements (projects)."
+version = "2026.2.7"
+description = "Chaos-tinged to-do app for juggling multiple projects."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

@@ -1,6 +1,30 @@
-# Engagement To-Do App
+# Chaos Queue
 
-Minimal to-do app for managing tasks across different engagements (projects). Personal use; runs locally with SQLite.
+Chaos-tinged to-do app for juggling tasks across different engagements (projects). Personal use; runs locally with SQLite.
+
+## Why this over a spreadsheet?
+
+Unlike an ad-hoc Excel or Sheets tracker, this app is opinionated around
+**multi?project, helper-centric work**:
+
+- **Cross-project view**: All todos live in a single table so you can see your
+  entire workload across engagements at once, without maintaining separate
+  tabs.
+- **Helper dimension**: The `helper` field treats ?who is on the hook? as a
+  first-class axis for filtering and planning (for example, ?what have I
+  delegated to Alice this week??).
+- **Deadlines & focus presets**: Deadline filters (today, tomorrow, this week,
+  custom ranges) and sorting are tuned for short-horizon planning rather than
+  long-term Gantt charts.
+- **Lightweight history & backups**: Todos and projects are stored in a local
+  SQLite database with a built-in JSON/CSV export, so you can safely experiment
+  without losing data.
+- **Streamlit-native UX**: The UI is optimised for quick inline editing,
+  filtering, and saving, not for cell-by-cell formulas or complex formatting.
+
+If you find yourself stitching together multiple sheets or constantly
+re-filtering to answer ?what must ship this week across all projects??, this
+app aims to make that view a single click instead.
 
 ## Database: SQLite
 
@@ -48,18 +72,27 @@ By default, the SQLite database is stored in your per-user data directory so app
 
 ## Logging & debugging
 
-The app uses **loguru** for logging (to standard output by default).
+The app uses **loguru** for logging, configured to write to:
 
-- **During development**, run the app from a terminal to see logs as you interact:
+- **Standard output** (what you see in the terminal when running Streamlit).
+- **Rotating log file** under your user data directory (for example on Windows:
+  `%APPDATA%\todo-app\logs\todo-app.log`).
+
+The configuration lives in `src/todo_app/logging.py` and is initialised from
+`todo_app.ui.setup()`.
+
+- **During development**, run the app from a terminal to see logs live as you interact:
   ```bash
   uv run streamlit run app.py --server.baseUrlPath todo
   ```
 - **What gets logged** (non-exhaustive):
-  - Project creation
-  - Creating, updating, and deleting todos (with context and row/todo id)
-  - Save summary counts and high-level query info
+  - Database initialisation and file location.
+  - Project creation, rename, and delete operations.
+  - Creating, updating, and deleting todos (with context, row number, and todo id).
+  - Save summary counts and high-level query info.
 
-For deeper diagnostics you can extend the existing `loguru` calls in `app.py`, `src/todo_app/data.py`, or `src/todo_app/db.py`.
+For deeper diagnostics you can extend the existing `loguru` calls in
+`src/todo_app/data.py`, `src/todo_app/db.py`, or `src/todo_app/ui_components.py`.
 
 ## Windows embedded zip build (optional)
 
