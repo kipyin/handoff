@@ -1,5 +1,13 @@
 # Release notes
 
+## 2026.2.4
+
+- **Logging:** Log applied filters in `query_todos` and include todo ids/names in save and delete logs for better traceability.
+- **UI naming:** Expose a concise `todo_app.ui` module and rename the main view function to `view`.
+- **Table behavior:** Remove the explicit Delete column and rely on built-in `st.data_editor` row deletion while keeping robust id mapping.
+- **Streamlit chrome:** Hide the Deploy toolbar button via `.streamlit/config.toml`.
+- **Docs:** Add a high-level UI flow diagram and clarify that notes support Markdown/links.
+
 ## 2026.2.3
 
 - **Column order:** Project, name, status, helper, deadline, notes; Delete column hidden by default (show via table column menu eye icon).

@@ -1,6 +1,6 @@
 [project]
 name = "todo-app"
-version = "2026.2.3"
+version = "2026.2.4"
 description = "Minimal to-do app for managing tasks across engagements (projects)."
 readme = "README.md"
 requires-python = ">=3.13"
