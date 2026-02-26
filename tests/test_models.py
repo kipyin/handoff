@@ -2,7 +2,6 @@
 
 from datetime import datetime
 
-import pytest
 from sqlmodel import Session
 
 from todo_app.models import Project, Todo, TodoStatus

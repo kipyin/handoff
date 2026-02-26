@@ -2,8 +2,6 @@
 
 from datetime import date, timedelta
 
-import pytest
-
 from todo_app.ui_facade import (
     DEADLINE_ANY,
     DEADLINE_CUSTOM,

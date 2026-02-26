@@ -3,8 +3,6 @@
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from todo_app.models import Project, Todo
-
 
 @pytest.fixture
 def session():

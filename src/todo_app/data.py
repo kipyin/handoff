@@ -1,6 +1,6 @@
 """Data access helpers for projects/todos and common query workflows."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from loguru import logger
@@ -131,7 +131,7 @@ def update_todo(
             todo.notes = notes
         # Track when a todo is marked as done.
         if previous_status != todo.status and todo.status == TodoStatus.DONE:
-            todo.completed_at = datetime.now(timezone.utc)
+            todo.completed_at = datetime.now(UTC)
 
         session.add(todo)
         session.commit()

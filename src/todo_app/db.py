@@ -8,8 +8,6 @@ from loguru import logger
 from platformdirs import user_data_dir
 from sqlmodel import Session, SQLModel, create_engine
 
-from todo_app.models import Project, Todo
-
 
 def _get_default_db_path() -> Path:
     """Return the default path for the SQLite DB in the user data directory.

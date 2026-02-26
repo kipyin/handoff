@@ -1,13 +1,12 @@
 """SQLModel models for projects and todos."""
 
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Optional
+from datetime import UTC, datetime
+from enum import StrEnum
 
 from sqlmodel import Field, Relationship, SQLModel
 
 
-class TodoStatus(str, Enum):
+class TodoStatus(StrEnum):
     """Status of a todo item.
 
     Values are persisted as strings in the database and used for filtering and display.
@@ -24,9 +23,9 @@ class Project(SQLModel, table=True):
     __tablename__ = "project"
     __table_args__ = {"extend_existing": True}
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     todos: list["Todo"] = Relationship(back_populates="project")
 
@@ -41,14 +40,14 @@ class Todo(SQLModel, table=True):
     __tablename__ = "todo"
     __table_args__ = {"extend_existing": True}
 
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id", index=True)
     name: str
     status: TodoStatus = Field(default=TodoStatus.DELEGATED, index=True)
-    deadline: Optional[datetime] = Field(default=None, index=True)
-    helper: Optional[str] = Field(default=None, index=True)
-    notes: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    completed_at: Optional[datetime] = Field(default=None, index=True)
+    deadline: datetime | None = Field(default=None, index=True)
+    helper: str | None = Field(default=None, index=True)
+    notes: str | None = Field(default=None)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    completed_at: datetime | None = Field(default=None, index=True)
 
-    project: Optional[Project] = Relationship(back_populates="todos")
+    project: Project | None = Relationship(back_populates="todos")
