@@ -3,15 +3,16 @@
 This file intentionally stays minimal so an updater can read APP_VERSION here.
 """
 
-from todo_app.ui import main as run_app
+from todo_app.ui import render_todos_page, setup
 
 # Keep this in sync with `[project].version` in pyproject.toml.
-APP_VERSION = "2026.2.4"
+APP_VERSION = "2026.2.5"
 
 
 def main() -> None:
     """Run the Streamlit app via the package UI module."""
-    run_app(app_version=APP_VERSION)
+    setup(APP_VERSION)
+    render_todos_page()
 
 
 if __name__ == "__main__":

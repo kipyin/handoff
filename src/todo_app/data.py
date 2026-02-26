@@ -367,3 +367,46 @@ def get_export_payload() -> dict[str, Any]:
                 for todo in todos
             ],
         }
+
+
+def get_projects_with_todo_summary() -> list[dict[str, Any]]:
+    """Return projects with aggregated todo status counts.
+
+    Each item contains:
+
+    - ``project``: The :class:`Project` instance.
+    - ``total``: Total todos in the project.
+    - ``delegated``: Todos with status ``delegated``.
+    - ``done``: Todos with status ``done``.
+    - ``canceled``: Todos with status ``canceled``.
+    """
+    projects = list_projects()
+    if not projects:
+        return []
+
+    project_ids = [p.id for p in projects]
+    todos = query_todos(project_ids=project_ids)
+    summary_by_project: dict[int, dict[str, Any]] = {
+        project.id: {
+            "project": project,
+            "total": 0,
+            "delegated": 0,
+            "done": 0,
+            "canceled": 0,
+        }
+        for project in projects
+    }
+
+    for todo in todos:
+        item = summary_by_project.get(todo.project_id)
+        if not item:
+            continue
+        item["total"] += 1
+        if todo.status == TodoStatus.DELEGATED:
+            item["delegated"] += 1
+        elif todo.status == TodoStatus.DONE:
+            item["done"] += 1
+        elif todo.status == TodoStatus.CANCELED:
+            item["canceled"] += 1
+
+    return [summary_by_project[project.id] for project in projects]
