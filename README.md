@@ -4,7 +4,7 @@ Minimal to-do app for managing tasks across different engagements (projects). Pe
 
 ## Database: SQLite
 
-The app uses **SQLite** (single file, no server). It’s a good fit for:
+The app uses **SQLite** (single file, no server). It's a good fit for:
 
 - One user, one machine
 - Simple CRUD (projects + todos)
@@ -30,18 +30,19 @@ By default, the SQLite database is stored in your per-user data directory so app
 
 ## Features
 
-1. **Projects** – Create engagements/projects in the sidebar.
-2. **Todos per project** – Each project has many todos. Each todo has:
+1. **Projects** ? Create engagements/projects in the sidebar.
+2. **Todos per project** ? Each project has many todos. Each todo has:
    - Name
    - Deadline (optional)
    - Creation timestamp (auto)
    - Status: `delegated` | `done` | `canceled`
    - Helper (assignee)
    - Notes (text; you can paste links, file paths, etc.)
-3. **Unified table view** – One main table lists todos across all projects. Use the filter bar to narrow by:
-   - **Search** – Text in name, notes, helper, or project.
-   - **Statuses** – Multiselect (defaults to delegated).
-   - **By timeframe** – Choose “Today”, “This week”, or a custom range to see all tasks in that period.
+3. **Unified table view** ? One main table lists todos across all projects (columns: Project, name, status, helper, deadline, notes; use the column menu eye icon to show the Delete column). Use the filter bar to narrow by:
+   - **Search** ? Text in name, notes, helper, or project.
+   - **Statuses** ? Multiselect (defaults to delegated).
+   - **Projects** ? Multiselect. **Helper** ? Multiselect.
+   - **Deadline** ? Any, Today, Tomorrow, This week, or custom range (single calendar). New rows default to the single selected filter when one is active. Sort via controls above the table.
 
 ## Logging & debugging
 
@@ -68,7 +69,7 @@ On Windows you can build a self-contained zip that bundles an embedded Python ru
 uv run python build_zip.py
 ```
 
-This produces a zip under `dist/` (named like `todo-app-2026.2.2-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app (the launcher already includes `--server.baseUrlPath todo`). The SQLite database is still stored in your user data directory, not inside the extracted folder.
+This produces a zip under `dist/` (named like `todo-app-2026.2.3-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app (the launcher already includes `--server.baseUrlPath todo`). The SQLite database is still stored in your user data directory, not inside the extracted folder.
 
 ## Development
 
@@ -93,7 +94,7 @@ Version sync guard:
 
 ## Project layout
 
-- `app.py` – Thin Streamlit entrypoint + `APP_VERSION`
-- `src/todo_app/app_ui.py` – Streamlit UI composition and view logic
-- `src/todo_app/` – Package: `models.py`, `db.py`, `data.py`
-- `tests/` – Pytest tests
+- `app.py` ? Thin Streamlit entrypoint + `APP_VERSION`
+- `src/todo_app/app_ui.py` ? Streamlit UI composition and view logic
+- `src/todo_app/` ? Package: `models.py`, `db.py`, `data.py`
+- `tests/` ? Pytest tests
