@@ -1,6 +1,6 @@
 [project]
 name = "todo-app"
-version = "2026.2.7"
+version = "2026.2.8"
 description = "Chaos-tinged to-do app for juggling multiple projects."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -12,17 +12,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["ruff>=0.8.0", "pytest>=8.0.0"]
+dev = ["ruff>=0.8.0", "pytest>=8.0.0", "typer>=0.12.3", "rich>=13.7.0"]
 
 [dependency-groups]
-dev = ["ruff>=0.8.0", "pytest>=8.0.0"]
+dev = ["ruff>=0.8.0", "pytest>=8.0.0", "typer>=0.12.3", "rich>=13.7.0"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/todo_app"]
+packages = ["src/todo_app", "scripts"]
 
 [tool.ruff]
 target-version = "py313"
@@ -37,3 +37,6 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+
+[project.scripts]
+todo = "scripts.cli:main"

@@ -43,12 +43,12 @@ Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
 uv sync
 
 # Run the app
-uv run streamlit run app.py
+uv run todo run
 ```
 
 By default, the SQLite database is stored in your per-user data directory so app updates do not overwrite your data (for example on Windows: `%APPDATA%\todo-app\todo.db`). You can override the location by setting the `TODO_APP_DB_PATH` environment variable before starting the app.
 
-`app.py` is intentionally kept thin and exposes an `APP_VERSION` constant so external tooling (for example an updater) can read a stable version value from a single place.
+`app.py` is intentionally kept thin and delegates version handling to `src/todo_app/version.py`, which exposes a single `__version__` constant used by the UI and tooling (for example the updater panel and build scripts).
 
 ## Features
 
@@ -92,39 +92,74 @@ The configuration lives in `src/todo_app/logging.py` and is initialised from
 For deeper diagnostics you can extend the existing `loguru` calls in
 `src/todo_app/data.py`, `src/todo_app/db.py`, or `src/todo_app/ui_components.py`.
 
-## Windows embedded zip build (optional)
+## Windows embedded zip build and code-only patches
 
-On Windows you can build a self-contained zip that bundles an embedded Python runtime, dependencies, and the app code:
+On Windows you can build a self-contained zip that bundles an embedded Python runtime,
+dependencies, and the app code:
 
 ```bash
-uv run python build_zip.py
+uv run todo build-zip
 ```
 
-This produces a zip under `dist/` (named like `todo-app-2026.2.4-windows-embed.zip`). Extract it, then double-click `run.bat` to start the app (the launcher already includes `--server.baseUrlPath todo`). The SQLite database is still stored in your user data directory, not inside the extracted folder.
+This produces a zip under `dist/` (named like `todo-app-2026.2.8-windows-embed.zip`).
+Extract it, then double-click `run.bat` to start the app (the launcher already includes
+`--server.baseUrlPath todo`). The SQLite database is still stored in your user data
+directory, not inside the extracted folder.
+
+For small logic-only changes you can ship a **code-only patch** zip instead of a full
+embedded bundle:
+
+```bash
+uv run todo build-patch
+```
+
+This creates `dist/todo-app-<version>-patch.zip` containing `app.py`, `src/todo_app/`,
+and (by default) the `pages/` directory, plus a `VERSION` marker.
+
+On a client machine:
+
+1. The user runs the app as usual (for example from the embedded zip via `run.bat`).
+2. In the Streamlit sidebar, they open **Update app**, upload the patch zip, and click
+   **Apply update**.
+3. The app extracts the patch into the app directory and asks the user to restart.
 
 ## Development
 
+The Typer CLI under `scripts/cli.py` wraps common development commands:
+
 ```bash
+# Run the app
+uv run todo run
+
+# Install/sync dependencies
+uv run todo sync
+
 # Lint and format
-uv run ruff check . && uv run ruff format .
+uv run todo check
 
 # Tests
-uv run pytest
+uv run todo test
+
+# Build embedded Windows zip
+uv run todo build-zip
+
+# Build code-only patch zip
+uv run todo build-patch
+
+# Bump version in pyproject.toml and todo_app.version
+uv run todo bump-version 2026.2.9
 ```
 
 Version sync guard:
 
-- `app.py` contains `APP_VERSION`.
+- `src/todo_app/version.py` contains `__version__`.
 - `pyproject.toml` contains `[project].version`.
 - `tests/test_version_sync.py` enforces they match.
-- `scripts/bump_version.py` updates both together:
-  ```bash
-  uv run python scripts/bump_version.py 2026.3.0
-  ```
+- `scripts/bump_version.py` (and the `bump-version` CLI command) update both together.
 
 ## Project layout
 
-- `app.py` ? Thin Streamlit entrypoint + `APP_VERSION`
+- `app.py` ? Thin Streamlit entrypoint + updater panel
 - `src/todo_app/ui_facade.py` ? Public Streamlit UI entrypoints
 - `src/todo_app/` ? Package: `models.py`, `db.py`, `data.py`
 - `tests/` ? Pytest tests

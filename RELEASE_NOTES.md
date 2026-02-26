@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.8
+
+- **CLI & scripts:** Add a Typer + Rich CLI under `scripts/cli.py` that wraps common developer commands (`run`, `sync`, `check`, `test`, `build-zip`, `build-patch`, `bump-version`), and move the embedded Windows build logic into `scripts/build_zip.py` with a small root-level shim for backwards compatibility.
+- **Versioning:** Introduce a single canonical `todo_app.version.__version__` constant, update `app.py` to import it, and update `scripts/bump_version.py` + `tests/test_version_sync.py` so `pyproject.toml` and the version module stay in sync.
+- **Patch updates:** Add a `scripts/build_patch.py` helper and `build-patch` CLI command to produce small code-only patch zips, plus an in-app Streamlit sidebar “Update app” panel (`todo_app.updater.render_update_panel`) that applies uploaded patch zips safely against the app directory.
+
 ## 2026.2.7
 
 - **Branding:** Rename the app to *Chaos Queue* and update titles, description, and navigation to better reflect multi-project, hectic-day usage.
