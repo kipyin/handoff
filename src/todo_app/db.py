@@ -58,6 +58,10 @@ def init_db() -> None:
             initialized.
     """
     try:
+        # Ensure models are imported so SQLModel's metadata is populated with
+        # the Project and Todo tables before create_all() runs.
+        from todo_app import models as _models  # noqa: F401
+
         SQLModel.metadata.create_all(engine)
 
         # Lightweight migration: ensure newer columns exist on existing tables.

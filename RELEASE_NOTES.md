@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.16
+
+- **DB tests:** Add tests for file-based DB initialisation and the lightweight `completed_at`
+  migration using a temporary SQLite database, guarding against regressions in init/migrate
+  behaviour.
+
 ## 2026.2.15
 
 - **Type checking:** Add a basic `pyright` configuration for `src/` and `scripts/`, wiring it
