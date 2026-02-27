@@ -14,10 +14,10 @@ from todo_app.ui_facade import (
     render_calendar_page,
     render_focus_page,
     render_projects_page,
+    render_settings_page,
     render_todos_page,
     setup,
 )
-from todo_app.updater import render_update_panel
 from todo_app.version import __version__ as APP_VERSION
 
 
@@ -51,15 +51,21 @@ def _focus_page() -> None:
     render_focus_page()
 
 
+def _settings_page() -> None:
+    """Configure global layout and render the Settings view."""
+    setup(APP_VERSION)
+    render_settings_page()
+
+
 def main() -> None:
     """Run the Chaos Queue app using the Streamlit navigation API."""
-    render_update_panel(APP_VERSION)
     pages = [
         st.Page(_todos_page, title="Todos", icon="✅"),
         st.Page(_projects_page, title="Projects", icon="📁"),
         st.Page(_calendar_page, title="Calendar", icon="📅"),
         st.Page(_analytics_page, title="Analytics", icon="📊"),
         st.Page(_focus_page, title="Focus", icon="🎯"),
+        st.Page(_settings_page, title="Settings", icon="⚙️"),
     ]
     nav = st.navigation(pages, position="top")
     nav.run()

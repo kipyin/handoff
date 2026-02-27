@@ -119,9 +119,9 @@ embedded bundle:
 On a client machine:
 
 1. The user runs the app as usual (for example from the embedded zip via `run.bat`).
-2. In the Streamlit sidebar, they open **Update app**, upload the patch zip, and click
-   **Apply and Restart**. If there are unsaved changes on the main Todos table, the button is
-   disabled until those changes are saved.
+2. In the app's navigation, they open the **Settings** page, use **Update app** to upload the
+   patch zip, and click **Apply and Restart**. If there are unsaved changes on the main Todos
+   table, the button is disabled until those changes are saved.
 3. After applying the patch, the app extracts the update into the app directory and then
    exits automatically; reopen `run.bat` to start the updated version.
 
@@ -129,10 +129,10 @@ On a client machine:
 
 When applying a code-only patch, the updater creates a **timestamped backup**
 of any overwritten files under a `backup/<YYYYMMDD-HHMMSS>/` directory inside the app
-root. You can roll back from a bad patch directly in the app:
+root. You can roll back from a bad patch directly from the **Settings** page:
 
-1. Open the **Update app** panel in the sidebar.
-2. In the **Restore from backup** section, pick a snapshot (named by timestamp).
+1. Open the **Settings** page and locate the **Restore from backup** section under **Update app**.
+2. Pick a snapshot (named by timestamp).
 3. Click **Restore selected backup and Restart**.
 
 The app copies the backed-up files back into the app directory, clears Python
@@ -180,7 +180,7 @@ Version sync guard:
 
 ## Project layout
 
-- `app.py` ? Thin Streamlit entrypoint + updater panel
+- `app.py` ? Thin Streamlit entrypoint + navigation
 - `src/todo_app/ui_facade.py` ? Public Streamlit UI entrypoints
 - `src/todo_app/` ? Package: `models.py`, `db.py`, `data.py`
 - `tests/` ? Pytest tests

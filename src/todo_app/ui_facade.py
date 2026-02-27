@@ -15,6 +15,7 @@ from .pages.analytics import render_analytics_page as _render_analytics_page_imp
 from .pages.calendar import render_calendar_page as _render_calendar_page_impl
 from .pages.focus import render_focus_page as _render_focus_page_impl
 from .pages.projects import render_projects_page as _render_projects_page_impl
+from .pages.settings import render_settings_page as _render_settings_page_impl
 from .pages.todos import render_todos_page as _render_todos_page_impl
 from .ui_components import (
     DEADLINE_ANY,
@@ -24,7 +25,6 @@ from .ui_components import (
     DEADLINE_TOMORROW,
     _deadline_preset_bounds,
     _init_session_state,
-    _render_sidebar_backup,
 )
 
 
@@ -50,11 +50,6 @@ def setup(app_version: str) -> None:
         )
         st.stop()
     _init_session_state()
-
-    st.sidebar.title("Chaos Queue")
-    st.sidebar.caption(f"Version: {app_version}")
-    st.sidebar.divider()
-    _render_sidebar_backup()
 
 
 def render_todos_page() -> None:
@@ -82,6 +77,11 @@ def render_focus_page() -> None:
     _render_focus_page_impl()
 
 
+def render_settings_page() -> None:
+    """Render the settings and about page."""
+    _render_settings_page_impl()
+
+
 __all__ = [
     "DEADLINE_ANY",
     "DEADLINE_CUSTOM",
@@ -95,4 +95,5 @@ __all__ = [
     "render_calendar_page",
     "render_analytics_page",
     "render_focus_page",
+    "render_settings_page",
 ]
