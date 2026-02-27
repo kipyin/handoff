@@ -23,6 +23,7 @@ BUILD_ROOT = ROOT / "build"
 DIST_ROOT = ROOT / "dist"
 APP_FOLDER_NAME = "todo-app"
 APP_BUILD_DIR = BUILD_ROOT / APP_FOLDER_NAME
+SRC_PLAIN_DIR = APP_BUILD_DIR / "src_plain"
 PYTHON_DIR = APP_BUILD_DIR / "python"
 
 PY_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
@@ -174,10 +175,54 @@ def _copy_app_code() -> None:
     print("Copying application code...")
     shutil.copy2(ROOT / "app.py", APP_BUILD_DIR / "app.py")
     src_pkg = ROOT / "src" / "todo_app"
-    dst_pkg = APP_BUILD_DIR / "src" / "todo_app"
-    if dst_pkg.exists():
-        shutil.rmtree(dst_pkg, ignore_errors=True)
-    shutil.copytree(src_pkg, dst_pkg)
+    if SRC_PLAIN_DIR.exists():
+        shutil.rmtree(SRC_PLAIN_DIR, ignore_errors=True)
+    SRC_PLAIN_DIR.mkdir(parents=True, exist_ok=True)
+    dst_pkg = SRC_PLAIN_DIR / "todo_app"
+    shutil.copytree(src_pkg, dst_pkg, dirs_exist_ok=True)
+
+
+def _obfuscate_app_code_with_pyarmor() -> None:
+    """Obfuscate the application package in the build directory using PyArmor.
+
+    This runs PyArmor against a copied source tree under SRC_PLAIN_DIR and
+    writes obfuscated modules and the runtime package under ``APP_BUILD_DIR/src``.
+    """
+    if not SRC_PLAIN_DIR.exists():
+        raise RuntimeError(
+            f"Expected plain sources in {SRC_PLAIN_DIR} before obfuscation; "
+            "did you run _copy_app_code()?"
+        )
+
+    obf_root = APP_BUILD_DIR / "src"
+    if obf_root.exists():
+        shutil.rmtree(obf_root, ignore_errors=True)
+
+    pyarmor_exe = shutil.which("pyarmor")
+    if not pyarmor_exe:
+        raise RuntimeError(
+            "PyArmor CLI not found on PATH. Install with: uv sync (dev group includes pyarmor)."
+        )
+    pyarmor_cmd = [
+        pyarmor_exe,
+        "gen",
+        "-r",
+        "-O",
+        str(obf_root),
+        "todo_app",
+    ]
+
+    print("Obfuscating application code with PyArmor...")
+    try:
+        subprocess.run(pyarmor_cmd, check=True, cwd=SRC_PLAIN_DIR)
+    except subprocess.CalledProcessError as exc:  # noqa: TRY002
+        raise RuntimeError(
+            "PyArmor failed while obfuscating application code. "
+            "Ensure PyArmor >=9.2.0 is installed in the development environment."
+        ) from exc
+
+    # Remove the plain sources so only obfuscated code is shipped.
+    shutil.rmtree(SRC_PLAIN_DIR, ignore_errors=True)
 
 
 def _write_run_bat() -> None:
@@ -215,7 +260,7 @@ def _make_zip(name: str, version: str) -> Path:
     print(f"Creating zip at {dist_path}...")
     with zipfile.ZipFile(dist_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for path in APP_BUILD_DIR.rglob("*"):
-            if path.is_file():
+            if path.is_file() and "__pycache__" not in path.parts:
                 rel_path = path.relative_to(BUILD_ROOT)
                 zf.write(path, rel_path)
     return dist_path
@@ -230,6 +275,7 @@ def main() -> None:
     _extract_embedded_python()
     _install_deps_into_embedded()
     _copy_app_code()
+    _obfuscate_app_code_with_pyarmor()
     _write_run_bat()
     out_zip = _make_zip(name, version)
     print()

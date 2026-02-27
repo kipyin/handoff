@@ -1,6 +1,6 @@
 [project]
 name = "todo-app"
-version = "2026.2.11"
+version = "2026.2.12"
 description = "Chaos-tinged to-do app for juggling multiple projects."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -15,7 +15,13 @@ dependencies = [
 dev = ["ruff>=0.8.0", "pytest>=8.0.0", "typer>=0.12.3", "rich>=13.7.0"]
 
 [dependency-groups]
-dev = ["ruff>=0.8.0", "pytest>=8.0.0", "typer>=0.12.3", "rich>=13.7.0"]
+dev = [
+    "ruff>=0.8.0",
+    "pytest>=8.0.0",
+    "typer>=0.12.3",
+    "rich>=13.7.0",
+    "pyarmor>=9.2.0",
+]
 
 [build-system]
 requires = ["hatchling"]

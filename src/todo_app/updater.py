@@ -1,4 +1,9 @@
-"""In-app update panel and patch application helpers."""
+"""In-app update panel and patch application helpers.
+
+Patches for PyArmor-obfuscated distributions must be built with
+``uv run todo build-obfuscated-patch`` (from the obfuscated build output);
+``build-patch`` produces source-only patches for dev or non-obfuscated installs.
+"""
 
 import os
 import shutil
