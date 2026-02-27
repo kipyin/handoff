@@ -7,24 +7,13 @@ Chaos-tinged to-do app for juggling tasks across different engagements (projects
 Unlike an ad-hoc Excel or Sheets tracker, this app is opinionated around
 **multi-project, helper-centric work**:
 
-- **Cross-project view**: All todos live in a single table so you can see your
-  entire workload across engagements at once, without maintaining separate
-  tabs.
-- **Helper dimension**: The `helper` field treats "who is on the hook" as a
-  first-class axis for filtering and planning (for example, "what have I
-  delegated to Alice this week?").
-- **Deadlines & focus presets**: Deadline filters (today, tomorrow, this week,
-  custom ranges) and sorting are tuned for short-horizon planning rather than
-  long-term Gantt charts.
-- **Lightweight history & backups**: Todos and projects are stored in a local
-  SQLite database with a built-in JSON/CSV export, so you can safely experiment
-  without losing data.
-- **Streamlit-native UX**: The UI is optimised for quick inline editing,
-  filtering, and saving, not for cell-by-cell formulas or complex formatting.
+- **Cross-project view**: All todos live in a single table so you can see your entire workload across engagements at once, without maintaining separate tabs.
+- **Helper dimension**: The `helper` field treats "who is on the hook" as a first-class axis for filtering and planning (for example, "what have I delegated to Alice this week?").
+- **Deadlines & focus presets**: Deadline filters (today, tomorrow, this week, custom ranges) and sorting are tuned for short-horizon planning rather than long-term Gantt charts.
+- **Lightweight history & backups**: Todos and projects are stored in a local SQLite database with a built-in JSON/CSV export, so you can safely experiment without losing data.
+- **Streamlit-native UX**: The UI is optimised for quick inline editing, filtering, and saving, not for cell-by-cell formulas or complex formatting.
 
-If you find yourself stitching together multiple sheets or constantly
-re-filtering to answer "what must ship this week across all projects?", this
-app aims to make that view a single click instead.
+If you find yourself stitching together multiple sheets or constantly re-filtering to answer "what must ship this week across all projects?", this app aims to make that view a single click instead.
 
 ## Database: SQLite
 
@@ -43,7 +32,7 @@ Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
 uv sync
 
 # Run the app
-uv run todo run
+uv run todo
 ```
 
 By default, the SQLite database is stored in your per-user data directory so app updates do not overwrite your data (for example on Windows: `%APPDATA%\todo-app\todo.db`). You can override the location by setting the `TODO_APP_DB_PATH` environment variable before starting the app.
@@ -52,20 +41,20 @@ By default, the SQLite database is stored in your per-user data directory so app
 
 ## Features
 
-1. **Projects** ? Create and manage engagements/projects on the Projects page.
-2. **Todos per project** ? Each project has many todos. Each todo has:
+1. **Projects** — Create and manage engagements/projects on the Projects page.
+2. **Todos per project** — Each project has many todos. Each todo has:
   - Name
   - Deadline (optional)
   - Creation timestamp (auto)
   - Status: `delegated` | `done` | `canceled`
   - Helper (assignee)
   - Notes (text; you can paste links, file paths, etc.)
-3. **Unified table view** ? One main table lists todos across all projects. Use the filter bar to narrow by:
-  - **Search** ? Text in name, notes, helper, or project.
-  - **Statuses** ? Multiselect (defaults to delegated).
-  - **Projects** ? Multiselect.
-  - **Helper** ? Dropdown of known helpers (or "All helpers").
-  - **Deadline** ? Optional date range (popover: enable range, then pick From/To dates).
+3. **Unified table view** — One main table lists todos across all projects. Use the filter bar to narrow by:
+  - **Search** — Text in name, notes, helper, or project.
+  - **Statuses** — Multiselect (defaults to delegated).
+  - **Projects** — Multiselect.
+  - **Helper** — Dropdown of known helpers (or "All helpers").
+  - **Deadline** — Optional date range (popover: enable range, then pick From/To dates).
    Sort by clicking column headers. Edit inline and click **Save changes** to create, update, or delete todos.
 
 ## Logging & debugging
@@ -183,10 +172,10 @@ Version sync guard:
 
 ## Project layout
 
-- `app.py` ? Thin Streamlit entrypoint + navigation
-- `src/todo_app/ui_facade.py` ? Public Streamlit UI entrypoints
-- `src/todo_app/` ? Package: `models.py`, `db.py`, `data.py`
-- `tests/` ? Pytest tests
+- `app.py` — Thin Streamlit entrypoint + navigation
+- `src/todo_app/ui_facade.py` — Public Streamlit UI entrypoints
+- `src/todo_app/` — Package: `models.py`, `db.py`, `data.py`
+- `tests/` — Pytest tests
 
 See also `CONTRIBUTING.md` for a more detailed overview of the dev workflow and
 branching/versioning expectations.
