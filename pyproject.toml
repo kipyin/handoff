@@ -1,6 +1,6 @@
 [project]
 name = "todo-app"
-version = "2026.2.14"
+version = "2026.2.15"
 description = "Chaos-tinged to-do app for juggling multiple projects."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -21,6 +21,7 @@ dev = [
     "typer>=0.12.3",
     "rich>=13.7.0",
     "pyarmor>=9.2.0",
+    "pyright>=1.1.408",
 ]
 
 [build-system]

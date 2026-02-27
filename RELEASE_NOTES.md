@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.15
+
+- **Type checking:** Add a basic `pyright` configuration for `src/` and `scripts/`, wiring it
+  into the dev environment and excluding dynamic ORM/UI modules for now so type checking can
+  run cleanly and be tightened incrementally.
+
 ## 2026.2.14
 
 - **DB robustness:** Wrap database engine creation and schema initialisation in structured

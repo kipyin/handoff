@@ -20,7 +20,7 @@ class TodoStatus(StrEnum):
 class Project(SQLModel, table=True):
     """An engagement/project that contains many todos."""
 
-    __tablename__ = "project"
+    __tablename__ = "project"  # type: ignore[assignment]
     __table_args__ = {"extend_existing": True}
 
     id: int | None = Field(default=None, primary_key=True)
@@ -37,7 +37,7 @@ class Todo(SQLModel, table=True):
     typically means the task is outstanding and assigned to that helper.
     """
 
-    __tablename__ = "todo"
+    __tablename__ = "todo"  # type: ignore[assignment]
     __table_args__ = {"extend_existing": True}
 
     id: int | None = Field(default=None, primary_key=True)

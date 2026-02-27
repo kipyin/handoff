@@ -16,7 +16,7 @@ def _render_create_project_form() -> None:
     """Render the top-of-page project creation form."""
     st.subheader("Create project")
     with st.form("projects_create_project"):
-        name = st.text_input("Project name", key="projects_new_project_name")
+        name = st.text_input("Project name", key="projects_new_project_name") or ""
         submitted = st.form_submit_button("Create")
         if submitted:
             cleaned = name.strip()
@@ -44,7 +44,7 @@ def _render_project_row(*, project, summary: dict) -> None:
             "Rename project",
             value=project.name,
             key=f"projects_rename_name_{project.id}",
-        )
+        ) or project.name
         if st.button("Rename", key=f"projects_rename_button_{project.id}"):
             cleaned = new_name.strip()
             if not cleaned:
