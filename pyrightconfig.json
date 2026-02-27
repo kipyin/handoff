@@ -2,7 +2,10 @@
   "include": ["src", "scripts"],
   "exclude": [
     "src/todo_app/data.py",
-    "src/todo_app/ui_components.py"
+    "src/todo_app/ui_components.py",
+    "src/todo_app/pages/analytics.py",
+    "src/todo_app/pages/calendar.py",
+    "src/todo_app/pages/focus.py"
   ],
   "venvPath": ".",
   "venv": ".venv",

@@ -11,7 +11,9 @@ import streamlit as st
 
 from .db import DatabaseInitializationError, init_db
 from .logging import configure_logging
+from .pages.analytics import render_analytics_page as _render_analytics_page_impl
 from .pages.calendar import render_calendar_page as _render_calendar_page_impl
+from .pages.focus import render_focus_page as _render_focus_page_impl
 from .pages.projects import render_projects_page as _render_projects_page_impl
 from .pages.todos import render_todos_page as _render_todos_page_impl
 from .ui_components import (
@@ -70,6 +72,16 @@ def render_calendar_page() -> None:
     _render_calendar_page_impl()
 
 
+def render_analytics_page() -> None:
+    """Render the analytics page."""
+    _render_analytics_page_impl()
+
+
+def render_focus_page() -> None:
+    """Render the focus/daily planning page."""
+    _render_focus_page_impl()
+
+
 __all__ = [
     "DEADLINE_ANY",
     "DEADLINE_CUSTOM",
@@ -81,4 +93,6 @@ __all__ = [
     "render_todos_page",
     "render_projects_page",
     "render_calendar_page",
+    "render_analytics_page",
+    "render_focus_page",
 ]
