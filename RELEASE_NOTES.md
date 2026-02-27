@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.12
+
+- **PyArmor obfuscation:** The Windows embedded zip build (`uv run todo build-zip`) now obfuscates the `src/todo_app` package with PyArmor so that distributed code is protected while `app.py` remains readable. The PyArmor runtime is included in the zip; no extra install is required on the target machine.
+- **Obfuscated patches:** For installs that use the obfuscated embedded zip, code-only updates must be built with `uv run todo build-obfuscated-patch` (after running `build-zip`) so that the patch contains obfuscated code and the PyArmor runtime. The standard `build-patch` command still produces source-only patches for development or non-obfuscated installs.
+- **Build requirements:** Building the embedded zip now requires PyArmor in the dev environment (`uv sync` installs it from the dev dependency group). The trial/non-profit PyArmor build uses default obfuscation; a full license allows extra options (e.g. `--enable-jit`, `--mix-str`) if you edit `scripts/build_zip.py`.
+
 ## 2026.2.11
 
 - **Updater cache cleanup:** After applying a code-only patch, the app now removes `__pycache__`

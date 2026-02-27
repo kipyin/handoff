@@ -95,26 +95,26 @@ For deeper diagnostics you can extend the existing `loguru` calls in
 ## Windows embedded zip build and code-only patches
 
 On Windows you can build a self-contained zip that bundles an embedded Python runtime,
-dependencies, and the app code:
+dependencies, and the app code. The build uses **PyArmor** to obfuscate the `src/todo_app`
+package so that distributed code is protected; `app.py` stays readable. You need PyArmor
+in your dev environment (`uv sync` installs it):
 
 ```bash
 uv run todo build-zip
 ```
 
 This produces a zip under `dist/` (named like `todo-app-<version>-windows-embed.zip`).
-Extract it, then double-click `run.bat` to start the app (the launcher already includes
-`--server.baseUrlPath todo`). The SQLite database is still stored in your user data
-directory, not inside the extracted folder.
+Extract it, then double-click `run.bat` to start the app. The SQLite database is still
+stored in your user data directory, not inside the extracted folder.
 
 For small logic-only changes you can ship a **code-only patch** zip instead of a full
 embedded bundle:
 
-```bash
-uv run todo build-patch
-```
-
-This creates `dist/todo-app-<version>-patch.zip` containing `app.py`, `src/todo_app/`,
-and (by default) the `pages/` directory, plus a `VERSION` marker.
+- **Non-obfuscated / dev installs:** `uv run todo build-patch` creates
+  `dist/todo-app-<version>-patch.zip` from the source tree (app.py, src/todo_app/, pages/).
+- **Obfuscated embedded installs:** Run `uv run todo build-obfuscated-patch` *after*
+  `build-zip`. This creates `dist/todo-app-<version>-obfuscated-patch.zip` from the
+  obfuscated build output so that the in-app updater can apply it to PyArmor-built installs.
 
 On a client machine:
 
@@ -153,11 +153,14 @@ uv run todo check
 # Tests
 uv run todo test
 
-# Build embedded Windows zip
+# Build embedded Windows zip (obfuscates src/todo_app with PyArmor)
 uv run todo build-zip
 
-# Build code-only patch zip
+# Build code-only patch zip (from source; for dev or non-obfuscated installs)
 uv run todo build-patch
+
+# Build patch from obfuscated build (for PyArmor-built installs; run after build-zip)
+uv run todo build-obfuscated-patch
 
 # Bump version in pyproject.toml and todo_app.version
 uv run todo bump-version 2026.2.10
