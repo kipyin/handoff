@@ -1,6 +1,6 @@
 [project]
 name = "todo-app"
-version = "2026.2.13"
+version = "2026.2.14"
 description = "Chaos-tinged to-do app for juggling multiple projects."
 readme = "README.md"
 requires-python = ">=3.13"

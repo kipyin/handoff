@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.14
+
+- **DB robustness:** Wrap database engine creation and schema initialisation in structured
+  error handling, logging failures with loguru and surfacing a friendly error message in
+  the UI when the DB cannot be created or migrated.
+
 ## 2026.2.13
 
 - **Rollback UI:** Add a **Restore from backup** section to the in-app **Update app** sidebar

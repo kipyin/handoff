@@ -31,26 +31,46 @@ def _resolve_db_path() -> Path:
     return _get_default_db_path()
 
 
+class DatabaseInitializationError(RuntimeError):
+    """Raised when the database engine or schema cannot be initialized."""
+
+
 _DB_PATH = _resolve_db_path()
 DATABASE_URL = f"sqlite:///{_DB_PATH}"
 
-engine = create_engine(DATABASE_URL, echo=False)
+try:
+    engine = create_engine(DATABASE_URL, echo=False)
+except Exception as exc:  # noqa: BLE001
+    logger.exception("Failed to create database engine for {}", DATABASE_URL)
+    msg = (
+        "Could not initialise the database engine. "
+        "Check that the configured path is writable and valid."
+    )
+    raise DatabaseInitializationError(msg) from exc
 
 
 def init_db() -> None:
     """Create all tables if they do not exist.
 
     Safe to call on every app start; only creates missing tables.
+    Raises:
+        DatabaseInitializationError: If the database engine or schema cannot be
+            initialized.
     """
-    SQLModel.metadata.create_all(engine)
+    try:
+        SQLModel.metadata.create_all(engine)
 
-    # Lightweight migration: ensure newer columns exist on existing tables.
-    with engine.connect() as conn:
-        result = conn.exec_driver_sql("PRAGMA table_info('todo')")
-        columns = {row[1] for row in result}  # row[1] = column name
-        if "completed_at" not in columns:
-            logger.info("Applying migration: adding completed_at column to todo table")
-            conn.exec_driver_sql("ALTER TABLE todo ADD COLUMN completed_at TIMESTAMP NULL")
+        # Lightweight migration: ensure newer columns exist on existing tables.
+        with engine.connect() as conn:
+            result = conn.exec_driver_sql("PRAGMA table_info('todo')")
+            columns = {row[1] for row in result}  # row[1] = column name
+            if "completed_at" not in columns:
+                logger.info("Applying migration: adding completed_at column to todo table")
+                conn.exec_driver_sql("ALTER TABLE todo ADD COLUMN completed_at TIMESTAMP NULL")
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Database initialization failed: {}", exc)
+        msg = "Database initialisation failed. See the log file for details."
+        raise DatabaseInitializationError(msg) from exc
 
     logger.info("Database initialized at {}", _DB_PATH)
 

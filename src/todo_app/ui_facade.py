@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from .db import init_db
+from .db import DatabaseInitializationError, init_db
 from .logging import configure_logging
 from .pages.calendar import render_calendar_page as _render_calendar_page_impl
 from .pages.projects import render_projects_page as _render_projects_page_impl
@@ -37,7 +37,16 @@ def setup(app_version: str) -> None:
     """
     configure_logging()
     st.set_page_config(page_title="Chaos Queue", page_icon="📥", layout="wide")
-    init_db()
+    try:
+        init_db()
+    except DatabaseInitializationError:
+        st.error(
+            "The database could not be initialised.\n\n"
+            "Check that the app has write access to its data directory or to the path "
+            "configured in TODO_APP_DB_PATH.\n\n"
+            "See the log file for technical details.",
+        )
+        st.stop()
     _init_session_state()
 
     st.sidebar.title("Chaos Queue")
