@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import zipfile
 from io import BytesIO
 from pathlib import Path
-import zipfile
 
 from todo_app.updater import (
-    apply_patch_zip,
     _clear_pycache,
     _iter_backup_snapshots,
     _restore_backup_snapshot,
+    apply_patch_zip,
 )
 
 
@@ -137,4 +137,3 @@ def test_restore_backup_snapshot_copies_files_and_clears_pycache(tmp_path: Path)
     assert app_file.read_text(encoding="utf-8") == "from backup"
     assert src_file.read_text(encoding="utf-8") == "from backup src"
     assert not pycache_dir.exists()
-

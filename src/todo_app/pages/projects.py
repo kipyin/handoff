@@ -47,11 +47,14 @@ def _render_project_row(*, project, summary: dict) -> None:
 
     rename_col, archive_col, delete_col = st.columns([3, 2, 2])
     with rename_col:
-        new_name = st.text_input(
-            "Rename project",
-            value=project.name,
-            key=f"projects_rename_name_{project.id}",
-        ) or project.name
+        new_name = (
+            st.text_input(
+                "Rename project",
+                value=project.name,
+                key=f"projects_rename_name_{project.id}",
+            )
+            or project.name
+        )
         if st.button("Rename", key=f"projects_rename_button_{project.id}"):
             cleaned = new_name.strip()
             if not cleaned:

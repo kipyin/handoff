@@ -28,7 +28,16 @@ def _build_done_dataframe(start: date | None, end: date | None) -> pd.DataFrame:
         include_archived=False,
     )
     if not todos:
-        return pd.DataFrame(columns=["id", "name", "helper", "project", "created_at", "completed_at"])
+        return pd.DataFrame(
+            columns=[
+                "id",
+                "name",
+                "helper",
+                "project",
+                "created_at",
+                "completed_at",
+            ],
+        )
 
     rows = []
     for todo in todos:
@@ -89,9 +98,7 @@ def render_analytics_page() -> None:
     p50 = df_done["cycle_days"].quantile(0.5)
     p90 = df_done["cycle_days"].quantile(0.9)
     st.write(
-        f"Average: {avg_cycle:.1f} days, "
-        f"median: {p50:.1f} days, "
-        f"90th percentile: {p90:.1f} days."
+        f"Average: {avg_cycle:.1f} days, median: {p50:.1f} days, 90th percentile: {p90:.1f} days."
     )
     st.bar_chart(df_done.set_index("completed_date")["cycle_days"])
 
@@ -113,4 +120,3 @@ def render_analytics_page() -> None:
     helper_counts = df_delegated.groupby("helper")["id"].count().reset_index(name="delegated")
     helper_counts = helper_counts.sort_values("delegated", ascending=False)
     st.bar_chart(helper_counts.set_index("helper"))
-

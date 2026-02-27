@@ -142,4 +142,3 @@ def render_focus_page() -> None:
                 update_todo(todo_id, deadline=new_deadline_dt)
             st.success("Deferred selected todos.")
             st.rerun()
-

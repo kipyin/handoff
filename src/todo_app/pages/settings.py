@@ -60,7 +60,7 @@ def _render_about_section() -> None:
     st.write(
         "Chaos Queue is a local, SQLite-backed to-do app for juggling work across multiple "
         "engagements. It emphasises a single unified table of todos, helper-centric filters "
-        "for \"who is on the hook\", and short-horizon planning views like calendar and focus."
+        'for "who is on the hook", and short-horizon planning views like calendar and focus.'
     )
 
     st.write(
@@ -96,4 +96,3 @@ def render_settings_page() -> None:
 
     st.divider()
     _render_about_section()
-

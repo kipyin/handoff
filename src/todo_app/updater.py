@@ -284,8 +284,7 @@ def render_update_panel(current_version: str) -> None:
             except PermissionError as exc:
                 logger.exception("Failed to restore backup due to permissions: {}", exc)
                 st.error(
-                    "Restore failed. The app directory may be read-only. "
-                    "See logs for details."
+                    "Restore failed. The app directory may be read-only. See logs for details."
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.exception("Failed to restore backup snapshot: {}", exc)

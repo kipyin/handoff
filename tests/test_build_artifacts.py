@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 import zipfile
+from pathlib import Path
 
 import pytest
 
-import scripts.build_zip as build_zip_module
-import scripts.build_patch as build_patch_module
 import scripts.build_obfuscated_patch as build_obfuscated_patch_module
+import scripts.build_patch as build_patch_module
+import scripts.build_zip as build_zip_module
 
 
-def test_copy_docs_copies_readme_and_release_notes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_copy_docs_copies_readme_and_release_notes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """_copy_docs copies README and release notes into the app build directory."""
     root = tmp_path
     readme = root / "README.md"
@@ -32,7 +35,10 @@ def test_copy_docs_copies_readme_and_release_notes(tmp_path: Path, monkeypatch: 
     assert (app_build_dir / "RELEASE_NOTES.md").is_file()
 
 
-def test_make_zip_includes_docs_and_core_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_make_zip_includes_docs_and_core_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """_make_zip includes docs, app.py, core package, and pages."""
     root = tmp_path
     build_root = root / "build"
@@ -76,7 +82,10 @@ def test_make_zip_includes_docs_and_core_files(tmp_path: Path, monkeypatch: pyte
     assert "todo-app/pages/2_Projects.py" in names
 
 
-def test_build_patch_includes_docs_and_core_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_patch_includes_docs_and_core_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """build_patch writes docs, app.py, and core package into the patch zip."""
     root = tmp_path
     monkeypatch.setattr(build_patch_module, "ROOT", root)
@@ -105,7 +114,10 @@ def test_build_patch_includes_docs_and_core_files(tmp_path: Path, monkeypatch: p
     assert "src/todo_app/__init__.py" in names
 
 
-def test_build_obfuscated_patch_includes_docs_and_core_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_build_obfuscated_patch_includes_docs_and_core_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """build_obfuscated_patch writes docs, app.py, and core package into the patch zip."""
     root = tmp_path
 
@@ -141,4 +153,3 @@ def test_build_obfuscated_patch_includes_docs_and_core_files(tmp_path: Path, mon
     assert "RELEASE_NOTES.md" in names
     assert "app.py" in names
     assert "src/todo_app/__init__.py" in names
-

@@ -84,9 +84,7 @@ def render_calendar_page() -> None:
 
                 # Inline deadline adjustments for delegated todos.
                 if status_value == TodoStatus.DELEGATED.value:
-                    current_deadline_date = (
-                        todo.deadline.date() if todo.deadline else day
-                    )
+                    current_deadline_date = todo.deadline.date() if todo.deadline else day
                     todo_id = int(todo.id)
                     date_key = f"calendar_deadline_{todo_id}"
                     new_date = st.date_input(

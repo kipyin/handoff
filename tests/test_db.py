@@ -35,7 +35,10 @@ def _fetch_columns(sqlite_path: str, table: str) -> set[str]:
     return {row[1] for row in rows}
 
 
-def test_init_db_creates_tables_and_completed_at(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_db_creates_tables_and_completed_at(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """init_db creates tables and includes the completed_at column on a fresh DB."""
     db_path = tmp_path / "todo.db"
     db = _reload_db_module(db_path, monkeypatch)
@@ -94,4 +97,3 @@ def test_init_db_adds_completed_at_to_existing_schema(
     assert "completed_at" in todo_columns
     assert "is_archived" in todo_columns
     assert "is_archived" in project_columns
-
