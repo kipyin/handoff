@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.20
+
+- **CLI & CI workflow:** Add `typecheck` and `ci` commands to the `todo` CLI and document the recommended check/typecheck/test flow for local and CI runs.
+- **Distribution quality:** Include project docs (README and release notes) in build and patch zips, plus tests that verify the contents of build artifacts.
+- **Internal cleanup:** Remove an obsolete sidebar backup hook and apply Ruff-driven formatting cleanups; there are no user-visible behaviour changes.
+
 ## 2026.2.19
 
 - **Settings page:** Add a dedicated Settings page with in-app update/rollback controls, data export (JSON/CSV), and an inline About section at the bottom.
