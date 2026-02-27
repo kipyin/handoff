@@ -1,5 +1,10 @@
 # Release notes
 
+## 2026.2.19
+
+- **Settings page:** Add a dedicated Settings page with in-app update/rollback controls, data export (JSON/CSV), and an inline About section at the bottom.
+- **Update/backup location:** Move the update and backup UI out of the global sidebar so operational controls now live only on the Settings page.
+
 ## 2026.2.18
 
 - **Urgency & helper view:** Add urgency buckets (overdue, today, soon) to the main todos table and weekly calendar, plus a per-helper summary panel showing delegated and urgent work under the current filters.

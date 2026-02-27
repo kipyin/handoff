@@ -178,9 +178,15 @@ def _schedule_shutdown(delay_seconds: float = 2.0) -> None:
 
 
 def render_update_panel(current_version: str) -> None:
-    """Render a sidebar panel for uploading updates and restoring backups."""
+    """Render an in-app panel for uploading updates and restoring backups.
+
+    This is intended to be called from the Settings page so that update and
+    rollback controls live in a single, dedicated place in the UI.
+    """
     app_root = _get_app_root()
-    with st.sidebar.expander("Update app"):
+
+    st.markdown("### App updates & rollback")
+    with st.expander("Update app"):
         st.caption(f"Current version: {current_version}")
 
         uploaded = st.file_uploader("Upload update.zip", type="zip", key="update_zip")
@@ -234,59 +240,60 @@ def render_update_panel(current_version: str) -> None:
                         )
                         _schedule_shutdown()
 
-        st.divider()
-        st.subheader("Restore from backup")
+    st.divider()
+    st.subheader("Restore from backup")
 
-        snapshots = _iter_backup_snapshots(app_root)
-        if not snapshots:
-            st.caption(
-                "No backups found yet. Backups are created automatically before applying "
-                "a code-only patch."
-            )
-            return
+    snapshots = _iter_backup_snapshots(app_root)
+    if not snapshots:
+        st.caption(
+            "No backups found yet. Backups are created automatically before applying "
+            "a code-only patch."
+        )
+        return
 
-        labels = [_format_snapshot_label(snapshot) for snapshot in snapshots]
-        label_to_snapshot = dict(zip(labels, snapshots, strict=False))
+    labels = [_format_snapshot_label(snapshot) for snapshot in snapshots]
+    label_to_snapshot = dict(zip(labels, snapshots, strict=False))
 
-        selected_label = st.selectbox(
-            "Choose a backup snapshot to restore",
-            options=labels,
-            key="restore_backup_choice",
+    has_unsaved_todos = bool(st.session_state.get("main_has_unsaved_changes", False))
+    selected_label = st.selectbox(
+        "Choose a backup snapshot to restore",
+        options=labels,
+        key="restore_backup_choice",
+    )
+
+    if has_unsaved_todos:
+        st.warning(
+            "You have unsaved changes on the Todos table. "
+            "Please click **Save changes** there before restoring a backup."
         )
 
-        if has_unsaved_todos:
-            st.warning(
-                "You have unsaved changes on the Todos table. "
-                "Please click **Save changes** there before restoring a backup."
-            )
+    restore_clicked = st.button(
+        "Restore selected backup and Restart",
+        type="secondary",
+        key="restore_backup_button",
+        disabled=has_unsaved_todos or not selected_label,
+    )
 
-        restore_clicked = st.button(
-            "Restore selected backup and Restart",
-            type="secondary",
-            key="restore_backup_button",
-            disabled=has_unsaved_todos or not selected_label,
-        )
-
-        if restore_clicked:
-            with st.spinner("Restoring backup..."):
-                try:
-                    message = _restore_backup_snapshot(
-                        label_to_snapshot[selected_label],
-                        app_root=app_root,
-                    )
-                except PermissionError as exc:
-                    logger.exception("Failed to restore backup due to permissions: {}", exc)
-                    st.error(
-                        "Restore failed. The app directory may be read-only. "
-                        "See logs for details."
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.exception("Failed to restore backup snapshot: {}", exc)
-                    st.error("Restore failed. See logs for details.")
-                else:
-                    st.success(message)
-                    st.info(
-                        "Backup restored. The app will close automatically in a moment; "
-                        "reopen it to use the restored version."
-                    )
-                    _schedule_shutdown()
+    if restore_clicked:
+        with st.spinner("Restoring backup..."):
+            try:
+                message = _restore_backup_snapshot(
+                    label_to_snapshot[selected_label],
+                    app_root=app_root,
+                )
+            except PermissionError as exc:
+                logger.exception("Failed to restore backup due to permissions: {}", exc)
+                st.error(
+                    "Restore failed. The app directory may be read-only. "
+                    "See logs for details."
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("Failed to restore backup snapshot: {}", exc)
+                st.error("Restore failed. See logs for details.")
+            else:
+                st.success(message)
+                st.info(
+                    "Backup restored. The app will close automatically in a moment; "
+                    "reopen it to use the restored version."
+                )
+                _schedule_shutdown()

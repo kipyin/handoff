@@ -13,7 +13,6 @@ helpers directly.
 
 from __future__ import annotations
 
-import json
 from datetime import date, datetime, time, timedelta
 
 import pandas as pd
@@ -25,7 +24,6 @@ from todo_app.data import (
     create_todo,
     delete_project,
     delete_todo,
-    get_export_payload,
     list_helpers,
     list_projects,
     normalize_helper_name,
@@ -736,34 +734,6 @@ def _render_sidebar_project_management(projects: list) -> None:
             st.rerun()
         else:
             st.sidebar.error("Project could not be deleted.")
-
-
-def _render_sidebar_backup() -> None:
-    """Render backup/download controls."""
-    st.sidebar.subheader("Backup")
-    payload = get_export_payload()
-    json_text = json.dumps(payload, indent=2)
-    st.sidebar.download_button(
-        "Download JSON backup",
-        data=json_text,
-        file_name="todo_backup.json",
-        mime="application/json",
-        key="download_json_backup",
-    )
-
-    todos = payload.get("todos", [])
-    csv_text = (
-        pd.DataFrame(todos).to_csv(index=False)
-        if todos
-        else "id,project_id,name,status,deadline,helper,notes,created_at\n"
-    )
-    st.sidebar.download_button(
-        "Download CSV (todos)",
-        data=csv_text,
-        file_name="todo_todos.csv",
-        mime="text/csv",
-        key="download_csv_backup",
-    )
 
 
 def sidebar(*, app_version: str) -> None:
