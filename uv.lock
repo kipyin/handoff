@@ -1032,6 +1032,7 @@ dependencies = [
 [package.optional-dependencies]
 dev = [
     { name = "pyarmor" },
+    { name = "pyright" },
     { name = "pytest" },
     { name = "rich" },
     { name = "ruff" },
@@ -1053,6 +1054,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "platformdirs", specifier = ">=4.0.0" },
     { name = "pyarmor", marker = "extra == 'dev'", specifier = ">=9.2.0" },
+    { name = "pyright", marker = "extra == 'dev'", specifier = ">=1.1.408" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "rich", marker = "extra == 'dev'", specifier = ">=13.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
