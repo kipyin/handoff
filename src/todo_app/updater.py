@@ -1,8 +1,7 @@
 """In-app update panel and patch application helpers.
 
 Patches for PyArmor-obfuscated distributions must be built with
-``uv run todo build-obfuscated-patch`` (from the obfuscated build output);
-``build-patch`` produces source-only patches for dev or non-obfuscated installs.
+``uv run todo build-obfuscated-patch`` from the obfuscated build output.
 """
 
 import os
@@ -15,7 +14,7 @@ from typing import BinaryIO
 
 from loguru import logger
 
-ALLOWED_PREFIXES = ("app.py", "src/", "pages/")
+ALLOWED_PREFIXES = ("app.py", "src/", "README.md", "RELEASE_NOTES.md")
 
 
 def _get_app_root() -> Path:

@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.22 [Optional]
+
+- **Legacy pages cleanup:** Remove legacy root `pages/` Streamlit shims (`2_Projects.py`, `3_Calendar.py`); navigation is now via `app.py` and Streamlit's `st.navigation` API only.
+- **Type checker config:** Move Pyright configuration into `[tool.pyright]` in `pyproject.toml` and remove the standalone `pyrightconfig.json` file.
+- **Patch tooling simplification:** Remove the legacy `scripts/build_patch.py` helper and associated CLI docs; use `uv run todo build-obfuscated-patch` (after `build-zip`) for patch builds.
+
 ## 2026.2.21 [Recommended]
 
 - **Docs inside the app:** Add a `Docs` navigation page that renders the README and release notes from the installed app root, and update Settings/About copy so it points there for “What’s new?”.
@@ -112,7 +118,7 @@
 
 - **Projects page:** Add a dedicated Projects page with project creation, rename, delete, and per-project todo summaries.
 - **UI façade:** Introduce `todo_app.pages` for page implementations and a `todo_app.ui_facade` façade with `setup`, `render_todos_page`, and `render_projects_page` entrypoints suitable for Streamlit multipage usage.
-- **Entry scripts:** Keep `app.py` as a thin entrypoint and add `pages/1_Todos.py` and `pages/2_Projects.py` as minimal Streamlit page shims.
+- **Entry scripts:** Keep `app.py` as a thin entrypoint and (historically) add `pages/1_Todos.py` and `pages/2_Projects.py` as minimal Streamlit page shims for classic multipage usage; modern installs rely on `app.py` and Streamlit navigation instead.
 
 ## 2026.2.4 [Optional]
 

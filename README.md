@@ -152,9 +152,6 @@ uv run todo ci
 # Build embedded Windows zip (obfuscates src/todo_app with PyArmor)
 uv run todo build-zip
 
-# Build code-only patch zip (from source; for dev or non-obfuscated installs)
-uv run todo build-patch
-
 # Build patch from obfuscated build (for PyArmor-built installs; run after build-zip)
 uv run todo build-obfuscated-patch
 
