@@ -155,6 +155,9 @@ uv run todo check
 # Tests
 uv run todo test
 
+# Type checking
+uv run pyright src scripts
+
 # Build embedded Windows zip (obfuscates src/todo_app with PyArmor)
 uv run todo build-zip
 
@@ -181,4 +184,7 @@ Version sync guard:
 - `src/todo_app/ui_facade.py` ? Public Streamlit UI entrypoints
 - `src/todo_app/` ? Package: `models.py`, `db.py`, `data.py`
 - `tests/` ? Pytest tests
+
+See also `CONTRIBUTING.md` for a more detailed overview of the dev workflow and
+branching/versioning expectations.
 

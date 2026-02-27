@@ -1,5 +1,11 @@
 # Release notes
 
+## 2026.2.17
+
+- **Contributor docs:** Add a `CONTRIBUTING.md` guide describing the uv/CLI workflow, type
+  checking with pyright, and the branching/versioning expectations backed by the Cursor
+  rules, plus reference it from the README.
+
 ## 2026.2.16
 
 - **DB tests:** Add tests for file-based DB initialisation and the lightweight `completed_at`
