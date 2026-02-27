@@ -12,6 +12,7 @@ import streamlit as st
 from todo_app.ui_facade import (
     render_analytics_page,
     render_calendar_page,
+    render_docs_page,
     render_focus_page,
     render_projects_page,
     render_settings_page,
@@ -57,6 +58,12 @@ def _settings_page() -> None:
     render_settings_page()
 
 
+def _docs_page() -> None:
+    """Configure global layout and render the Docs view."""
+    setup(APP_VERSION)
+    render_docs_page()
+
+
 def main() -> None:
     """Run the Chaos Queue app using the Streamlit navigation API."""
     pages = [
@@ -66,6 +73,7 @@ def main() -> None:
         st.Page(_analytics_page, title="Analytics", icon="📊"),
         st.Page(_focus_page, title="Focus", icon="🎯"),
         st.Page(_settings_page, title="Settings", icon="⚙️"),
+        st.Page(_docs_page, title="Docs", icon="📖"),
     ]
     nav = st.navigation(pages, position="top")
     nav.run()

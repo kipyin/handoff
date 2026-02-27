@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from todo_app.data import get_export_payload
-from todo_app.updater import render_update_panel
+from todo_app.update_ui import render_update_panel
 from todo_app.version import __version__ as APP_VERSION
 
 
@@ -55,7 +55,12 @@ def _render_data_export_section() -> None:
 def _render_about_section() -> None:
     """Render a compact About section at the end of the Settings page."""
     st.markdown("### About Chaos Queue")
-    st.caption(f"Version: {APP_VERSION}")
+    cols = st.columns([2, 1])
+    with cols[0]:
+        st.caption(f"Version: {APP_VERSION}")
+    with cols[1]:
+        # Link to the Docs page, which hosts README and Release notes.
+        st.page_link("app.py", page="Docs", label="What's new?")
 
     st.write(
         "Chaos Queue is a local, SQLite-backed to-do app for juggling work across multiple "
@@ -75,8 +80,8 @@ def _render_about_section() -> None:
     st.caption(f"Environment: Python {python_version} on {system} {release}")
 
     st.caption(
-        "For a fuller overview and a detailed changelog, see the README and RELEASE_NOTES files "
-        "in the project directory."
+        "For a fuller overview and a detailed changelog, open the in-app README and Release "
+        "notes pages from the navigation bar."
     )
 
 
