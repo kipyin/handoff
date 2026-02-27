@@ -60,6 +60,12 @@ def build_obfuscated_patch(*, include_pages: bool = True) -> Path:
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("VERSION", __version__)
 
+        # Include top-level documentation in the patch.
+        for filename in ("README.md", "RELEASE_NOTES.md"):
+            doc = ROOT / filename
+            if doc.is_file():
+                zf.write(doc, filename)
+
         app_py = BUILD_APP_DIR / "app.py"
         if app_py.is_file():
             zf.write(app_py, "app.py")

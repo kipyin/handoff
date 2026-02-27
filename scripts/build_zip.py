@@ -182,6 +182,19 @@ def _copy_app_code() -> None:
     shutil.copytree(src_pkg, dst_pkg, dirs_exist_ok=True)
 
 
+def _copy_docs() -> None:
+    """Copy top-level documentation files into the build directory.
+
+    Includes README and release notes so they ship with the embedded
+    distribution zip.
+    """
+    print("Copying documentation files...")
+    for filename in ("README.md", "RELEASE_NOTES.md"):
+        src = ROOT / filename
+        if src.exists():
+            shutil.copy2(src, APP_BUILD_DIR / filename)
+
+
 def _obfuscate_app_code_with_pyarmor() -> None:
     """Obfuscate the application package in the build directory using PyArmor.
 
@@ -275,6 +288,7 @@ def main() -> None:
     _extract_embedded_python()
     _install_deps_into_embedded()
     _copy_app_code()
+    _copy_docs()
     _obfuscate_app_code_with_pyarmor()
     _write_run_bat()
     out_zip = _make_zip(name, version)

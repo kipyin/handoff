@@ -51,6 +51,12 @@ def build_patch(*, include_pages: bool = True) -> Path:
         # Write a VERSION marker so the updater can display target version.
         zf.writestr("VERSION", __version__)
 
+        # Include top-level documentation in the patch.
+        for filename in ("README.md", "RELEASE_NOTES.md"):
+            doc = ROOT / filename
+            if doc.is_file():
+                zf.write(doc, filename)
+
         for path in files:
             rel_path = path.relative_to(ROOT)
             zf.write(path, rel_path.as_posix())
