@@ -123,6 +123,7 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
         "status",
         "helper",
         "deadline",
+        "urgency",
         "notes",
         "created_at",
     ]
@@ -134,10 +135,11 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "status",
             "helper",
             "deadline",
+            "urgency",
             "notes",
             "created_at",
         ]
-    return pd.DataFrame(columns=cols)
+    return pd.DataFrame(columns=pd.Index(cols))
 
 
 DEADLINE_ANY = "Any"
@@ -393,70 +395,6 @@ def _render_editable_table(
         st.info("No rows match filters. You can still add rows and save.")
         filtered_df = source_df.head(0).copy()
 
-    # Helper summary for current filters
-    if not filtered_df.empty:
-        helper_summary: dict[str, dict[str, int]] = {}
-        today = date.today()
-        weekday = today.weekday()
-        monday = today - timedelta(days=weekday)
-        sunday = monday + timedelta(days=6)
-        for _, row in filtered_df.iterrows():
-            helper_name = (row.get("helper") or "").strip() or "(unassigned)"
-            status_val = str(row.get("status") or "")
-            deadline_val = row.get("deadline")
-            urgency = str(row.get("urgency") or "")
-
-            bucket = helper_summary.setdefault(
-                helper_name,
-                {
-                    "delegated": 0,
-                    "done": 0,
-                    "canceled": 0,
-                    "overdue": 0,
-                    "today": 0,
-                    "this_week": 0,
-                },
-            )
-            if status_val == TodoStatus.DELEGATED.value:
-                bucket["delegated"] += 1
-            elif status_val == TodoStatus.DONE.value:
-                bucket["done"] += 1
-            elif status_val == TodoStatus.CANCELED.value:
-                bucket["canceled"] += 1
-
-            if isinstance(deadline_val, date):
-                if deadline_val < today:
-                    bucket["overdue"] += 1
-                elif deadline_val == today:
-                    bucket["today"] += 1
-                elif monday <= deadline_val <= sunday:
-                    bucket["this_week"] += 1
-            elif urgency in {"overdue", "today", "soon"}:
-                # Fallback based on urgency marker if deadline is not a date.
-                if urgency == "overdue":
-                    bucket["overdue"] += 1
-                elif urgency == "today":
-                    bucket["today"] += 1
-                else:
-                    bucket["this_week"] += 1
-
-        if helper_summary:
-            st.caption("Helper summary (current filters)")
-            helper_items = sorted(helper_summary.items(), key=lambda item: item[0].lower())
-            cols_per_row = 4
-            for idx in range(0, len(helper_items), cols_per_row):
-                row_slice = helper_items[idx : idx + cols_per_row]
-                cols = st.columns(len(row_slice))
-                for col_idx, (helper_name, stats) in enumerate(row_slice):
-                    with cols[col_idx]:
-                        st.markdown(f"**{helper_name}**")
-                        st.caption(
-                            f"Delegated: {stats['delegated']}, "
-                            f"Overdue: {stats['overdue']}, "
-                            f"Today: {stats['today']}, "
-                            f"This week: {stats['this_week']}"
-                        )
-
     # Defaults for new rows from active filters (single selection)
     project_filters = filter_state.get("project_filters", [])
     status_filters = filter_state.get("status_filters", [])
@@ -570,29 +508,25 @@ def _render_editable_table(
         },
     )
 
-    # Detect unsaved changes by comparing the current table state to the last
-    # saved snapshot for this view, and record the result in session state so
-    # other parts of the app (for example the updater panel) can warn before
-    # closing the app while edits are pending.
+    # Autosave: compare current table state to the last persisted snapshot and
+    # persist changes automatically when they differ.
     snapshot_key = f"{key_prefix}_last_saved_snapshot"
+    status_key = f"{key_prefix}_saving_status"
+    error_key = f"{key_prefix}_saving_error"
     current_snapshot = edited_df.to_json(date_format="iso", orient="records")
     last_snapshot = st.session_state.get(snapshot_key)
-    has_unsaved_changes = current_snapshot != last_snapshot
-    st.session_state[f"{key_prefix}_has_unsaved_changes"] = has_unsaved_changes
 
-    status_col, button_col = st.columns([2, 1])
-    with status_col:
-        if has_unsaved_changes:
-            st.caption("Unsaved changes \u2014 click **Save changes** to persist.")
-        else:
-            st.caption("All changes saved.")
-
-    with button_col:
-        save_clicked = st.button("Save changes", type="primary", key=f"{key_prefix}_save")
-
-    if save_clicked and has_unsaved_changes:
+    if last_snapshot is None:
+        # First render: treat the current DB state as the baseline without
+        # writing anything back, so we don't show a spurious unsaved warning.
+        st.session_state[snapshot_key] = current_snapshot
+        st.session_state[status_key] = "saved"
+        st.session_state[error_key] = ""
+    elif current_snapshot != last_snapshot:
+        st.session_state[status_key] = "saving"
+        st.session_state[error_key] = ""
         logger.info(
-            "Save requested for {context} with rows={rows}",
+            "Autosave starting for {context} with rows={rows}",
             context=context_label,
             rows=len(edited_df),
         )
@@ -637,51 +571,61 @@ def _render_editable_table(
                         f"Row {row_idx + 1}: todo id {todo_id} not found for delete."
                     )
 
-        summary = _save_rows(
-            edited_df,
-            projects=projects,
-            default_project_id=default_project_id,
-            context_label=context_label,
-        )
-        summary["deleted"] = summary.get("deleted", 0) + deleted
-        summary["skipped"] = summary.get("skipped", 0) + skipped_for_delete
-        if delete_errors:
-            summary.setdefault("errors", []).extend(delete_errors)
+        try:
+            summary = _save_rows(
+                edited_df,
+                projects=projects,
+                default_project_id=default_project_id,
+                context_label=context_label,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Autosave failed for {context}: {}", context_label, exc)
+            st.session_state[status_key] = "error"
+            st.session_state[error_key] = "Autosave failed. See logs for details."
+        else:
+            summary["deleted"] = summary.get("deleted", 0) + deleted
+            summary["skipped"] = summary.get("skipped", 0) + skipped_for_delete
+            if delete_errors:
+                summary.setdefault("errors", []).extend(delete_errors)
 
-        created_ids = summary.get("created_ids", [])
-        updated_ids = summary.get("updated_ids", [])
-        logger.info(
-            "Save result context={context}: created={created} ids={created_ids}, "
-            "updated={updated} ids={updated_ids}, deleted={deleted} ids={deleted_ids}, "
-            "skipped={skipped}",
-            context=context_label,
-            created=summary["created"],
-            created_ids=created_ids,
-            updated=summary["updated"],
-            updated_ids=updated_ids,
-            deleted=summary["deleted"],
-            deleted_ids=deleted_ids,
-            skipped=summary["skipped"],
-        )
-        success_msg = (
-            f"Saved. Created: {summary['created']}, updated: {summary['updated']}, "
-            f"deleted: {summary['deleted']}, skipped: {summary['skipped']}."
-        )
-        st.success(success_msg)
-        if summary["errors"]:
-            st.warning("\n".join(summary["errors"]))
-        # Update remembered defaults for new rows based on the last created todo.
-        last_created_project_id = summary.get("last_created_project_id")
-        last_created_helper = summary.get("last_created_helper")
-        if last_created_project_id is not None:
-            st.session_state[remember_project_key] = last_created_project_id
-        if last_created_helper:
-            st.session_state[remember_helper_key] = last_created_helper
+            created_ids = summary.get("created_ids", [])
+            updated_ids = summary.get("updated_ids", [])
+            logger.info(
+                "Autosave result context={context}: created={created} ids={created_ids}, "
+                "updated={updated} ids={updated_ids}, deleted={deleted} ids={deleted_ids}, "
+                "skipped={skipped}",
+                context=context_label,
+                created=summary["created"],
+                created_ids=created_ids,
+                updated=summary["updated"],
+                updated_ids=updated_ids,
+                deleted=summary["deleted"],
+                deleted_ids=deleted_ids,
+                skipped=summary["skipped"],
+            )
+            # Update remembered defaults for new rows based on the last created todo.
+            last_created_project_id = summary.get("last_created_project_id")
+            last_created_helper = summary.get("last_created_helper")
+            if last_created_project_id is not None:
+                st.session_state[remember_project_key] = last_created_project_id
+            if last_created_helper:
+                st.session_state[remember_helper_key] = last_created_helper
 
-        # Record the new snapshot so subsequent renders know there are no
-        # outstanding edits.
-        st.session_state[snapshot_key] = current_snapshot
-        st.rerun()
+            # Record the new snapshot so subsequent renders know there are no
+            # outstanding edits, then rerun so the table reflects DB state.
+            st.session_state[snapshot_key] = current_snapshot
+            st.session_state[status_key] = "saved"
+            st.rerun()
+
+    # Saving status message for the bottom of the table.
+    status_value = st.session_state.get(status_key, "saved")
+    error_message = st.session_state.get(error_key, "")
+    if status_value == "saving":
+        st.caption("Saving changes\u2026")
+    elif status_value == "error":
+        st.error(error_message or "Last save failed. See logs for details.")
+    else:
+        st.caption("All changes saved.")
 
 
 def view() -> None:

@@ -51,6 +51,10 @@ type-checking setup, etc.), follow this flow:
      ```
 4. Update documentation:
    - Add a new section to `RELEASE_NOTES.md` under the new version.
+   - Choose an impact tag for the release and include it in the heading in square brackets:
+     - `[Breaking]` – schema changes, behaviour shifts, or anything that may require backups or manual intervention.
+     - `[Recommended]` – new features, UX improvements, or important dependency updates most users should adopt.
+     - `[Optional]` – internal-only cleanups or minor fixes that users can safely skip.
    - Update `README.md` if behavior, commands, or UX changed.
 5. Run checks before merging:
    - `uv run todo check`

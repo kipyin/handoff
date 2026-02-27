@@ -24,6 +24,7 @@ def test_create_todo(session: Session) -> None:
     session.add(p)
     session.commit()
     session.refresh(p)
+    assert p.id is not None
     t = Todo(project_id=p.id, name="Call client", status=TodoStatus.DELEGATED, helper="Alice")
     session.add(t)
     session.commit()

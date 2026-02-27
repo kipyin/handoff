@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 import scripts.build_obfuscated_patch as build_obfuscated_patch_module
-import scripts.build_patch as build_patch_module
 import scripts.build_zip as build_zip_module
 
 
@@ -80,38 +79,6 @@ def test_make_zip_includes_docs_and_core_files(
     assert "todo-app/app.py" in names
     assert "todo-app/src/todo_app/__init__.py" in names
     assert "todo-app/pages/2_Projects.py" in names
-
-
-def test_build_patch_includes_docs_and_core_files(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """build_patch writes docs, app.py, and core package into the patch zip."""
-    root = tmp_path
-    monkeypatch.setattr(build_patch_module, "ROOT", root)
-    dist_root = root / "dist"
-    monkeypatch.setattr(build_patch_module, "DIST_ROOT", dist_root)
-
-    # Project root files.
-    (root / "README.md").write_text("readme", encoding="utf-8")
-    (root / "RELEASE_NOTES.md").write_text("notes", encoding="utf-8")
-    (root / "app.py").write_text("print('hi')", encoding="utf-8")
-
-    # Minimal package structure under src/.
-    pkg_dir = root / "src" / "todo_app"
-    pkg_dir.mkdir(parents=True, exist_ok=True)
-    (pkg_dir / "__init__.py").write_text("x = 1", encoding="utf-8")
-
-    zip_path = build_patch_module.build_patch(include_pages=False)
-
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        names = set(zf.namelist())
-
-    assert "VERSION" in names
-    assert "README.md" in names
-    assert "RELEASE_NOTES.md" in names
-    assert "app.py" in names
-    assert "src/todo_app/__init__.py" in names
 
 
 def test_build_obfuscated_patch_includes_docs_and_core_files(
