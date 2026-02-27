@@ -152,11 +152,14 @@ uv run todo sync
 # Lint and format
 uv run todo check
 
+# Type checking
+uv run todo typecheck
+
 # Tests
 uv run todo test
 
-# Type checking
-uv run pyright src scripts
+# All checks (lint, format, type checking, tests)
+uv run todo ci
 
 # Build embedded Windows zip (obfuscates src/todo_app with PyArmor)
 uv run todo build-zip

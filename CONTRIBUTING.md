@@ -25,7 +25,9 @@ The Typer CLI under `scripts/cli.py` is exposed as the `todo` command:
 - `uv run todo run` – start the Streamlit app
 - `uv run todo sync` – sync dependencies
 - `uv run todo check` – Ruff lint + format
+- `uv run todo typecheck` – type checking with pyright over `src/` and `scripts/`
 - `uv run todo test` – run the pytest suite
+- `uv run todo ci` – run lint, format, type checking, and tests together
 
 Type checking (optional but recommended for larger changes):
 
@@ -52,8 +54,8 @@ type-checking setup, etc.), follow this flow:
    - Update `README.md` if behavior, commands, or UX changed.
 5. Run checks before merging:
    - `uv run todo check`
-   - `uv run pyright src scripts`
-   - `uv run todo test`
+   - `uv run todo typecheck` (or `uv run pyright src scripts`)
+   - `uv run todo test` (or `uv run todo ci` to run everything together)
 6. Merge back into `main` once tests pass.
 
 ### Cursor rules and agent guidance
