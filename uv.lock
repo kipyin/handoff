@@ -998,7 +998,7 @@ wheels = [
 
 [[package]]
 name = "todo-app"
-version = "2026.2.12"
+version = "2026.2.13"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },
@@ -1009,6 +1009,7 @@ dependencies = [
 
 [package.optional-dependencies]
 dev = [
+    { name = "pyarmor" },
     { name = "pytest" },
     { name = "rich" },
     { name = "ruff" },
@@ -1028,6 +1029,7 @@ dev = [
 requires-dist = [
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "platformdirs", specifier = ">=4.0.0" },
+    { name = "pyarmor", marker = "extra == 'dev'", specifier = ">=9.2.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "rich", marker = "extra == 'dev'", specifier = ">=13.7.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },

@@ -1,5 +1,13 @@
 # Release notes
 
+## 2026.2.13
+
+- **Rollback UI:** Add a **Restore from backup** section to the in-app **Update app** sidebar
+  so you can browse timestamped backup snapshots, restore a selected snapshot, and have the
+  app restart automatically into the restored state.
+- **Updater tests:** Add unit tests for the updater's patch application, backup handling,
+  `__pycache__` cleanup, and the new backup-restore helper.
+
 ## 2026.2.12
 
 - **PyArmor obfuscation:** The Windows embedded zip build (`uv run todo build-zip`) now obfuscates the `src/todo_app` package with PyArmor so that distributed code is protected while `app.py` remains readable. The PyArmor runtime is included in the zip; no extra install is required on the target machine.

@@ -1,0 +1,140 @@
+"""Tests for the in-app updater helpers."""
+
+from __future__ import annotations
+
+from io import BytesIO
+from pathlib import Path
+import zipfile
+
+from todo_app.updater import (
+    apply_patch_zip,
+    _clear_pycache,
+    _iter_backup_snapshots,
+    _restore_backup_snapshot,
+)
+
+
+def _build_patch_zip_bytes(
+    files: dict[str, bytes],
+    *,
+    version: str | None = None,
+) -> bytes:
+    """Return bytes for a patch zip with optional VERSION marker."""
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zf:
+        if version is not None:
+            zf.writestr("VERSION", version)
+        for name, content in files.items():
+            zf.writestr(name, content)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+def test_apply_patch_zip_applies_allowed_paths_and_creates_backup(tmp_path: Path) -> None:
+    """Allowed paths are applied and a backup of previous contents is created."""
+    app_root = tmp_path
+    app_file = app_root / "app.py"
+    src_dir = app_root / "src"
+    src_dir.mkdir()
+    src_file = src_dir / "module.py"
+
+    app_file.write_text("old app", encoding="utf-8")
+    src_file.write_text("old src", encoding="utf-8")
+
+    zip_bytes = _build_patch_zip_bytes(
+        {
+            "app.py": b"new app",
+            "src/module.py": b"new src",
+            "ignored.txt": b"should be ignored",
+        },
+        version="2026.2.99",
+    )
+
+    message = apply_patch_zip(BytesIO(zip_bytes), app_root=app_root)
+    assert "Target version: 2026.2.99" in message
+
+    # Updated contents are written to the app root.
+    assert app_file.read_text(encoding="utf-8") == "new app"
+    assert src_file.read_text(encoding="utf-8") == "new src"
+    # Disallowed path is ignored.
+    assert not (app_root / "ignored.txt").exists()
+
+    # A timestamped backup directory exists and contains the previous contents.
+    backup_root = app_root / "backup"
+    backups = [path for path in backup_root.iterdir() if path.is_dir()]
+    assert backups, "Expected at least one backup directory"
+    # There should be exactly one snapshot for this test.
+    snapshot = backups[0]
+    assert (snapshot / "app.py").read_text(encoding="utf-8") == "old app"
+    assert (snapshot / "src" / "module.py").read_text(encoding="utf-8") == "old src"
+
+
+def test_apply_patch_zip_with_only_disallowed_paths_returns_message(tmp_path: Path) -> None:
+    """Patch containing only disallowed paths results in a no-op message."""
+    app_root = tmp_path
+    zip_bytes = _build_patch_zip_bytes({"other/file.txt": b"content"})
+
+    message = apply_patch_zip(BytesIO(zip_bytes), app_root=app_root)
+    assert message == "No applicable files found in patch zip."
+    assert not (app_root / "backup").exists()
+
+
+def test_clear_pycache_removes_pycache_directories(tmp_path: Path) -> None:
+    """_clear_pycache removes __pycache__ directories under the app root."""
+    app_root = tmp_path
+    top_pycache = app_root / "__pycache__"
+    nested_pycache = app_root / "src" / "__pycache__"
+
+    for directory in (top_pycache, nested_pycache):
+        directory.mkdir(parents=True)
+        (directory / "dummy.pyc").write_bytes(b"x")
+
+    _clear_pycache(app_root)
+
+    assert not top_pycache.exists()
+    assert not nested_pycache.exists()
+
+
+def test_iter_backup_snapshots_orders_newest_first(tmp_path: Path) -> None:
+    """_iter_backup_snapshots returns snapshots sorted newest-first."""
+    app_root = tmp_path
+    backup_root = app_root / "backup"
+    backup_root.mkdir()
+
+    older = backup_root / "20260101-120000"
+    newer = backup_root / "20260102-130000"
+    older.mkdir()
+    newer.mkdir()
+
+    snapshots = _iter_backup_snapshots(app_root)
+    assert snapshots == [newer, older]
+
+
+def test_restore_backup_snapshot_copies_files_and_clears_pycache(tmp_path: Path) -> None:
+    """Restoring a snapshot copies files back and clears __pycache__."""
+    app_root = tmp_path
+    snapshot = app_root / "backup" / "20260101-120000"
+    snapshot.mkdir(parents=True)
+
+    (snapshot / "app.py").write_text("from backup", encoding="utf-8")
+    snapshot_src = snapshot / "src"
+    snapshot_src.mkdir()
+    (snapshot_src / "module.py").write_text("from backup src", encoding="utf-8")
+
+    app_file = app_root / "app.py"
+    app_file.write_text("current app", encoding="utf-8")
+    src_dir = app_root / "src"
+    src_dir.mkdir(exist_ok=True)
+    src_file = src_dir / "module.py"
+    src_file.write_text("current src", encoding="utf-8")
+
+    pycache_dir = app_root / "__pycache__"
+    pycache_dir.mkdir()
+    (pycache_dir / "dummy.pyc").write_bytes(b"x")
+
+    message = _restore_backup_snapshot(snapshot, app_root=app_root)
+    assert "Backup restored" in message
+    assert app_file.read_text(encoding="utf-8") == "from backup"
+    assert src_file.read_text(encoding="utf-8") == "from backup src"
+    assert not pycache_dir.exists()
+

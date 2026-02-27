@@ -125,16 +125,18 @@ On a client machine:
 3. After applying the patch, the app extracts the update into the app directory and then
    exits automatically; reopen `run.bat` to start the updated version.
 
-### Backups and future rollback
+### Backups and rollback
 
-When applying a code-only patch, the updater currently creates a **timestamped backup**
+When applying a code-only patch, the updater creates a **timestamped backup**
 of any overwritten files under a `backup/<YYYYMMDD-HHMMSS>/` directory inside the app
-root. Today, rollback is a **manual** process (for example, by copying files from a
-chosen backup folder back into the app directory).
+root. You can roll back from a bad patch directly in the app:
 
-A future enhancement is planned to expose a **rollback/restore-from-backup** control in
-the app itself, so that an operator can select a backup snapshot from the UI and
-automatically restore the corresponding files without touching the filesystem directly.
+1. Open the **Update app** panel in the sidebar.
+2. In the **Restore from backup** section, pick a snapshot (named by timestamp).
+3. Click **Restore selected backup and Restart**.
+
+The app copies the backed-up files back into the app directory, clears Python
+bytecode caches, and then exits so you can reopen it in the restored state.
 
 ## Development
 
