@@ -67,18 +67,51 @@ def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
     return None, "unsupported deadline format"
 
 
+def get_urgency_bucket(deadline: date | None, status: str) -> str:
+    """Return a simple urgency bucket for a todo.
+
+    Args:
+        deadline: Date portion of the todo deadline, or None.
+        status: String status value (for example, ``delegated``, ``done``).
+
+    Returns:
+        One of ``overdue``, ``today``, ``soon``, or ``none``.
+    """
+    if status != TodoStatus.DELEGATED.value:
+        return "none"
+    if deadline is None:
+        return "none"
+
+    today = date.today()
+    if deadline < today:
+        return "overdue"
+    if deadline == today:
+        return "today"
+
+    # Treat the rest of the current ISO week after today as "soon".
+    weekday = today.weekday()
+    monday = today - timedelta(days=weekday)
+    sunday = monday + timedelta(days=6)
+    if today < deadline <= sunday:
+        return "soon"
+    return "none"
+
+
 def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame:
     """Convert todo records to an editable dataframe."""
     rows = []
     for todo in todos:
+        status_value = todo.status.value
+        deadline_date = todo.deadline.date() if todo.deadline else None
         row = {
             "id": todo.id,
             "name": todo.name,
-            "status": todo.status.value,
+            "status": status_value,
             "helper": todo.helper or "",
-            "deadline": todo.deadline.date() if todo.deadline else None,
+            "deadline": deadline_date,
             "notes": todo.notes or "",
             "created_at": todo.created_at,
+            "urgency": get_urgency_bucket(deadline_date, status_value),
         }
         if include_project:
             row["project"] = todo.project.name if todo.project else ""
@@ -244,7 +277,7 @@ def _save_rows(
     """Validate and persist edited rows, returning operation summary."""
     project_by_name = {project.name: project.id for project in projects}
 
-    summary = {
+    summary: dict[str, object] = {
         "created": 0,
         "updated": 0,
         "deleted": 0,
@@ -252,6 +285,8 @@ def _save_rows(
         "errors": [],
         "created_ids": [],
         "updated_ids": [],
+        "last_created_project_id": None,
+        "last_created_helper": None,
     }
 
     for row_no, row in enumerate(edited_df.to_dict("records"), start=1):
@@ -328,6 +363,8 @@ def _save_rows(
             )
             summary["created"] += 1
             summary["created_ids"].append(created.id)
+            summary["last_created_project_id"] = project_id
+            summary["last_created_helper"] = helper_val
             logger.info(
                 "Save action create context={context} row={row_no} todo_id={todo_id} name={name!r}",
                 context=context_label,
@@ -358,6 +395,63 @@ def _render_editable_table(
         st.info("No rows match filters. You can still add rows and save.")
         filtered_df = source_df.head(0).copy()
 
+    # Helper summary for current filters
+    if not filtered_df.empty:
+        helper_summary: dict[str, dict[str, int]] = {}
+        today = date.today()
+        weekday = today.weekday()
+        monday = today - timedelta(days=weekday)
+        sunday = monday + timedelta(days=6)
+        for _, row in filtered_df.iterrows():
+            helper_name = (row.get("helper") or "").strip() or "(unassigned)"
+            status_val = str(row.get("status") or "")
+            deadline_val = row.get("deadline")
+            urgency = str(row.get("urgency") or "")
+
+            bucket = helper_summary.setdefault(
+                helper_name,
+                {"delegated": 0, "done": 0, "canceled": 0, "overdue": 0, "today": 0, "this_week": 0},
+            )
+            if status_val == TodoStatus.DELEGATED.value:
+                bucket["delegated"] += 1
+            elif status_val == TodoStatus.DONE.value:
+                bucket["done"] += 1
+            elif status_val == TodoStatus.CANCELED.value:
+                bucket["canceled"] += 1
+
+            if isinstance(deadline_val, date):
+                if deadline_val < today:
+                    bucket["overdue"] += 1
+                elif deadline_val == today:
+                    bucket["today"] += 1
+                elif monday <= deadline_val <= sunday:
+                    bucket["this_week"] += 1
+            elif urgency in {"overdue", "today", "soon"}:
+                # Fallback based on urgency marker if deadline is not a date.
+                if urgency == "overdue":
+                    bucket["overdue"] += 1
+                elif urgency == "today":
+                    bucket["today"] += 1
+                else:
+                    bucket["this_week"] += 1
+
+        if helper_summary:
+            st.caption("Helper summary (current filters)")
+            helper_items = sorted(helper_summary.items(), key=lambda item: item[0].lower())
+            cols_per_row = 4
+            for idx in range(0, len(helper_items), cols_per_row):
+                row_slice = helper_items[idx : idx + cols_per_row]
+                cols = st.columns(len(row_slice))
+                for col_idx, (helper_name, stats) in enumerate(row_slice):
+                    with cols[col_idx]:
+                        st.markdown(f"**{helper_name}**")
+                        st.caption(
+                            f"Delegated: {stats['delegated']}, "
+                            f"Overdue: {stats['overdue']}, "
+                            f"Today: {stats['today']}, "
+                            f"This week: {stats['this_week']}"
+                        )
+
     # Defaults for new rows from active filters (single selection)
     project_filters = filter_state.get("project_filters", [])
     status_filters = filter_state.get("status_filters", [])
@@ -372,6 +466,20 @@ def _render_editable_table(
         default_project_name = projects[0].name
     default_status = status_filters[0] if len(status_filters) == 1 else TodoStatus.DELEGATED.value
     default_helper = helper_filters[0] if len(helper_filters) == 1 else ""
+
+    # Remembered defaults for new rows (per view)
+    remember_project_key = f"{key_prefix}_last_new_project_id"
+    remember_helper_key = f"{key_prefix}_last_new_helper"
+    remembered_project_id = st.session_state.get(remember_project_key)
+    if isinstance(remembered_project_id, int):
+        for name, project in project_by_name.items():
+            if project.id == remembered_project_id:
+                default_project_id = project.id
+                default_project_name = name
+                break
+    remembered_helper = st.session_state.get(remember_helper_key)
+    if isinstance(remembered_helper, str) and remembered_helper:
+        default_helper = remembered_helper
 
     # Sort state and apply sort
     sort_col_key = f"{key_prefix}_sort_column"
@@ -423,7 +531,7 @@ def _render_editable_table(
             st.session_state[sort_asc_key] = new_sort_asc == "Ascending"
             st.rerun()
 
-    column_order = ["project", "name", "status", "helper", "deadline", "notes"]
+    column_order = ["project", "name", "status", "helper", "deadline", "urgency", "notes"]
     st.caption("Filter using the controls above. Use row deletion in the table to remove todos.")
     edited_df = st.data_editor(
         display_df,
@@ -452,6 +560,7 @@ def _render_editable_table(
                 default=default_helper or None,
             ),
             "deadline": st.column_config.DateColumn("Deadline"),
+            "urgency": st.column_config.TextColumn("Urgency", disabled=True),
             "notes": st.column_config.TextColumn("Notes"),
         },
     )
@@ -556,6 +665,14 @@ def _render_editable_table(
         st.success(success_msg)
         if summary["errors"]:
             st.warning("\n".join(summary["errors"]))
+        # Update remembered defaults for new rows based on the last created todo.
+        last_created_project_id = summary.get("last_created_project_id")
+        last_created_helper = summary.get("last_created_helper")
+        if last_created_project_id is not None:
+            st.session_state[remember_project_key] = last_created_project_id
+        if last_created_helper:
+            st.session_state[remember_helper_key] = last_created_helper
+
         # Record the new snapshot so subsequent renders know there are no
         # outstanding edits.
         st.session_state[snapshot_key] = current_snapshot
