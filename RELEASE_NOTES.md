@@ -1,5 +1,14 @@
 # Release notes
 
+## 2026.2.18
+
+- **Urgency & helper view:** Add urgency buckets (overdue, today, soon) to the main todos table and weekly calendar, plus a per-helper summary panel showing delegated and urgent work under the current filters.
+- **Smart defaults:** Remember the last-used project and helper for new rows in the main todos view so repeated entry flows require fewer clicks.
+- **Archiving:** Introduce project and todo archiving with a Projects page toggle for showing archived projects, and ensure archived items are excluded from default queries and views.
+- **Calendar refinements:** Enable inline deadline adjustments for delegated todos directly from the weekly calendar.
+- **Analytics:** Add an Analytics page with completed-per-week charts, cycle time stats, and current helper load.
+- **Focus mode:** Add a Focus page that guides a daily review of overdue/today items and later-this-week tasks, with quick actions to mark done or defer.
+
 ## 2026.2.17
 
 - **Contributor docs:** Add a `CONTRIBUTING.md` guide describing the uv/CLI workflow, type
