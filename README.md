@@ -81,7 +81,7 @@ The configuration lives in `src/todo_app/logging.py` and is initialised from
 For deeper diagnostics you can extend the existing `loguru` calls in
 `src/todo_app/data.py`, `src/todo_app/db.py`, or `src/todo_app/ui_components.py`.
 
-## Windows embedded zip build and code-only patches
+## Windows embedded zip build and obfuscated patches
 
 On Windows you can build a self-contained zip that bundles an embedded Python runtime,
 dependencies, and the app code. The build uses **PyArmor** to obfuscate the `src/todo_app`
@@ -97,13 +97,12 @@ Extract it, then double-click `run.bat` to start the app. The SQLite database is
 stored in your user data directory, not inside the extracted folder.
 
 For small logic-only changes you can ship a **code-only patch** zip instead of a full
-embedded bundle:
+embedded bundle. For production usage, always use the obfuscated patch flow:
 
-- **Non-obfuscated / dev installs:** `uv run todo build-patch` creates
-  `dist/todo-app-<version>-patch.zip` from the source tree (app.py, src/todo_app/, pages/).
-- **Obfuscated embedded installs:** Run `uv run todo build-obfuscated-patch` *after*
-  `build-zip`. This creates `dist/todo-app-<version>-obfuscated-patch.zip` from the
-  obfuscated build output so that the in-app updater can apply it to PyArmor-built installs.
+- Run `uv run todo build-zip` to produce the embedded app build.
+- Then run `uv run todo build-obfuscated-patch` to create
+  `dist/todo-app-<version>-obfuscated-patch.zip` from the obfuscated build output so that the
+  in-app updater can apply it to PyArmor-built installs.
 
 On a client machine:
 
@@ -175,6 +174,7 @@ Version sync guard:
 - `app.py` — Thin Streamlit entrypoint + navigation
 - `src/todo_app/ui_facade.py` — Public Streamlit UI entrypoints
 - `src/todo_app/` — Package: `models.py`, `db.py`, `data.py`
+- `pages/` — Legacy Streamlit entry scripts for Projects/Calendar (primary nav is in `app.py`)
 - `tests/` — Pytest tests
 
 See also `CONTRIBUTING.md` for a more detailed overview of the dev workflow and

@@ -9,7 +9,7 @@ import streamlit as st
 
 from todo_app.data import get_todos_by_timeframe, update_todo
 from todo_app.models import Todo, TodoStatus
-from todo_app.ui_components import _deadline_preset_bounds, get_urgency_bucket
+from todo_app.ui_components import get_urgency_bucket
 
 
 def _get_week_bounds(reference: date) -> tuple[datetime, datetime]:
@@ -64,9 +64,7 @@ def render_calendar_page() -> None:
             reference_date = selected_date
 
     start_dt, end_dt = _get_week_bounds(reference_date)
-    st.subheader(
-        f"Week of {start_dt.date().isoformat()} – {end_dt.date().isoformat()}"
-    )
+    st.subheader(f"Week of {start_dt.date().isoformat()} – {end_dt.date().isoformat()}")
 
     todos = get_todos_by_timeframe(start_dt, end_dt)
     grouped = _group_todos_by_day(todos)

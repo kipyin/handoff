@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from .updater import _get_app_root
 
 
@@ -26,4 +24,3 @@ def read_markdown_from_app_root(name: str) -> str:
         return f"{name} not found at {path}."
     except OSError:
         return f"{name} could not be read from {path}."
-

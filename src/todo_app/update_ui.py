@@ -132,4 +132,3 @@ def render_update_panel(current_version: str) -> None:
                     "reopen it to use the restored version."
                 )
                 _schedule_shutdown()
-

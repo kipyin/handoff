@@ -20,4 +20,3 @@ def test_read_markdown_from_app_root_finds_release_notes_from_any_cwd(tmp_path: 
         os.chdir(original_cwd)
 
     assert "Release notes" in content
-
