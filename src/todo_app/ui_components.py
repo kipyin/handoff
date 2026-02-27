@@ -408,7 +408,14 @@ def _render_editable_table(
 
             bucket = helper_summary.setdefault(
                 helper_name,
-                {"delegated": 0, "done": 0, "canceled": 0, "overdue": 0, "today": 0, "this_week": 0},
+                {
+                    "delegated": 0,
+                    "done": 0,
+                    "canceled": 0,
+                    "overdue": 0,
+                    "today": 0,
+                    "this_week": 0,
+                },
             )
             if status_val == TodoStatus.DELEGATED.value:
                 bucket["delegated"] += 1
@@ -756,8 +763,6 @@ def sidebar(*, app_version: str) -> None:
     projects = list_projects()
     st.sidebar.divider()
     _render_sidebar_project_management(projects)
-    st.sidebar.divider()
-    _render_sidebar_backup()
 
 
 def main(*, app_version: str) -> None:
