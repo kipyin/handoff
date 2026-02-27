@@ -159,7 +159,7 @@ uv run todo build-patch
 uv run todo build-obfuscated-patch
 
 # Bump version in pyproject.toml and todo_app.version
-uv run todo bump-version 2026.2.10
+uv run todo bump-version 2026.2.21
 ```
 
 Version sync guard:

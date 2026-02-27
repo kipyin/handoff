@@ -1,5 +1,12 @@
 # Release notes
 
+## 2026.2.21 [Recommended]
+
+- **Docs inside the app:** Add a `Docs` navigation page that renders the README and release notes from the installed app root, and update Settings/About copy so it points there for “What’s new?”.
+- **Calendar week navigation:** Allow paging backwards/forwards by week and jumping to a specific “week of” on the Calendar page while keeping inline deadline editing.
+- **Autosave banner correctness:** Fix the main todos table so the “All changes saved” / “Unsaved changes” banner starts in a saved state on first load and only flips after real edits.
+- **Updater UI separation:** Move the update/backup Streamlit panel into `todo_app.update_ui` so `todo_app.updater` focuses on filesystem logic, keeping Settings layout but with clearer “App updates” and “Restore from backup” sections.
+
 ## 2026.2.20 [Optional]
 
 - **CLI & CI workflow:** Add `typecheck` and `ci` commands to the `todo` CLI and document the recommended check/typecheck/test flow for local and CI runs.
