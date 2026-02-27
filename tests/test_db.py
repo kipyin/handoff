@@ -25,11 +25,11 @@ def _get_sqlite_path(database_url: str) -> str:
     return database_url
 
 
-def _fetch_todo_columns(sqlite_path: str) -> set[str]:
-    """Return the set of column names for the todo table."""
+def _fetch_columns(sqlite_path: str, table: str) -> set[str]:
+    """Return the set of column names for a table."""
     conn = sqlite3.connect(sqlite_path)
     try:
-        rows = conn.execute("PRAGMA table_info('todo')").fetchall()
+        rows = conn.execute(f"PRAGMA table_info('{table}')").fetchall()
     finally:
         conn.close()
     return {row[1] for row in rows}
@@ -43,10 +43,13 @@ def test_init_db_creates_tables_and_completed_at(tmp_path: Path, monkeypatch: py
     db.init_db()
 
     sqlite_path = _get_sqlite_path(db.DATABASE_URL)
-    columns = _fetch_todo_columns(sqlite_path)
-    # Sanity-check core columns plus the migration column.
-    assert {"id", "project_id", "name"}.issubset(columns)
-    assert "completed_at" in columns
+    todo_columns = _fetch_columns(sqlite_path, "todo")
+    project_columns = _fetch_columns(sqlite_path, "project")
+    # Sanity-check core columns plus the migration columns.
+    assert {"id", "project_id", "name"}.issubset(todo_columns)
+    assert "completed_at" in todo_columns
+    assert "is_archived" in todo_columns
+    assert "is_archived" in project_columns
 
 
 def test_init_db_adds_completed_at_to_existing_schema(
@@ -58,7 +61,7 @@ def test_init_db_adds_completed_at_to_existing_schema(
     db = _reload_db_module(db_path, monkeypatch)
 
     sqlite_path = _get_sqlite_path(db.DATABASE_URL)
-    # Simulate an older schema that predates the completed_at column.
+    # Simulate an older schema that predates the completed_at/is_archived columns.
     conn = sqlite3.connect(sqlite_path)
     try:
         conn.execute(
@@ -66,6 +69,14 @@ def test_init_db_adds_completed_at_to_existing_schema(
             CREATE TABLE todo (
                 id INTEGER PRIMARY KEY,
                 project_id INTEGER NOT NULL,
+                name TEXT NOT NULL
+            )
+            """,
+        )
+        conn.execute(
+            """
+            CREATE TABLE project (
+                id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL
             )
             """,
@@ -78,6 +89,9 @@ def test_init_db_adds_completed_at_to_existing_schema(
     # the completed_at column via the lightweight migration.
     db.init_db()
 
-    columns = _fetch_todo_columns(sqlite_path)
-    assert "completed_at" in columns
+    todo_columns = _fetch_columns(sqlite_path, "todo")
+    project_columns = _fetch_columns(sqlite_path, "project")
+    assert "completed_at" in todo_columns
+    assert "is_archived" in todo_columns
+    assert "is_archived" in project_columns
 

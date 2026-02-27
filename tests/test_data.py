@@ -3,6 +3,8 @@
 from contextlib import contextmanager
 from datetime import datetime
 
+from sqlmodel import select
+
 import todo_app.data as data
 from todo_app.models import Project, Todo, TodoStatus
 
@@ -68,6 +70,33 @@ def test_delete_project_deletes_project_and_children(session, monkeypatch) -> No
     assert deleted is True
     assert session.get(Project, project.id) is None
     assert session.get(Todo, todo.id) is None
+
+
+def test_archive_and_unarchive_project(session, monkeypatch) -> None:
+    """Archiving a project marks it and its todos; unarchiving clears the flag."""
+    _patch_session_context(monkeypatch, session)
+    project = Project(name="Archive Me")
+    session.add(project)
+    session.commit()
+    session.refresh(project)
+
+    todo1 = Todo(project_id=project.id, name="t1")
+    todo2 = Todo(project_id=project.id, name="t2")
+    session.add(todo1)
+    session.add(todo2)
+    session.commit()
+
+    archived = data.archive_project(project.id)
+    assert archived is True
+    session.refresh(project)
+    assert project.is_archived is True
+    todos = session.exec(select(Todo).where(Todo.project_id == project.id)).all()
+    assert {t.is_archived for t in todos} == {True}
+
+    unarchived = data.unarchive_project(project.id)
+    assert unarchived is True
+    session.refresh(project)
+    assert project.is_archived is False
 
 
 def test_get_export_payload_includes_projects_and_todos(session, monkeypatch) -> None:

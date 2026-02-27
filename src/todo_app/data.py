@@ -47,10 +47,17 @@ def create_project(name: str) -> Project:
         return project
 
 
-def list_projects() -> list[Project]:
-    """Return all projects ordered by creation (newest first)."""
+def list_projects(*, include_archived: bool = False) -> list[Project]:
+    """Return all projects ordered by creation (newest first).
+
+    Args:
+        include_archived: When True, include archived projects; otherwise only
+            active projects are returned.
+    """
     with session_context() as session:
         stmt = select(Project).order_by(Project.created_at.desc())
+        if not include_archived:
+            stmt = stmt.where(Project.is_archived.is_(False))
         return list(session.exec(stmt).all())
 
 
@@ -177,6 +184,7 @@ def query_todos(
     start: datetime | None = None,
     end: datetime | None = None,
     search_text: str | None = None,
+    include_archived: bool = False,
 ) -> list[Todo]:
     """Return todos matching optional unified filters.
 
@@ -193,6 +201,8 @@ def query_todos(
     """
     with session_context() as session:
         stmt = select(Todo)
+        if not include_archived:
+            stmt = stmt.where(Todo.is_archived.is_(False))
 
         if project_ids:
             stmt = stmt.where(Todo.project_id.in_(project_ids))
@@ -344,6 +354,102 @@ def delete_project(project_id: int) -> bool:
         return True
 
 
+def archive_project(project_id: int, *, archive_todos: bool = True) -> bool:
+    """Archive a project and, optionally, its todos.
+
+    Args:
+        project_id: Id of the project to archive.
+        archive_todos: When True, mark all child todos as archived as well.
+
+    Returns:
+        True when archived, otherwise False.
+    """
+    with session_context() as session:
+        project = session.get(Project, project_id)
+        if not project:
+            logger.warning("Project {project_id} not found for archive", project_id=project_id)
+            return False
+
+        project.is_archived = True
+        if archive_todos:
+            todo_stmt = select(Todo).where(Todo.project_id == project_id)
+            for todo in session.exec(todo_stmt).all():
+                todo.is_archived = True
+                session.add(todo)
+
+        session.add(project)
+        session.commit()
+        logger.info(
+            "Archived project {project_id} (archive_todos={archive_todos})",
+            project_id=project_id,
+            archive_todos=archive_todos,
+        )
+        return True
+
+
+def unarchive_project(project_id: int) -> bool:
+    """Unarchive a project (todos remain archived or active as-is).
+
+    Args:
+        project_id: Id of the project to unarchive.
+
+    Returns:
+        True when unarchived, otherwise False.
+    """
+    with session_context() as session:
+        project = session.get(Project, project_id)
+        if not project:
+            logger.warning("Project {project_id} not found for unarchive", project_id=project_id)
+            return False
+        project.is_archived = False
+        session.add(project)
+        session.commit()
+        logger.info("Unarchived project {project_id}", project_id=project_id)
+        return True
+
+
+def archive_todo(todo_id: int) -> bool:
+    """Archive a single todo.
+
+    Args:
+        todo_id: Id of the todo to archive.
+
+    Returns:
+        True when archived, otherwise False.
+    """
+    with session_context() as session:
+        todo = session.get(Todo, todo_id)
+        if not todo:
+            logger.warning("Todo {todo_id} not found for archive", todo_id=todo_id)
+            return False
+        todo.is_archived = True
+        session.add(todo)
+        session.commit()
+        logger.info("Archived todo {todo_id}", todo_id=todo_id)
+        return True
+
+
+def unarchive_todo(todo_id: int) -> bool:
+    """Unarchive a single todo.
+
+    Args:
+        todo_id: Id of the todo to unarchive.
+
+    Returns:
+        True when unarchived, otherwise False.
+    """
+    with session_context() as session:
+        todo = session.get(Todo, todo_id)
+        if not todo:
+            logger.warning("Todo {todo_id} not found for unarchive", todo_id=todo_id)
+            return False
+        todo.is_archived = False
+        session.add(todo)
+        session.commit()
+        logger.info("Unarchived todo {todo_id}", todo_id=todo_id)
+        return True
+
+
 def get_export_payload() -> dict[str, Any]:
     """Return JSON-serializable snapshot of projects and todos."""
     with session_context() as session:
@@ -355,6 +461,7 @@ def get_export_payload() -> dict[str, Any]:
                     "id": project.id,
                     "name": project.name,
                     "created_at": project.created_at.isoformat(),
+                    "is_archived": project.is_archived,
                 }
                 for project in projects
             ],
@@ -369,13 +476,14 @@ def get_export_payload() -> dict[str, Any]:
                     "notes": todo.notes,
                     "created_at": todo.created_at.isoformat(),
                     "completed_at": todo.completed_at.isoformat() if todo.completed_at else None,
+                    "is_archived": todo.is_archived,
                 }
                 for todo in todos
             ],
         }
 
 
-def get_projects_with_todo_summary() -> list[dict[str, Any]]:
+def get_projects_with_todo_summary(*, include_archived: bool = False) -> list[dict[str, Any]]:
     """Return projects with aggregated todo status counts.
 
     Each item contains:
@@ -386,12 +494,12 @@ def get_projects_with_todo_summary() -> list[dict[str, Any]]:
     - ``done``: Todos with status ``done``.
     - ``canceled``: Todos with status ``canceled``.
     """
-    projects = list_projects()
+    projects = list_projects(include_archived=include_archived)
     if not projects:
         return []
 
     project_ids = [p.id for p in projects]
-    todos = query_todos(project_ids=project_ids)
+    todos = query_todos(project_ids=project_ids, include_archived=include_archived)
     summary_by_project: dict[int, dict[str, Any]] = {
         project.id: {
             "project": project,

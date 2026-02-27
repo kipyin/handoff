@@ -64,13 +64,28 @@ def init_db() -> None:
 
         SQLModel.metadata.create_all(engine)
 
-        # Lightweight migration: ensure newer columns exist on existing tables.
+        # Lightweight migrations: ensure newer columns exist on existing tables.
         with engine.connect() as conn:
+            # Todo table migrations.
             result = conn.exec_driver_sql("PRAGMA table_info('todo')")
-            columns = {row[1] for row in result}  # row[1] = column name
-            if "completed_at" not in columns:
+            todo_columns = {row[1] for row in result}  # row[1] = column name
+            if "completed_at" not in todo_columns:
                 logger.info("Applying migration: adding completed_at column to todo table")
                 conn.exec_driver_sql("ALTER TABLE todo ADD COLUMN completed_at TIMESTAMP NULL")
+            if "is_archived" not in todo_columns:
+                logger.info("Applying migration: adding is_archived column to todo table")
+                conn.exec_driver_sql(
+                    "ALTER TABLE todo ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0"
+                )
+
+            # Project table migrations.
+            result = conn.exec_driver_sql("PRAGMA table_info('project')")
+            project_columns = {row[1] for row in result}
+            if "is_archived" not in project_columns:
+                logger.info("Applying migration: adding is_archived column to project table")
+                conn.exec_driver_sql(
+                    "ALTER TABLE project ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0"
+                )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Database initialization failed: {}", exc)
         msg = "Database initialisation failed. See the log file for details."

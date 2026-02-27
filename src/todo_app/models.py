@@ -26,6 +26,7 @@ class Project(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    is_archived: bool = Field(default=False, index=True)
 
     todos: list["Todo"] = Relationship(back_populates="project")
 
@@ -49,5 +50,6 @@ class Todo(SQLModel, table=True):
     notes: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     completed_at: datetime | None = Field(default=None, index=True)
+    is_archived: bool = Field(default=False, index=True)
 
     project: Project | None = Relationship(back_populates="todos")
