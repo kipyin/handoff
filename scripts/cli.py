@@ -68,6 +68,24 @@ def test() -> None:
     run_cmd(["uv", "run", "pytest"], cwd=ROOT, description="Running tests with pytest...")
 
 
+@app.command("typecheck")
+def typecheck() -> None:
+    """Run pyright type checking over src/ and scripts/."""
+    run_cmd(
+        ["uv", "run", "pyright", "src", "scripts"],
+        cwd=ROOT,
+        description="Running pyright type checking...",
+    )
+
+
+@app.command("ci")
+def ci() -> None:
+    """Run lint, format, type checking, and tests."""
+    check_command()
+    typecheck()
+    test()
+
+
 @app.command("build-zip")
 def build_zip() -> None:
     """Build the Windows embedded zip distribution."""
