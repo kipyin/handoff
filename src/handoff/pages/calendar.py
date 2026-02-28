@@ -9,7 +9,25 @@ import streamlit as st
 
 from handoff.data import get_todos_by_timeframe, update_todo
 from handoff.models import Todo, TodoStatus
-from handoff.ui_components import get_urgency_bucket
+
+
+def _urgency_for_display(deadline_date: date | None, status_value: str) -> str:
+    """Return urgency bucket for calendar display only (overdue, today, soon, none)."""
+    if status_value != TodoStatus.DELEGATED.value:
+        return "none"
+    if deadline_date is None:
+        return "none"
+    today = date.today()
+    if deadline_date < today:
+        return "overdue"
+    if deadline_date == today:
+        return "today"
+    weekday = today.weekday()
+    monday = today - timedelta(days=weekday)
+    sunday = monday + timedelta(days=6)
+    if today < deadline_date <= sunday:
+        return "soon"
+    return "none"
 
 
 def _get_week_bounds(reference: date) -> tuple[datetime, datetime]:
@@ -93,7 +111,7 @@ def render_calendar_page() -> None:
                 if completed_at and start_dt <= completed_at <= end_dt:
                     label += f" (done {completed_at.date().isoformat()})"
 
-                urgency = get_urgency_bucket(
+                urgency = _urgency_for_display(
                     todo.deadline.date() if todo.deadline else None,
                     status_value,
                 )

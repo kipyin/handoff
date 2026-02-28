@@ -2,7 +2,6 @@
 
 from datetime import date, timedelta
 
-from handoff.ui_components import get_urgency_bucket
 from handoff.ui_facade import (
     DEADLINE_ANY,
     DEADLINE_CUSTOM,
@@ -48,19 +47,3 @@ def test_deadline_preset_bounds_this_week() -> None:
 def test_deadline_preset_bounds_custom_returns_none() -> None:
     """Custom preset returns (None, None); UI handles range separately."""
     assert _deadline_preset_bounds(DEADLINE_CUSTOM) == (None, None)
-
-
-def test_get_urgency_bucket_overdue_today_soon_and_none() -> None:
-    """Urgency helper buckets delegated todos by date."""
-    today = date.today()
-    monday = today - timedelta(days=today.weekday())
-    sunday = monday + timedelta(days=6)
-
-    assert get_urgency_bucket(today - timedelta(days=1), "delegated") == "overdue"
-    assert get_urgency_bucket(today, "delegated") == "today"
-    # Pick a day later this week, but not today.
-    if today < sunday:
-        assert get_urgency_bucket(today + timedelta(days=1), "delegated") == "soon"
-    assert get_urgency_bucket(None, "delegated") == "none"
-    # Non-delegated statuses are never considered urgent.
-    assert get_urgency_bucket(today, "done") == "none"

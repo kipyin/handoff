@@ -9,7 +9,7 @@ import streamlit as st
 
 from handoff.data import query_todos, update_todo
 from handoff.models import TodoStatus
-from handoff.ui_components import _deadline_preset_bounds, _format_deadline_display
+from handoff.ui_components import _deadline_preset_bounds
 
 
 def _build_focus_dataframe() -> pd.DataFrame:
@@ -46,7 +46,6 @@ def _build_focus_dataframe() -> pd.DataFrame:
                 "project": todo.project.name if todo.project else "",
                 "helper": todo.helper or "",
                 "deadline": deadline_date,
-                "deadline_display": _format_deadline_display(deadline_date),
                 "bucket": bucket,
             }
         )
@@ -60,14 +59,13 @@ def _build_focus_dataframe() -> pd.DataFrame:
                 "project": todo.project.name if todo.project else "",
                 "helper": todo.helper or "",
                 "deadline": deadline_date,
-                "deadline_display": _format_deadline_display(deadline_date),
                 "bucket": bucket,
             }
         )
 
     if not rows:
         return pd.DataFrame(
-            columns=["id", "name", "project", "helper", "deadline", "deadline_display", "bucket"]
+            columns=["id", "name", "project", "helper", "deadline", "bucket"]
         )
     return pd.DataFrame(rows)
 
@@ -120,8 +118,8 @@ def render_focus_page() -> None:
         return
 
     focus_rows = df[df["id"].isin(selected_ids)].copy()
-    focus_rows = focus_rows[["name", "project", "helper", "deadline_display"]].rename(
-        columns={"deadline_display": "Deadline"}
+    focus_rows = focus_rows[["name", "project", "helper", "deadline"]].rename(
+        columns={"deadline": "Deadline"}
     )
     st.dataframe(focus_rows, use_container_width=True, hide_index=True)
 

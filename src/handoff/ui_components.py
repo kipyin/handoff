@@ -74,63 +74,6 @@ def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
     return None, "unsupported deadline format"
 
 
-# TODO: remove urgency column in v2026.2.24
-def get_urgency_bucket(deadline: date | None, status: str) -> str:
-    """Return a simple urgency bucket for a todo.
-
-    Shared helper used by table display and other pages (e.g. calendar) to classify
-    todos for display/sorting.
-
-    Args:
-        deadline (date | None): Date portion of the todo deadline, or None.
-        status (str): String status value (e.g. delegated, done).
-
-    Returns:
-        str: One of "overdue", "today", "soon", or "none".
-    """
-    if status != TodoStatus.DELEGATED.value:
-        return "none"
-    if deadline is None:
-        return "none"
-
-    today = date.today()
-    if deadline < today:
-        return "overdue"
-    if deadline == today:
-        return "today"
-
-    # Treat the rest of the current ISO week after today as "soon".
-    weekday = today.weekday()
-    monday = today - timedelta(days=weekday)
-    sunday = monday + timedelta(days=6)
-    if today < deadline <= sunday:
-        return "soon"
-    return "none"
-
-
-# TODO: remove deadline formatting in v2026
-def _format_deadline_display(d: date | None) -> str:
-    """Format a date as 'Tue, Mar 4th' (moment-style ddd, MMM Do).
-
-    Presentation-only: turns a date into the human-readable string used in the
-    table and elsewhere.
-
-    Args:
-        d (date | None): Date to format, or None.
-
-    Returns:
-        str: Human-readable string or empty string if d is None.
-    """
-    if d is None:
-        return ""
-    day = d.day
-    if 10 <= day % 100 <= 20:
-        suffix = "th"
-    else:
-        suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
-    return f"{d.strftime('%a, %b ')}{day}{suffix}"
-
-
 def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame:
     """Convert todo records to an editable dataframe.
 
@@ -152,12 +95,10 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "id": todo.id,
             "name": todo.name,
             "status": status_value,
-            "helper": todo.helper or "",  # TODO: why do we need `or ""`? what's gonna happen without `or`?
-            "deadline": deadline_date,  # TODO: Should just be a date from db
-            "deadline_display": _format_deadline_display(deadline_date),  # TODO: to be removed in v2026.2.24
+            "helper": todo.helper or "",
+            "deadline": deadline_date,
             "notes": todo.notes or "",
             "created_at": todo.created_at,
-            "urgency": get_urgency_bucket(deadline_date, status_value),  # TODO: to be removed
         }
         if include_project:
             row["project"] = todo.project.name if todo.project else ""  # TODO: should always include project. 
@@ -171,12 +112,10 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
         "status",
         "helper",
         "deadline",
-        "deadline_display",
-        "urgency",
         "notes",
         "created_at",
     ]
-    if include_project:  # this should be the default.
+    if include_project:
         cols = [
             "id",
             "project",
@@ -184,8 +123,6 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "status",
             "helper",
             "deadline",
-            "deadline_display",
-            "urgency",
             "notes",
             "created_at",
         ]
@@ -579,9 +516,7 @@ def _render_editable_table(
         "name",
         "status",
         "helper",
-        "deadline_display",
         "deadline",
-        "urgency",
         "notes",
     ]
     st.caption("Filter using the controls above. Use row deletion in the table to remove todos.")
@@ -611,9 +546,7 @@ def _render_editable_table(
                 "Helper",
                 default=default_helper or None,
             ),
-            "deadline_display": st.column_config.TextColumn("Deadline", disabled=True),
-            "deadline": st.column_config.DateColumn("Date"),
-            "urgency": st.column_config.TextColumn("Urgency", disabled=True),
+            "deadline": st.column_config.DateColumn("Deadline"),
             "notes": st.column_config.TextColumn("Notes"),
         },
     )
