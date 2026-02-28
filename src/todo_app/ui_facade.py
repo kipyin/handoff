@@ -1,4 +1,4 @@
-"""Public UI entrypoints for the Chaos Queue app.
+"""Public UI entrypoints for the Handoff app.
 
 This module provides a stable, concise import path for the Streamlit UI while
 delegating concrete page implementations to :mod:`todo_app.pages` and shared
@@ -39,14 +39,14 @@ def setup(app_version: str) -> None:
         app_version: Application version string for display.
     """
     configure_logging()
-    st.set_page_config(page_title="Chaos Queue", page_icon="📥", layout="wide")
+    st.set_page_config(page_title="Handoff", page_icon="📥", layout="wide")
     try:
         init_db()
     except DatabaseInitializationError:
         st.error(
             "The database could not be initialised.\n\n"
             "Check that the app has write access to its data directory or to the path "
-            "configured in TODO_APP_DB_PATH.\n\n"
+            "configured in HANDOFF_DB_PATH.\n\n"
             "See the log file for technical details.",
         )
         st.stop()
