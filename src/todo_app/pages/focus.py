@@ -1,4 +1,4 @@
-"""Focus / daily planning page for Chaos Queue."""
+"""Focus / daily planning page for Handoff."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import streamlit as st
 
 from todo_app.data import query_todos, update_todo
 from todo_app.models import TodoStatus
-from todo_app.ui_components import _deadline_preset_bounds
+from todo_app.ui_components import _deadline_preset_bounds, _format_deadline_display
 
 
 def _build_focus_dataframe() -> pd.DataFrame:
@@ -38,31 +38,37 @@ def _build_focus_dataframe() -> pd.DataFrame:
     rows = []
     for todo in overdue_and_today:
         bucket = "overdue_or_today"
+        deadline_date = todo.deadline.date() if todo.deadline else None
         rows.append(
             {
                 "id": todo.id,
                 "name": todo.name,
                 "project": todo.project.name if todo.project else "",
                 "helper": todo.helper or "",
-                "deadline": todo.deadline.date() if todo.deadline else None,
+                "deadline": deadline_date,
+                "deadline_display": _format_deadline_display(deadline_date),
                 "bucket": bucket,
             }
         )
     for todo in later_this_week:
         bucket = "later_this_week"
+        deadline_date = todo.deadline.date() if todo.deadline else None
         rows.append(
             {
                 "id": todo.id,
                 "name": todo.name,
                 "project": todo.project.name if todo.project else "",
                 "helper": todo.helper or "",
-                "deadline": todo.deadline.date() if todo.deadline else None,
+                "deadline": deadline_date,
+                "deadline_display": _format_deadline_display(deadline_date),
                 "bucket": bucket,
             }
         )
 
     if not rows:
-        return pd.DataFrame(columns=["id", "name", "project", "helper", "deadline", "bucket"])
+        return pd.DataFrame(
+            columns=["id", "name", "project", "helper", "deadline", "deadline_display", "bucket"]
+        )
     return pd.DataFrame(rows)
 
 
@@ -114,7 +120,9 @@ def render_focus_page() -> None:
         return
 
     focus_rows = df[df["id"].isin(selected_ids)].copy()
-    focus_rows = focus_rows[["name", "project", "helper", "deadline"]]
+    focus_rows = focus_rows[["name", "project", "helper", "deadline_display"]].rename(
+        columns={"deadline_display": "Deadline"}
+    )
     st.dataframe(focus_rows, use_container_width=True, hide_index=True)
 
     col_done, col_defer = st.columns(2)

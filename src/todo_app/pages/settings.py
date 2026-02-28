@@ -1,4 +1,4 @@
-"""Settings page implementation for Chaos Queue.
+"""Settings page implementation for Handoff.
 
 This page centralises app updates, code backup restore, data export, and a
 compact About section so that operational controls live in one place.
@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 
 from todo_app.data import get_export_payload
-from todo_app.update_ui import render_update_panel
+from todo_app.updater import render_update_panel
 from todo_app.version import __version__ as APP_VERSION
 
 
@@ -54,13 +54,13 @@ def _render_data_export_section() -> None:
 
 def _render_about_section() -> None:
     """Render a compact About section at the end of the Settings page."""
-    st.markdown("### About Chaos Queue")
+    st.markdown("### About Handoff")
     st.caption(f"Version: {APP_VERSION}”")
 
     st.write(
-        "Chaos Queue is a local, SQLite-backed to-do app for juggling work across multiple "
-        "engagements. It emphasises a single unified table of todos, helper-centric filters "
-        'for "who is on the hook", and short-horizon planning views like calendar and focus.'
+        "Handoff — see who's on the hook across all your projects. A local, SQLite-backed "
+        "to-do app for juggling work across multiple engagements. Single unified table of todos, "
+        "helper-centric filters, and short-horizon planning views like calendar and focus."
     )
 
     st.write(
