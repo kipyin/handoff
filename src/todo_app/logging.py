@@ -1,4 +1,4 @@
-"""Central logging configuration for the todo app.
+"""Central logging configuration for the Handoff app.
 
 This module configures loguru to:
 
@@ -19,7 +19,7 @@ _CONFIGURED = False
 
 def _get_logs_dir() -> Path:
     """Return the directory where log files should be written."""
-    data_dir = Path(user_data_dir("todo-app", "todo-app"))
+    data_dir = Path(user_data_dir("handoff", "handoff"))
     logs_dir = data_dir / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)
     return logs_dir
@@ -35,7 +35,7 @@ def configure_logging() -> None:
         return
 
     logs_dir = _get_logs_dir()
-    log_path = logs_dir / "todo-app.log"
+    log_path = logs_dir / "handoff.log"
 
     # Remove the default loguru handler to avoid duplicate logs, then add our
     # stdout + file sinks.

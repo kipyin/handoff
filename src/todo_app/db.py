@@ -15,15 +15,15 @@ def _get_default_db_path() -> Path:
     This keeps the database outside the application bundle so updates to the
     executable or zip do not overwrite user data.
     """
-    # Example on Windows: C:\Users\<user>\AppData\Roaming\todo-app\todo.db
-    data_dir = Path(user_data_dir("todo-app", "todo-app"))
+    # Example on Windows: C:\Users\<user>\AppData\Roaming\handoff\todo.db
+    data_dir = Path(user_data_dir("handoff", "handoff"))
     data_dir.mkdir(parents=True, exist_ok=True)
     return data_dir / "todo.db"
 
 
 def _resolve_db_path() -> Path:
     """Resolve the database path, allowing an override via environment variable."""
-    override = os.environ.get("TODO_APP_DB_PATH")
+    override = os.environ.get("HANDOFF_DB_PATH") or os.environ.get("TODO_APP_DB_PATH")
     if override:
         path = Path(override).expanduser().resolve()
         path.parent.mkdir(parents=True, exist_ok=True)

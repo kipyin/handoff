@@ -1,4 +1,4 @@
-"""Streamlit UI components for the Chaos Queue app.
+"""Streamlit UI components for the Handoff app.
 
 This module wires together the Streamlit layout and the data layer:
 
@@ -95,6 +95,18 @@ def get_urgency_bucket(deadline: date | None, status: str) -> str:
     return "none"
 
 
+def _format_deadline_display(d: date | None) -> str:
+    """Format a date as 'Tue, Mar 4th' (moment-style ddd, MMM Do)."""
+    if d is None:
+        return ""
+    day = d.day
+    if 10 <= day % 100 <= 20:
+        suffix = "th"
+    else:
+        suffix = {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+    return f"{d.strftime('%a, %b ')}{day}{suffix}"
+
+
 def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame:
     """Convert todo records to an editable dataframe."""
     rows = []
@@ -107,6 +119,7 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "status": status_value,
             "helper": todo.helper or "",
             "deadline": deadline_date,
+            "deadline_display": _format_deadline_display(deadline_date),
             "notes": todo.notes or "",
             "created_at": todo.created_at,
             "urgency": get_urgency_bucket(deadline_date, status_value),
@@ -123,6 +136,7 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
         "status",
         "helper",
         "deadline",
+        "deadline_display",
         "urgency",
         "notes",
         "created_at",
@@ -135,6 +149,7 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "status",
             "helper",
             "deadline",
+            "deadline_display",
             "urgency",
             "notes",
             "created_at",
@@ -474,7 +489,16 @@ def _render_editable_table(
             st.session_state[sort_asc_key] = new_sort_asc == "Ascending"
             st.rerun()
 
-    column_order = ["project", "name", "status", "helper", "deadline", "urgency", "notes"]
+    column_order = [
+        "project",
+        "name",
+        "status",
+        "helper",
+        "deadline_display",
+        "deadline",
+        "urgency",
+        "notes",
+    ]
     st.caption("Filter using the controls above. Use row deletion in the table to remove todos.")
     edited_df = st.data_editor(
         display_df,
@@ -502,7 +526,8 @@ def _render_editable_table(
                 "Helper",
                 default=default_helper or None,
             ),
-            "deadline": st.column_config.DateColumn("Deadline"),
+            "deadline_display": st.column_config.TextColumn("Deadline", disabled=True),
+            "deadline": st.column_config.DateColumn("Date"),
             "urgency": st.column_config.TextColumn("Urgency", disabled=True),
             "notes": st.column_config.TextColumn("Notes"),
         },
@@ -689,7 +714,8 @@ def _render_sidebar_project_management(projects: list) -> None:
 
 def sidebar(*, app_version: str) -> None:
     """Render sidebar controls and project lifecycle actions."""
-    st.sidebar.title("Chaos Queue")
+    st.sidebar.title("Handoff")
+    st.sidebar.caption("See who's on the hook across all your projects.")
     st.sidebar.caption(f"Version: {app_version}")
 
     st.sidebar.subheader("Create project")
@@ -711,7 +737,7 @@ def sidebar(*, app_version: str) -> None:
 
 def main(*, app_version: str) -> None:
     """Run the Streamlit app UI."""
-    st.set_page_config(page_title="Engagement To-Do", layout="wide")
+    st.set_page_config(page_title="Handoff", layout="wide")
     init_db()
     _init_session_state()
     sidebar(app_version=app_version)
