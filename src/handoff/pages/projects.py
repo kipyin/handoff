@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from todo_app.data import (
+from handoff.data import (
     archive_project,
     create_project,
     delete_project,

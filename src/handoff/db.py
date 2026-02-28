@@ -60,7 +60,7 @@ def init_db() -> None:
     try:
         # Ensure models are imported so SQLModel's metadata is populated with
         # the Project and Todo tables before create_all() runs.
-        from todo_app import models as _models  # noqa: F401
+        from handoff import models as _models  # noqa: F401
 
         SQLModel.metadata.create_all(engine)
 
@@ -97,7 +97,7 @@ def init_db() -> None:
 def get_session() -> Session:
     """Return a new database session (context manager preferred via session_context).
 
-    This is primarily used by higher-level helpers in ``todo_app.data``.
+    This is primarily used by higher-level helpers in ``handoff.data``.
     """
     return Session(engine)
 
@@ -106,7 +106,7 @@ def get_session() -> Session:
 def session_context():
     """Context manager yielding a database session.
 
-    Preferred entrypoint for DB access; used by functions in ``todo_app.data`` to ensure
+    Preferred entrypoint for DB access; used by functions in ``handoff.data`` to ensure
     sessions are opened and closed consistently.
     """
     with Session(engine) as session:

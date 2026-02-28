@@ -7,9 +7,9 @@ from datetime import date, datetime, time, timedelta
 
 import streamlit as st
 
-from todo_app.data import get_todos_by_timeframe, update_todo
-from todo_app.models import Todo, TodoStatus
-from todo_app.ui_components import get_urgency_bucket
+from handoff.data import get_todos_by_timeframe, update_todo
+from handoff.models import Todo, TodoStatus
+from handoff.ui_components import get_urgency_bucket
 
 
 def _get_week_bounds(reference: date) -> tuple[datetime, datetime]:

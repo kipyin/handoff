@@ -13,9 +13,9 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from todo_app.data import get_export_payload
-from todo_app.updater import render_update_panel
-from todo_app.version import __version__ as APP_VERSION
+from handoff.data import get_export_payload
+from handoff.updater import render_update_panel
+from handoff.version import __version__ as APP_VERSION
 
 
 def _render_data_export_section() -> None:
@@ -88,7 +88,7 @@ def render_settings_page() -> None:
         "your data. An About section at the end summarises the app and environment."
     )
 
-    # App updates and code backups (panel from todo_app.updater).
+    # App updates and code backups (panel from handoff.updater).
     render_update_panel(APP_VERSION)
 
     st.divider()

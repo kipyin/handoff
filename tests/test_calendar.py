@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from todo_app.pages.calendar import _get_week_bounds
+from handoff.pages.calendar import _get_week_bounds
 
 
 def test_get_week_bounds_returns_monday_to_sunday_for_reference_date() -> None:

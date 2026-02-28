@@ -231,7 +231,7 @@ def render_update_panel(app_version: str) -> None:
     and a "Restore from backup" section (snapshot list and restore).
 
     Args:
-        app_version: Current app version string (e.g. from todo_app.version.__version__).
+        app_version: Current app version string (e.g. from handoff.version.__version__).
     """
     st.markdown("### App updates")
     st.caption(

@@ -90,7 +90,7 @@ def _configure_pth_file() -> None:
     pth_path = PYTHON_DIR / pth_name
     if pth_path.exists():
         lines = pth_path.read_text(encoding="utf-8").splitlines()
-        # Include app root and src so `import todo_app` resolves from bundled source.
+        # Include app root and src so `import handoff` resolves from bundled source.
         # In embedded Python mode, `PYTHONPATH` is ignored when a `pythonXX._pth`
         # file is present, and relative entries are resolved from the `python/`
         # directory (where this file lives), not from the current working dir.
@@ -174,11 +174,11 @@ def _copy_app_code() -> None:
     """
     print("Copying application code...")
     shutil.copy2(ROOT / "app.py", APP_BUILD_DIR / "app.py")
-    src_pkg = ROOT / "src" / "todo_app"
+    src_pkg = ROOT / "src" / "handoff"
     if SRC_PLAIN_DIR.exists():
         shutil.rmtree(SRC_PLAIN_DIR, ignore_errors=True)
     SRC_PLAIN_DIR.mkdir(parents=True, exist_ok=True)
-    dst_pkg = SRC_PLAIN_DIR / "todo_app"
+    dst_pkg = SRC_PLAIN_DIR / "handoff"
     shutil.copytree(src_pkg, dst_pkg, dirs_exist_ok=True)
 
 
@@ -222,7 +222,7 @@ def _obfuscate_app_code_with_pyarmor() -> None:
         "-r",
         "-O",
         str(obf_root),
-        "todo_app",
+        "handoff",
     ]
 
     print("Obfuscating application code with PyArmor...")

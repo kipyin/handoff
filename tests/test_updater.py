@@ -6,7 +6,7 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
-from todo_app.updater import (
+from handoff.updater import (
     _clear_pycache,
     _iter_backup_snapshots,
     _restore_backup_snapshot,

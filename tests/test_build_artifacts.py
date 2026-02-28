@@ -52,7 +52,7 @@ def test_make_zip_includes_docs_and_core_files(
     (app_build_dir / "app.py").write_text("print('hi')", encoding="utf-8")
 
     # Core package.
-    pkg_dir = app_build_dir / "src" / "todo_app"
+    pkg_dir = app_build_dir / "src" / "handoff"
     pkg_dir.mkdir(parents=True, exist_ok=True)
     (pkg_dir / "__init__.py").write_text("x = 1", encoding="utf-8")
 
@@ -77,7 +77,7 @@ def test_make_zip_includes_docs_and_core_files(
     assert "handoff/README.md" in names
     assert "handoff/RELEASE_NOTES.md" in names
     assert "handoff/app.py" in names
-    assert "handoff/src/todo_app/__init__.py" in names
+    assert "handoff/src/handoff/__init__.py" in names
     assert "handoff/pages/2_Projects.py" in names
 
 
@@ -94,11 +94,11 @@ def test_build_obfuscated_patch_includes_docs_and_core_files(
 
     build_app_dir = root / "build" / "handoff"
     src_dir = build_app_dir / "src"
-    todo_app_dir = src_dir / "todo_app"
-    todo_app_dir.mkdir(parents=True, exist_ok=True)
+    handoff_dir = src_dir / "handoff"
+    handoff_dir.mkdir(parents=True, exist_ok=True)
 
     # Minimal obfuscated package layout (contents are irrelevant for this test).
-    (todo_app_dir / "__init__.py").write_text("x = 1", encoding="utf-8")
+    (handoff_dir / "__init__.py").write_text("x = 1", encoding="utf-8")
 
     # app.py that should be included when present in the build tree.
     build_app_dir.mkdir(parents=True, exist_ok=True)
@@ -119,4 +119,4 @@ def test_build_obfuscated_patch_includes_docs_and_core_files(
     assert "README.md" in names
     assert "RELEASE_NOTES.md" in names
     assert "app.py" in names
-    assert "src/todo_app/__init__.py" in names
+    assert "src/handoff/__init__.py" in names

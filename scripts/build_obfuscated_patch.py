@@ -2,7 +2,7 @@
 
 Use this after ``build-zip`` to produce a patch that can be applied by the
 in-app updater on PyArmor-obfuscated distributions. The patch contains
-obfuscated ``src/todo_app``, the PyArmor runtime, and optionally ``app.py``
+obfuscated ``src/handoff``, the PyArmor runtime, and optionally ``app.py``
 and ``pages/`` from the last build.
 """
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 import zipfile
 from pathlib import Path
 
-from todo_app.version import __version__
+from handoff.version import __version__
 
 from . import ROOT
 
@@ -23,7 +23,7 @@ def build_obfuscated_patch(*, include_pages: bool = True) -> Path:
     """Build a patch zip from the obfuscated build tree and return its path.
 
     Requires that ``build-zip`` has been run so that ``build/handoff``
-    contains ``app.py``, ``src/todo_app`` (obfuscated), and
+    contains ``app.py``, ``src/handoff`` (obfuscated), and
     ``src/pyarmor_runtime_*``.
 
     Args:
@@ -43,10 +43,10 @@ def build_obfuscated_patch(*, include_pages: bool = True) -> Path:
         )
 
     src_dir = BUILD_APP_DIR / "src"
-    todo_app_dir = src_dir / "todo_app"
-    if not todo_app_dir.is_dir():
+    handoff_dir = src_dir / "handoff"
+    if not handoff_dir.is_dir():
         raise RuntimeError(
-            f"Expected obfuscated package at {todo_app_dir}. "
+            f"Expected obfuscated package at {handoff_dir}. "
             "Run 'uv run handoff build-zip' to produce an obfuscated build."
         )
 

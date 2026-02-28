@@ -12,7 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT_PATH = ROOT / "pyproject.toml"
-VERSION_PATH = ROOT / "src" / "todo_app" / "version.py"
+VERSION_PATH = ROOT / "src" / "handoff" / "version.py"
 
 
 def _validate_version(value: str) -> str:
@@ -88,13 +88,13 @@ def bump_version(new_version: str) -> None:
 
     PYPROJECT_PATH.write_text(pyproject_updated, encoding="utf-8")
     VERSION_PATH.write_text(version_updated, encoding="utf-8")
-    print(f"Updated version to {new_version} in pyproject.toml and src/todo_app/version.py")
+    print(f"Updated version to {new_version} in pyproject.toml and src/handoff/version.py")
 
 
 def main() -> None:
     """CLI entrypoint for synchronizing version strings."""
     parser = argparse.ArgumentParser(
-        description="Bump version in pyproject.toml and src/todo_app/version.py together.",
+        description="Bump version in pyproject.toml and src/handoff/version.py together.",
     )
     parser.add_argument(
         "version",

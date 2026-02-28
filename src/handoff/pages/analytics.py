@@ -7,8 +7,8 @@ from datetime import date, datetime, time, timedelta
 import pandas as pd
 import streamlit as st
 
-from todo_app.data import query_todos
-from todo_app.models import TodoStatus
+from handoff.data import query_todos
+from handoff.models import TodoStatus
 
 
 def _build_done_dataframe(start: date | None, end: date | None) -> pd.DataFrame:

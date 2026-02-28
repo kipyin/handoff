@@ -10,9 +10,9 @@ import pytest
 
 
 def _reload_db_module(db_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Reload todo_app.db with TODO_APP_DB_PATH pointed at db_path."""
+    """Reload handoff.db with TODO_APP_DB_PATH pointed at db_path."""
     monkeypatch.setenv("TODO_APP_DB_PATH", str(db_path))
-    import todo_app.db as db  # type: ignore[import-not-found]
+    import handoff.db as db  # type: ignore[import-not-found]
 
     return importlib.reload(db)
 

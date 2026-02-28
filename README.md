@@ -37,7 +37,7 @@ uv run handoff
 
 By default, the SQLite database is stored in your per-user data directory so app updates do not overwrite your data (for example on Windows: `%APPDATA%\handoff\todo.db`). You can override the location by setting the `HANDOFF_DB_PATH` environment variable (or `TODO_APP_DB_PATH` for backward compatibility) before starting the app.
 
-`app.py` is intentionally kept thin and delegates version handling to `src/todo_app/version.py`, which exposes a single `__version__` constant used by the UI and tooling (for example the updater panel and build scripts).
+`app.py` is intentionally kept thin and delegates version handling to `src/handoff/version.py`, which exposes a single `__version__` constant used by the UI and tooling (for example the updater panel and build scripts).
 
 ## Features
 
@@ -65,8 +65,8 @@ The app uses **loguru** for logging, configured to write to:
 - **Rotating log file** under your user data directory (for example on Windows:
 `%APPDATA%\handoff\logs\handoff.log`).
 
-The configuration lives in `src/todo_app/logging.py` and is initialised from
-`todo_app.ui_facade.setup()`.
+The configuration lives in `src/handoff/logging.py` and is initialised from
+`handoff.ui_facade.setup()`.
 
 - **During development**, run the app from a terminal to see logs live as you interact:
   ```bash
@@ -79,12 +79,12 @@ The configuration lives in `src/todo_app/logging.py` and is initialised from
   - Save summary counts and high-level query info.
 
 For deeper diagnostics you can extend the existing `loguru` calls in
-`src/todo_app/data.py`, `src/todo_app/db.py`, or `src/todo_app/ui_components.py`.
+`src/handoff/data.py`, `src/handoff/db.py`, or `src/handoff/ui_components.py`.
 
 ## Windows embedded zip build and obfuscated patches
 
 On Windows you can build a self-contained zip that bundles an embedded Python runtime,
-dependencies, and the app code. The build uses **PyArmor** to obfuscate the `src/todo_app`
+dependencies, and the app code. The build uses **PyArmor** to obfuscate the `src/handoff`
 package so that distributed code is protected; `app.py` stays readable. You need PyArmor
 in your dev environment (`uv sync` installs it):
 
@@ -149,19 +149,19 @@ uv run handoff test
 # All checks (lint, format, type checking, tests)
 uv run handoff ci
 
-# Build embedded Windows zip (obfuscates src/todo_app with PyArmor)
+# Build embedded Windows zip (obfuscates src/handoff with PyArmor)
 uv run handoff build-zip
 
 # Build patch from obfuscated build (for PyArmor-built installs; run after build-zip)
 uv run handoff build-obfuscated-patch
 
-# Bump version in pyproject.toml and todo_app.version
+# Bump version in pyproject.toml and handoff.version
 uv run handoff bump-version 2026.2.21
 ```
 
 Version sync guard:
 
-- `src/todo_app/version.py` contains `__version__`.
+- `src/handoff/version.py` contains `__version__`.
 - `pyproject.toml` contains `[project].version`.
 - `tests/test_version_sync.py` enforces they match.
 - `scripts/bump_version.py` (and the `bump-version` CLI command) update both together.
@@ -169,8 +169,8 @@ Version sync guard:
 ## Project layout
 
 - `app.py` — Thin Streamlit entrypoint + navigation
-- `src/todo_app/ui_facade.py` — Public Streamlit UI entrypoints
-- `src/todo_app/` — Package: `models.py`, `db.py`, `data.py`
+- `src/handoff/ui_facade.py` — Public Streamlit UI entrypoints
+- `src/handoff/` — Package: `models.py`, `db.py`, `data.py`
 - `pages/` — Legacy Streamlit entry scripts for Projects/Calendar (primary nav is in `app.py`)
 - `tests/` — Pytest tests
 

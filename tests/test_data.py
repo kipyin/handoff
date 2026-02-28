@@ -5,8 +5,8 @@ from datetime import datetime
 
 from sqlmodel import select
 
-import todo_app.data as data
-from todo_app.models import Project, Todo, TodoStatus
+import handoff.data as data
+from handoff.models import Project, Todo, TodoStatus
 
 
 def _patch_session_context(monkeypatch, session) -> None:

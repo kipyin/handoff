@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from todo_app.docs import read_markdown_from_app_root
+from handoff.docs import read_markdown_from_app_root
 
 
 def test_read_markdown_from_app_root_finds_release_notes_from_any_cwd(tmp_path: Path) -> None:

@@ -9,7 +9,7 @@
 - **Patch version check:** When applying a code-only patch zip, the updater now compares the patch version (from a `VERSION` file in the zip) with the current app version. If the patch is older, applying is blocked with a clear message; a checkbox on the Settings page lets you confirm and apply anyway if you understand the risk.
 - **Backup versioning:** Timestamped backups created before applying a patch now include the app version in the folder name (e.g. `backup/2026.2.22_20260228-143022`). Restore snapshot labels in the UI show both version and timestamp where available.
 - **Export timestamps:** JSON and CSV exports from the Settings page now include a timestamp in the filename (e.g. `todo_backup_2026-02-28_143022.json`, `todo_todos_2026-02-28_143022.csv`).
-- **Update panel location:** The in-app update and backup-restore panel has been moved from `todo_app.update_ui` into the Settings page implementation (`pages/settings.py`). The `update_ui.py` module has been removed; Settings imports updater logic directly from `todo_app.updater`.
+- **Update panel location:** The in-app update and backup-restore panel has been moved from `handoff.update_ui` into the Settings page implementation (`pages/settings.py`). The `update_ui.py` module has been removed; Settings imports updater logic directly from `handoff.updater`.
 - **Todo table height:** The main todos table now uses Streamlit’s `height="content"` so the editor grows with the number of rows instead of a fixed viewport.
 - **Calendar improvements:** Week navigation uses a 7-column layout so “Previous week” aligns with Monday and “Next week” with Sunday; the “View week of” date picker sits in the centre. Deadline and Update controls for delegated todos are more compact (single row, smaller button). The current day is marked with “— *Today*” in the column header.
 - **Focus page:** A short caption has been added under the title explaining the page’s purpose: choose a few delegated items to focus on today, then mark them done or defer in one go.
@@ -26,11 +26,11 @@
 - **Docs inside the app:** Add a `Docs` navigation page that renders the README and release notes from the installed app root, and update Settings/About copy so it points there for “What’s new?”.
 - **Calendar week navigation:** Allow paging backwards/forwards by week and jumping to a specific “week of” on the Calendar page while keeping inline deadline editing.
 - **Autosave banner correctness:** Fix the main todos table so the “All changes saved” / “Unsaved changes” banner starts in a saved state on first load and only flips after real edits.
-- **Updater UI separation:** Move the update/backup Streamlit panel into `todo_app.update_ui` so `todo_app.updater` focuses on filesystem logic, keeping Settings layout but with clearer “App updates” and “Restore from backup” sections.
+- **Updater UI separation:** Move the update/backup Streamlit panel into `handoff.update_ui` so `handoff.updater` focuses on filesystem logic, keeping Settings layout but with clearer “App updates” and “Restore from backup” sections.
 
 ## 2026.2.20 [Optional]
 
-- **CLI & CI workflow:** Add `typecheck` and `ci` commands to the `todo` CLI and document the recommended check/typecheck/test flow for local and CI runs.
+- **CLI & CI workflow:** Add `typecheck` and `ci` commands to the `handoff` CLI and document the recommended check/typecheck/test flow for local and CI runs.
 - **Distribution quality:** Include project docs (README and release notes) in build and patch zips, plus tests that verify the contents of build artifacts.
 - **Internal cleanup:** Remove an obsolete sidebar backup hook and apply Ruff-driven formatting cleanups; there are no user-visible behaviour changes.
 
@@ -82,8 +82,8 @@
 
 ## 2026.2.12 [Recommended]
 
-- **PyArmor obfuscation:** The Windows embedded zip build (`uv run todo build-zip`) now obfuscates the `src/todo_app` package with PyArmor so that distributed code is protected while `app.py` remains readable. The PyArmor runtime is included in the zip; no extra install is required on the target machine.
-- **Obfuscated patches:** For installs that use the obfuscated embedded zip, code-only updates must be built with `uv run todo build-obfuscated-patch` (after running `build-zip`) so that the patch contains obfuscated code and the PyArmor runtime. The standard `build-patch` command still produces source-only patches for development or non-obfuscated installs.
+- **PyArmor obfuscation:** The Windows embedded zip build (`uv run handoff build-zip`) now obfuscates the `src/handoff` package with PyArmor so that distributed code is protected while `app.py` remains readable. The PyArmor runtime is included in the zip; no extra install is required on the target machine.
+- **Obfuscated patches:** For installs that use the obfuscated embedded zip, code-only updates must be built with `uv run handoff build-obfuscated-patch` (after running `build-zip`) so that the patch contains obfuscated code and the PyArmor runtime. The standard `build-patch` command still produces source-only patches for development or non-obfuscated installs.
 - **Build requirements:** Building the embedded zip now requires PyArmor in the dev environment (`uv sync` installs it from the dev dependency group). The trial/non-profit PyArmor build uses default obfuscation; a full license allows extra options (e.g. `--enable-jit`, `--mix-str`) if you edit `scripts/build_zip.py`.
 
 ## 2026.2.11 [Optional]
@@ -113,8 +113,8 @@
 ## 2026.2.8 [Recommended]
 
 - **CLI & scripts:** Add a Typer + Rich CLI under `scripts/cli.py` that wraps common developer commands (`run`, `sync`, `check`, `test`, `build-zip`, `build-patch`, `bump-version`), and move the embedded Windows build logic into `scripts/build_zip.py` with a small root-level shim for backwards compatibility.
-- **Versioning:** Introduce a single canonical `todo_app.version.__version__` constant, update `app.py` to import it, and update `scripts/bump_version.py` + `tests/test_version_sync.py` so `pyproject.toml` and the version module stay in sync.
-- **Patch updates:** Add a `scripts/build_patch.py` helper and `build-patch` CLI command to produce small code-only patch zips, plus an in-app Streamlit sidebar “Update app” panel (`todo_app.updater.render_update_panel`) that applies uploaded patch zips safely against the app directory.
+- **Versioning:** Introduce a single canonical `handoff.version.__version__` constant, update `app.py` to import it, and update `scripts/bump_version.py` + `tests/test_version_sync.py` so `pyproject.toml` and the version module stay in sync.
+- **Patch updates:** Add a `scripts/build_patch.py` helper and `build-patch` CLI command to produce small code-only patch zips, plus an in-app Streamlit sidebar “Update app” panel (`handoff.updater.render_update_panel`) that applies uploaded patch zips safely against the app directory.
 
 ## 2026.2.7 [Recommended]
 
@@ -132,13 +132,13 @@
 ## 2026.2.5 [Recommended]
 
 - **Projects page:** Add a dedicated Projects page with project creation, rename, delete, and per-project todo summaries.
-- **UI façade:** Introduce `todo_app.pages` for page implementations and a `todo_app.ui_facade` façade with `setup`, `render_todos_page`, and `render_projects_page` entrypoints suitable for Streamlit multipage usage.
+- **UI façade:** Introduce `handoff.pages` for page implementations and a `handoff.ui_facade` façade with `setup`, `render_todos_page`, and `render_projects_page` entrypoints suitable for Streamlit multipage usage.
 - **Entry scripts:** Keep `app.py` as a thin entrypoint and (historically) add `pages/1_Todos.py` and `pages/2_Projects.py` as minimal Streamlit page shims for classic multipage usage; modern installs rely on `app.py` and Streamlit navigation instead.
 
 ## 2026.2.4 [Optional]
 
 - **Logging:** Log applied filters in `query_todos` and include todo ids/names in save and delete logs for better traceability.
-- **UI naming:** Expose a concise `todo_app.ui_facade` module and rename the main view function to `view`.
+- **UI naming:** Expose a concise `handoff.ui_facade` module and rename the main view function to `view`.
 - **Table behavior:** Remove the explicit Delete column and rely on built-in `st.data_editor` row deletion while keeping robust id mapping.
 - **Streamlit chrome:** Hide the Deploy toolbar button via `.streamlit/config.toml`.
 - **Docs:** Add a high-level UI flow diagram and clarify that notes support Markdown/links.
@@ -158,7 +158,7 @@
 
 ## 2026.2.1 [Recommended]
 
-- Refactor the Streamlit entrypoint by moving UI composition and view logic into `src/todo_app/app_ui.py`, keeping `app.py` intentionally minimal for runtime bootstrapping.
+- Refactor the Streamlit entrypoint by moving UI composition and view logic into `src/handoff/app_ui.py`, keeping `app.py` intentionally minimal for runtime bootstrapping.
 - Expose a stable `APP_VERSION` constant in `app.py` for updater/version checks and add a test (`tests/test_version_sync.py`) to enforce parity with `pyproject.toml`.
 - Add `scripts/bump_version.py` to update `pyproject.toml` and `app.py` together in one command, reducing version drift risk.
 

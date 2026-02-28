@@ -6,8 +6,8 @@ from typing import Any
 from loguru import logger
 from sqlmodel import or_, select
 
-from todo_app.db import session_context
-from todo_app.models import Project, Todo, TodoStatus
+from handoff.db import session_context
+from handoff.models import Project, Todo, TodoStatus
 
 _UNSET = object()
 

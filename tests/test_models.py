@@ -4,7 +4,7 @@ from datetime import datetime
 
 from sqlmodel import Session
 
-from todo_app.models import Project, Todo, TodoStatus
+from handoff.models import Project, Todo, TodoStatus
 
 
 def test_create_project(session: Session) -> None:

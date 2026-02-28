@@ -3,7 +3,7 @@
 This module wires together the Streamlit layout and the data layer:
 
 - ``view()`` renders a unified, filterable todos table and saves edits back
-  through helpers in :mod:`todo_app.data`.
+  through helpers in :mod:`handoff.data`.
 - ``sidebar()`` hosts project creation, rename/delete, and backup download
   actions in the Streamlit sidebar.
 
@@ -19,7 +19,7 @@ import pandas as pd
 import streamlit as st
 from loguru import logger
 
-from todo_app.data import (
+from handoff.data import (
     create_project,
     create_todo,
     delete_project,
@@ -31,8 +31,8 @@ from todo_app.data import (
     rename_project,
     update_todo,
 )
-from todo_app.db import init_db
-from todo_app.models import TodoStatus
+from handoff.db import init_db
+from handoff.models import TodoStatus
 
 
 def _init_session_state() -> None:
@@ -49,7 +49,7 @@ def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
         return None, None
     if isinstance(raw_value, datetime):
         # Treat all deadlines as naive local datetimes.
-        return raw_value.replace(tzinfo=None), None
+        return raw_value.astimezone().replace(tzinfo=None), None
     if isinstance(raw_value, date):
         # Store date-only deadlines at the end of the day (18:00 local time).
         return datetime.combine(raw_value, time(hour=18, minute=0)), None
@@ -59,7 +59,7 @@ def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
             return None, None
         try:
             parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
-            return parsed.replace(tzinfo=None), None
+            return parsed.astimezone().replace(tzinfo=None), None
         except ValueError:
             return None, f"invalid deadline '{candidate}'"
     return None, "unsupported deadline format"

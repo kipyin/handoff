@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from todo_app.data import list_projects, query_todos
-from todo_app.ui_components import _build_todo_dataframe, _render_editable_table
+from handoff.data import list_projects, query_todos
+from handoff.ui_components import _build_todo_dataframe, _render_editable_table
 
 
 def render_todos_page() -> None:

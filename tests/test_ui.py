@@ -2,8 +2,8 @@
 
 from datetime import date, timedelta
 
-from todo_app.ui_components import get_urgency_bucket
-from todo_app.ui_facade import (
+from handoff.ui_components import get_urgency_bucket
+from handoff.ui_facade import (
     DEADLINE_ANY,
     DEADLINE_CUSTOM,
     DEADLINE_THIS_WEEK,

@@ -7,9 +7,9 @@ from datetime import date, datetime, time, timedelta
 import pandas as pd
 import streamlit as st
 
-from todo_app.data import query_todos, update_todo
-from todo_app.models import TodoStatus
-from todo_app.ui_components import _deadline_preset_bounds, _format_deadline_display
+from handoff.data import query_todos, update_todo
+from handoff.models import TodoStatus
+from handoff.ui_components import _deadline_preset_bounds, _format_deadline_display
 
 
 def _build_focus_dataframe() -> pd.DataFrame:

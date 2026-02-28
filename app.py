@@ -1,7 +1,7 @@
 """Main entrypoint for the Handoff app.
 
 This file intentionally exposes a stable APP_VERSION constant so an updater can
-read it, while delegating UI rendering to :mod:`todo_app.ui_facade` and
+read it, while delegating UI rendering to :mod:`handoff.ui_facade` and
 Streamlit's :func:`st.navigation` API.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from todo_app.ui_facade import (
+from handoff.ui_facade import (
     render_analytics_page,
     render_calendar_page,
     render_docs_page,
@@ -19,7 +19,7 @@ from todo_app.ui_facade import (
     render_todos_page,
     setup,
 )
-from todo_app.version import __version__ as APP_VERSION
+from handoff.version import __version__ as APP_VERSION
 
 
 def _todos_page() -> None:
@@ -70,10 +70,10 @@ def main() -> None:
         st.Page(_todos_page, title="Todos", icon="✅"),
         st.Page(_projects_page, title="Projects", icon="📁"),
         st.Page(_calendar_page, title="Calendar", icon="📅"),
-        st.Page(_analytics_page, title="Analytics", icon="📊"),
-        st.Page(_focus_page, title="Focus", icon="🎯"),
+        # st.Page(_analytics_page, title="Analytics", icon="📊"),
+        # st.Page(_focus_page, title="Focus", icon="🎯"),
         st.Page(_settings_page, title="Settings", icon="⚙️"),
-        st.Page(_docs_page, title="Docs", icon="📖"),
+        # st.Page(_docs_page, title="Docs", icon="📖"),
     ]
     nav = st.navigation(pages, position="top")
     nav.run()

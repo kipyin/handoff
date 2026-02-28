@@ -5,7 +5,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 
-from todo_app.version import __version__
+from handoff.version import __version__
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
@@ -19,5 +19,5 @@ def _read_pyproject_version() -> str:
 
 
 def test_version_module_matches_pyproject() -> None:
-    """todo_app.version.__version__ should match pyproject [project].version."""
+    """handoff.version.__version__ should match pyproject [project].version."""
     assert __version__ == _read_pyproject_version()

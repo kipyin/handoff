@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import streamlit as st
 
-from todo_app.docs import read_markdown_from_app_root
-from todo_app.version import __version__ as APP_VERSION
+from handoff.docs import read_markdown_from_app_root
+from handoff.version import __version__ as APP_VERSION
 
 
 def render_docs_page() -> None:

@@ -45,7 +45,7 @@ type-checking setup, etc.), follow this flow:
 2. Make focused commits:
    - Keep each commit as small and coherent as practical.
 3. Bump the CalVer patch version when shipping user-visible changes:
-   - Use the CLI helper so `pyproject.toml` and `src/todo_app/version.py` stay in sync:
+   - Use the CLI helper so `pyproject.toml` and `src/handoff/version.py` stay in sync:
      ```bash
      uv run handoff bump-version 2026.2.XY
      ```
