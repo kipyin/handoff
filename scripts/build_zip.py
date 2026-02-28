@@ -21,7 +21,7 @@ from . import ROOT
 
 BUILD_ROOT = ROOT / "build"
 DIST_ROOT = ROOT / "dist"
-APP_FOLDER_NAME = "todo-app"
+APP_FOLDER_NAME = "handoff"
 APP_BUILD_DIR = BUILD_ROOT / APP_FOLDER_NAME
 SRC_PLAIN_DIR = APP_BUILD_DIR / "src_plain"
 PYTHON_DIR = APP_BUILD_DIR / "python"
@@ -38,7 +38,7 @@ def _read_project_metadata() -> tuple[str, str]:
     with pyproject.open("rb") as f:
         data = tomllib.load(f)
     project = data.get("project", {})
-    name = project.get("name", "todo-app")
+    name = project.get("name", "handoff")
     version = project.get("version", "0.0.0")
     return name, version
 
@@ -301,7 +301,7 @@ def main() -> None:
     print("  3. Double-click run.bat.")
     print(
         "Your SQLite database will be stored in your user data directory "
-        "(e.g. %APPDATA%\\todo-app\\todo.db)."
+        "(e.g. %APPDATA%\\handoff\\todo.db)."
     )
 
 

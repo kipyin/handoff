@@ -11,7 +11,7 @@ from . import build_zip as build_zip_module
 from . import bump_version as bump_version_module
 from .subprocess_utils import run_cmd
 
-app = typer.Typer(help="Chaos Queue development and build commands.")
+app = typer.Typer(help="Handoff development and build commands.")
 console = Console()
 
 
@@ -27,7 +27,7 @@ def run() -> None:
 
 @app.callback(invoke_without_command=True)
 def main_callback(ctx: typer.Context) -> None:
-    """Default entrypoint so `uv run todo` behaves like `uv run todo run`."""
+    """Default entrypoint so `uv run handoff` behaves like `uv run handoff run`."""
     if ctx.invoked_subcommand is None:
         run()
 

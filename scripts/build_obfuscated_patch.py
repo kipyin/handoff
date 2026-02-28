@@ -15,14 +15,14 @@ from todo_app.version import __version__
 
 from . import ROOT
 
-BUILD_APP_DIR = ROOT / "build" / "todo-app"
+BUILD_APP_DIR = ROOT / "build" / "handoff"
 DIST_ROOT = ROOT / "dist"
 
 
 def build_obfuscated_patch(*, include_pages: bool = True) -> Path:
     """Build a patch zip from the obfuscated build tree and return its path.
 
-    Requires that ``build-zip`` has been run so that ``build/todo-app``
+    Requires that ``build-zip`` has been run so that ``build/handoff``
     contains ``app.py``, ``src/todo_app`` (obfuscated), and
     ``src/pyarmor_runtime_*``.
 
@@ -39,7 +39,7 @@ def build_obfuscated_patch(*, include_pages: bool = True) -> Path:
     """
     if not BUILD_APP_DIR.is_dir():
         raise RuntimeError(
-            f"Obfuscated build not found at {BUILD_APP_DIR}. Run 'uv run todo build-zip' first."
+            f"Obfuscated build not found at {BUILD_APP_DIR}. Run 'uv run handoff build-zip' first."
         )
 
     src_dir = BUILD_APP_DIR / "src"
@@ -47,11 +47,11 @@ def build_obfuscated_patch(*, include_pages: bool = True) -> Path:
     if not todo_app_dir.is_dir():
         raise RuntimeError(
             f"Expected obfuscated package at {todo_app_dir}. "
-            "Run 'uv run todo build-zip' to produce an obfuscated build."
+            "Run 'uv run handoff build-zip' to produce an obfuscated build."
         )
 
     DIST_ROOT.mkdir(parents=True, exist_ok=True)
-    zip_name = f"todo-app-{__version__}-obfuscated-patch.zip"
+    zip_name = f"handoff-{__version__}-obfuscated-patch.zip"
     zip_path = DIST_ROOT / zip_name
 
     if zip_path.exists():
