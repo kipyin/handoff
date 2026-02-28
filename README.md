@@ -46,12 +46,12 @@ By default, the SQLite database is stored in your per-user data directory so app
   - Name
   - Deadline (optional)
   - Creation timestamp (auto)
-  - Status: `delegated` | `done` | `canceled`
+  - Status: `handoff` | `done` | `canceled`
   - Helper (assignee)
   - Notes (text; you can paste links, file paths, etc.)
 3. **Unified table view** — One main table lists todos across all projects. Use the filter bar to narrow by:
   - **Search** — Text in name, notes, helper, or project.
-  - **Statuses** — Multiselect (defaults to delegated).
+  - **Statuses** — Multiselect (defaults to handoff).
   - **Projects** — Multiselect.
   - **Helper** — Dropdown of known helpers (or "All helpers").
   - **Deadline** — Optional date range (popover: enable range, then pick From/To dates).

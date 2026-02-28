@@ -33,7 +33,7 @@ def _render_create_project_form() -> None:
 def _render_project_row(*, project, summary: dict) -> None:
     """Render a single project's summary, rename, and delete controls."""
     total = summary.get("total", 0)
-    delegated = summary.get("delegated", 0)
+    handoff = summary.get("handoff", 0)
     done = summary.get("done", 0)
     canceled = summary.get("canceled", 0)
 
@@ -43,7 +43,7 @@ def _render_project_row(*, project, summary: dict) -> None:
         title = f"{title} (archived)"
 
     st.markdown(f"### {title}")
-    st.caption(f"{total} todos (delegated: {delegated}, done: {done}, canceled: {canceled})")
+    st.caption(f"{total} todos (handoff: {handoff}, done: {done}, canceled: {canceled})")
 
     rename_col, archive_col, delete_col = st.columns([3, 2, 2])
     with rename_col:

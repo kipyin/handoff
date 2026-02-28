@@ -102,21 +102,21 @@ def render_analytics_page() -> None:
     )
     st.bar_chart(df_done.set_index("completed_date")["cycle_days"])
 
-    # Section 3: Helper load (current delegated)
+    # Section 3: Helper load (current handoff)
     st.markdown("### Current helper load")
-    delegated = query_todos(statuses=[TodoStatus.DELEGATED], include_archived=False)
-    if not delegated:
-        st.caption("No delegated todos at the moment.")
+    handoff_todos = query_todos(statuses=[TodoStatus.DELEGATED], include_archived=False)
+    if not handoff_todos:
+        st.caption("No handoff todos at the moment.")
         return
     rows = []
-    for todo in delegated:
+    for todo in handoff_todos:
         rows.append(
             {
                 "helper": todo.helper or "(unassigned)",
                 "id": todo.id,
             }
         )
-    df_delegated = pd.DataFrame(rows)
-    helper_counts = df_delegated.groupby("helper")["id"].count().reset_index(name="delegated")
-    helper_counts = helper_counts.sort_values("delegated", ascending=False)
+    df_handoff = pd.DataFrame(rows)
+    helper_counts = df_handoff.groupby("helper")["id"].count().reset_index(name="handoff")
+    helper_counts = helper_counts.sort_values("handoff", ascending=False)
     st.bar_chart(helper_counts.set_index("helper"))

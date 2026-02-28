@@ -12,7 +12,7 @@ class TodoStatus(StrEnum):
     Values are persisted as strings in the database and used for filtering and display.
     """
 
-    DELEGATED = "delegated"
+    DELEGATED = "handoff"  # Display name: "handoff"; persisted in DB as "handoff"
     DONE = "done"
     CANCELED = "canceled"
 
@@ -34,7 +34,7 @@ class Project(SQLModel, table=True):
 class Todo(SQLModel, table=True):
     """A single todo item belonging to a project.
 
-    The ``helper`` field is the person responsible for the todo; ``delegated`` status
+    The ``helper`` field is the person responsible for the todo; ``handoff`` status
     typically means the task is outstanding and assigned to that helper.
     """
 

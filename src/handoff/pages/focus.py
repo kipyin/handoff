@@ -13,7 +13,7 @@ from handoff.ui_components import _deadline_preset_bounds
 
 
 def _build_focus_dataframe() -> pd.DataFrame:
-    """Return a DataFrame of delegated todos split into logical buckets."""
+    """Return a DataFrame of handoff todos split into logical buckets."""
     today = date.today()
     start_of_week, end_of_week = _deadline_preset_bounds("This week")
     assert start_of_week is not None and end_of_week is not None
@@ -76,7 +76,7 @@ def render_focus_page() -> None:
 
     df = _build_focus_dataframe()
     if df.empty:
-        st.info("No delegated todos with deadlines this week.")
+        st.info("No handoff todos with deadlines this week.")
         return
 
     today = date.today()

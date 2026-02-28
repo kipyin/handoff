@@ -77,6 +77,11 @@ def init_db() -> None:
                 conn.exec_driver_sql(
                     "ALTER TABLE todo ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0"
                 )
+            # Migrate legacy status label: delegated -> handoff (only if status column exists)
+            if "status" in todo_columns:
+                conn.exec_driver_sql(
+                    "UPDATE todo SET status = 'handoff' WHERE status = 'delegated'"
+                )
 
             # Project table migrations.
             result = conn.exec_driver_sql("PRAGMA table_info('project')")

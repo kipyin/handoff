@@ -84,7 +84,7 @@ def create_todo(
     Args:
         project_id: Id of the project.
         name: Todo title/name.
-        status: One of delegated, done, canceled.
+        status: One of handoff, done, canceled.
         deadline: Optional due date/time.
         helper: Optional assignee/helper name.
         notes: Optional text (can include links, file paths, etc.).
@@ -490,7 +490,7 @@ def get_projects_with_todo_summary(*, include_archived: bool = False) -> list[di
 
     - ``project``: The :class:`Project` instance.
     - ``total``: Total todos in the project.
-    - ``delegated``: Todos with status ``delegated``.
+    - ``handoff``: Todos with status ``handoff``.
     - ``done``: Todos with status ``done``.
     - ``canceled``: Todos with status ``canceled``.
     """
@@ -504,7 +504,7 @@ def get_projects_with_todo_summary(*, include_archived: bool = False) -> list[di
         project.id: {
             "project": project,
             "total": 0,
-            "delegated": 0,
+            "handoff": 0,
             "done": 0,
             "canceled": 0,
         }
@@ -517,7 +517,7 @@ def get_projects_with_todo_summary(*, include_archived: bool = False) -> list[di
             continue
         item["total"] += 1
         if todo.status == TodoStatus.DELEGATED:
-            item["delegated"] += 1
+            item["handoff"] += 1
         elif todo.status == TodoStatus.DONE:
             item["done"] += 1
         elif todo.status == TodoStatus.CANCELED:

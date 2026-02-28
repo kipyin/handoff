@@ -128,7 +128,7 @@ def render_calendar_page() -> None:
 
                 st.markdown(label)
 
-                # Inline deadline adjustments for delegated todos.
+                # Inline deadline adjustments for handoff todos.
                 if status_value == TodoStatus.DELEGATED.value:
                     current_deadline_date = todo.deadline.date() if todo.deadline else day
                     todo_id = int(todo.id)
