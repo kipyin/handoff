@@ -22,7 +22,7 @@ def test_copy_docs_copies_readme_and_release_notes(
     readme.write_text("readme", encoding="utf-8")
     release_notes.write_text("notes", encoding="utf-8")
 
-    app_build_dir = root / "build" / "todo-app"
+    app_build_dir = root / "build" / "handoff"
     app_build_dir.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(build_zip_module, "ROOT", root)
@@ -41,7 +41,7 @@ def test_make_zip_includes_docs_and_core_files(
     """_make_zip includes docs, app.py, core package, and pages."""
     root = tmp_path
     build_root = root / "build"
-    app_build_dir = build_root / "todo-app"
+    app_build_dir = build_root / "handoff"
     app_build_dir.mkdir(parents=True, exist_ok=True)
 
     # Documentation files that should be shipped.
@@ -68,17 +68,17 @@ def test_make_zip_includes_docs_and_core_files(
     monkeypatch.setattr(build_zip_module, "DIST_ROOT", dist_root)
     monkeypatch.setattr(build_zip_module, "APP_BUILD_DIR", app_build_dir)
 
-    zip_path = build_zip_module._make_zip("todo-app", "1.0.0")
+    zip_path = build_zip_module._make_zip("handoff", "1.0.0")
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         names = set(zf.namelist())
 
-    # Paths are relative to BUILD_ROOT, so they are prefixed with "todo-app/".
-    assert "todo-app/README.md" in names
-    assert "todo-app/RELEASE_NOTES.md" in names
-    assert "todo-app/app.py" in names
-    assert "todo-app/src/todo_app/__init__.py" in names
-    assert "todo-app/pages/2_Projects.py" in names
+    # Paths are relative to BUILD_ROOT, so they are prefixed with "handoff/".
+    assert "handoff/README.md" in names
+    assert "handoff/RELEASE_NOTES.md" in names
+    assert "handoff/app.py" in names
+    assert "handoff/src/todo_app/__init__.py" in names
+    assert "handoff/pages/2_Projects.py" in names
 
 
 def test_build_obfuscated_patch_includes_docs_and_core_files(
@@ -92,7 +92,7 @@ def test_build_obfuscated_patch_includes_docs_and_core_files(
     (root / "README.md").write_text("readme", encoding="utf-8")
     (root / "RELEASE_NOTES.md").write_text("notes", encoding="utf-8")
 
-    build_app_dir = root / "build" / "todo-app"
+    build_app_dir = root / "build" / "handoff"
     src_dir = build_app_dir / "src"
     todo_app_dir = src_dir / "todo_app"
     todo_app_dir.mkdir(parents=True, exist_ok=True)
