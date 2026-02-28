@@ -1,4 +1,4 @@
-"""Main entrypoint for the Chaos Queue app.
+"""Main entrypoint for the Handoff app.
 
 This file intentionally exposes a stable APP_VERSION constant so an updater can
 read it, while delegating UI rendering to :mod:`todo_app.ui_facade` and
@@ -65,7 +65,7 @@ def _docs_page() -> None:
 
 
 def main() -> None:
-    """Run the Chaos Queue app using the Streamlit navigation API."""
+    """Run the Handoff app using the Streamlit navigation API."""
     pages = [
         st.Page(_todos_page, title="Todos", icon="✅"),
         st.Page(_projects_page, title="Projects", icon="📁"),
