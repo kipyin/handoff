@@ -1,14 +1,12 @@
 """Streamlit UI components for the Handoff app.
 
-This module wires together the Streamlit layout and the data layer:
-
-- ``view()`` renders a unified, filterable todos table and saves edits back
-  through helpers in :mod:`handoff.data`.
-- ``sidebar()`` hosts project creation, rename/delete, and backup download
-  actions in the Streamlit sidebar.
+This module wires together the Streamlit layout and the data layer. view() renders
+a unified, filterable todos table and saves edits back through helpers in handoff.data.
 
 Most pages should import from this module instead of reaching into lower-level
-helpers directly.
+helpers directly. This module is the UI layer that bridges Streamlit and the
+data layer (handoff.data). It is function-based (no classes) and provides the
+main table entrypoint and reusable helpers for other pages.
 """
 
 from __future__ import annotations
@@ -20,15 +18,12 @@ import streamlit as st
 from loguru import logger
 
 from handoff.data import (
-    create_project,
     create_todo,
-    delete_project,
     delete_todo,
     list_helpers,
     list_projects,
     normalize_helper_name,
     query_todos,
-    rename_project,
     update_todo,
 )
 from handoff.db import init_db
@@ -36,7 +31,10 @@ from handoff.models import TodoStatus
 
 
 def _init_session_state() -> None:
-    """Initialize Streamlit session defaults."""
+    """Initialize Streamlit session defaults.
+
+    Single place that sets session defaults so the rest of the UI can rely on them.
+    """
     defaults: dict[str, object] = {}
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -44,7 +42,18 @@ def _init_session_state() -> None:
 
 
 def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
-    """Coerce supported UI values into a deadline datetime."""
+    """Coerce supported UI values into a deadline datetime.
+
+    Boundary that normalizes UI/editor values (date, datetime, string) into a single
+    deadline representation for the data layer.
+
+    Args:
+        raw_value (object): Value from the UI (None, datetime, date, or ISO string).
+
+    Returns:
+        tuple[datetime | None, str | None]: (deadline as naive local datetime, or None)
+            and (error message string, or None if valid).
+    """
     if raw_value is None or raw_value == "":
         return None, None
     if isinstance(raw_value, datetime):
@@ -65,15 +74,19 @@ def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
     return None, "unsupported deadline format"
 
 
+# TODO: remove urgency column in v2026.2.24
 def get_urgency_bucket(deadline: date | None, status: str) -> str:
     """Return a simple urgency bucket for a todo.
 
+    Shared helper used by table display and other pages (e.g. calendar) to classify
+    todos for display/sorting.
+
     Args:
-        deadline: Date portion of the todo deadline, or None.
-        status: String status value (for example, ``delegated``, ``done``).
+        deadline (date | None): Date portion of the todo deadline, or None.
+        status (str): String status value (e.g. delegated, done).
 
     Returns:
-        One of ``overdue``, ``today``, ``soon``, or ``none``.
+        str: One of "overdue", "today", "soon", or "none".
     """
     if status != TodoStatus.DELEGATED.value:
         return "none"
@@ -95,8 +108,19 @@ def get_urgency_bucket(deadline: date | None, status: str) -> str:
     return "none"
 
 
+# TODO: remove deadline formatting in v2026
 def _format_deadline_display(d: date | None) -> str:
-    """Format a date as 'Tue, Mar 4th' (moment-style ddd, MMM Do)."""
+    """Format a date as 'Tue, Mar 4th' (moment-style ddd, MMM Do).
+
+    Presentation-only: turns a date into the human-readable string used in the
+    table and elsewhere.
+
+    Args:
+        d (date | None): Date to format, or None.
+
+    Returns:
+        str: Human-readable string or empty string if d is None.
+    """
     if d is None:
         return ""
     day = d.day
@@ -108,7 +132,18 @@ def _format_deadline_display(d: date | None) -> str:
 
 
 def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame:
-    """Convert todo records to an editable dataframe."""
+    """Convert todo records to an editable dataframe.
+
+    Adapter that converts domain todo list and optional project into the DataFrame
+    shape expected by the editable table and filters.
+
+    Args:
+        todos (list): List of todo domain objects.
+        include_project (bool): Whether to add a project column.
+
+    Returns:
+        pd.DataFrame: DataFrame with columns suitable for the editable table and filters.
+    """
     rows = []
     for todo in todos:
         status_value = todo.status.value
@@ -117,15 +152,15 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "id": todo.id,
             "name": todo.name,
             "status": status_value,
-            "helper": todo.helper or "",
-            "deadline": deadline_date,
-            "deadline_display": _format_deadline_display(deadline_date),
+            "helper": todo.helper or "",  # TODO: why do we need `or ""`? what's gonna happen without `or`?
+            "deadline": deadline_date,  # TODO: Should just be a date from db
+            "deadline_display": _format_deadline_display(deadline_date),  # TODO: to be removed in v2026.2.24
             "notes": todo.notes or "",
             "created_at": todo.created_at,
-            "urgency": get_urgency_bucket(deadline_date, status_value),
+            "urgency": get_urgency_bucket(deadline_date, status_value),  # TODO: to be removed
         }
         if include_project:
-            row["project"] = todo.project.name if todo.project else ""
+            row["project"] = todo.project.name if todo.project else ""  # TODO: should always include project. 
         rows.append(row)
     if rows:
         return pd.DataFrame(rows)
@@ -141,7 +176,7 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
         "notes",
         "created_at",
     ]
-    if include_project:
+    if include_project:  # this should be the default.
         cols = [
             "id",
             "project",
@@ -157,6 +192,8 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
     return pd.DataFrame(columns=pd.Index(cols))
 
 
+# TODO: What are other pages use this filter?
+# Preset labels for the deadline filter; shared by table and any page using presets.
 DEADLINE_ANY = "Any"
 DEADLINE_TODAY = "Today"
 DEADLINE_TOMORROW = "Tomorrow"
@@ -173,7 +210,18 @@ DEADLINE_PRESETS = [
 
 
 def _deadline_preset_bounds(preset: str) -> tuple[date | None, date | None]:
-    """Return (start_date, end_date) for a deadline preset, or (None, None) for Any."""
+    """Return (start_date, end_date) for a deadline preset, or (None, None) for Any.
+
+    Maps preset filter labels to (start, end) dates so the table and any page can
+    apply the same deadline filter logic.
+
+    Args:
+        preset (str): One of DEADLINE_ANY, DEADLINE_TODAY, DEADLINE_TOMORROW,
+            DEADLINE_THIS_WEEK, or DEADLINE_CUSTOM.
+
+    Returns:
+        tuple[date | None, date | None]: (start_date, end_date) for filtering, or (None, None).
+    """
     today = date.today()
     if preset == DEADLINE_ANY:
         return None, None
@@ -197,7 +245,20 @@ def _apply_native_filters(
     key_prefix: str,
     project_names: list[str],
 ) -> tuple[pd.DataFrame, dict]:
-    """Apply compact native Streamlit filters; return (filtered_df, filter_state)."""
+    """Apply compact native Streamlit filters; return (filtered_df, filter_state).
+
+    Renders the filter controls and returns the filtered DataFrame and filter state;
+    keeps filter UI and logic in one place.
+
+    Args:
+        source_df (pd.DataFrame): Full todo DataFrame to filter.
+        key_prefix (str): Prefix for Streamlit widget keys.
+        project_names (list[str]): List of project names for the project multiselect.
+
+    Returns:
+        tuple[pd.DataFrame, dict]: Filtered DataFrame and filter_state dict (project_filters,
+            status_filters, helper_filters).
+    """
     cols = st.columns([2.2, 1.5, 1.5, 1.5, 1.1])
     with cols[0]:
         query = st.text_input(
@@ -289,7 +350,21 @@ def _save_rows(
     default_project_id: int | None,
     context_label: str,
 ) -> dict[str, object]:
-    """Validate and persist edited rows, returning operation summary."""
+    """Validate and persist edited rows, returning operation summary.
+
+    Orchestrates validation and persistence: maps edited rows to create/update/delete
+    via handoff.data and returns a summary for the UI.
+
+    Args:
+        edited_df (pd.DataFrame): DataFrame of edited rows from the data_editor.
+        projects (list): List of project domain objects (for name->id lookup).
+        default_project_id (int | None): Default project for rows without a project column.
+        context_label (str): Label for logging (e.g. "view=main").
+
+    Returns:
+        dict[str, object]: Summary with keys created, updated, deleted, skipped, errors,
+            created_ids, updated_ids, last_created_project_id, last_created_helper.
+    """
     project_by_name = {project.name: project.id for project in projects}
 
     summary: dict[str, object] = {
@@ -398,7 +473,17 @@ def _render_editable_table(
     key_prefix: str,
     context_label: str,
 ) -> None:
-    """Render native editable table and persist on save."""
+    """Render native editable table and persist on save.
+
+    Main table component: filters, sort, data_editor, and autosave; delegates
+    persistence to _save_rows and delete to delete_todo.
+
+    Args:
+        source_df (pd.DataFrame): Full todo DataFrame (with project column if needed).
+        projects (list): List of project domain objects.
+        key_prefix (str): Prefix for Streamlit widget/session keys.
+        context_label (str): Label for logging and autosave context.
+    """
     project_names = [project.name for project in projects]
     project_by_name = {p.name: p for p in projects}
     filtered_df, filter_state = _apply_native_filters(
@@ -654,11 +739,15 @@ def _render_editable_table(
 
 
 def view() -> None:
-    """View and edit todos in a single table."""
+    """View and edit todos in a single table.
+
+    Public entrypoint for the main Todos view: loads projects and todos, builds the
+    dataframe, and delegates to _render_editable_table.
+    """
     st.subheader("Todos")
     projects = list_projects()
     if not projects:
-        st.info("No projects yet. Create one in the sidebar.")
+        st.info("No projects yet. Create one on the Projects page.")
         return
 
     todos = query_todos()
@@ -671,75 +760,16 @@ def view() -> None:
     )
 
 
-def _render_sidebar_project_management(projects: list) -> None:
-    """Render project rename/delete controls."""
-    st.sidebar.subheader("Manage projects")
-    if not projects:
-        st.sidebar.caption("No projects to manage yet.")
-        return
-
-    project_by_id = {project.id: project for project in projects}
-    selected_project_id = st.sidebar.selectbox(
-        "Project",
-        options=[project.id for project in projects],
-        format_func=lambda pid: project_by_id[pid].name,
-        key="manage_project_id",
-    )
-    rename_value = st.sidebar.text_input("New name", key="rename_project_name")
-    if st.sidebar.button("Rename project", key="rename_project_button"):
-        if not rename_value.strip():
-            st.sidebar.error("Project name cannot be empty.")
-        else:
-            rename_project(selected_project_id, rename_value.strip())
-            st.sidebar.success("Project renamed.")
-            st.rerun()
-
-    confirm_delete = st.sidebar.checkbox(
-        "I understand this deletes the project and all todos.",
-        key="confirm_delete_project",
-    )
-    if st.sidebar.button(
-        "Delete project",
-        key="delete_project_button",
-        disabled=not confirm_delete,
-        type="secondary",
-    ):
-        deleted = delete_project(selected_project_id)
-        if deleted:
-            st.sidebar.success("Project deleted.")
-            st.rerun()
-        else:
-            st.sidebar.error("Project could not be deleted.")
-
-
-def sidebar(*, app_version: str) -> None:
-    """Render sidebar controls and project lifecycle actions."""
-    st.sidebar.title("Handoff")
-    st.sidebar.caption("See who's on the hook across all your projects.")
-    st.sidebar.caption(f"Version: {app_version}")
-
-    st.sidebar.subheader("Create project")
-    with st.sidebar.form("new_project"):
-        new_name = st.text_input("Project name", key="new_proj_name")
-        submit = st.form_submit_button("Create")
-        if submit:
-            if not new_name.strip():
-                st.sidebar.error("Project name cannot be empty.")
-            else:
-                create_project(new_name.strip())
-                st.sidebar.success("Project created.")
-                st.rerun()
-
-    projects = list_projects()
-    st.sidebar.divider()
-    _render_sidebar_project_management(projects)
-
-
 def main(*, app_version: str) -> None:
-    """Run the Streamlit app UI."""
+    """Run the Streamlit app UI.
+
+    Legacy/single-page app entry: page config, DB init, session init, and view.
+
+    Args:
+        app_version (str): Application version string for display.
+    """
     st.set_page_config(page_title="Handoff", layout="wide")
     init_db()
     _init_session_state()
-    sidebar(app_version=app_version)
     logger.info("Rendering main todo table view")
     view()
