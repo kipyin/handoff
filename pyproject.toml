@@ -1,7 +1,7 @@
 [project]
-name = "todo-app"
-version = "2026.2.22"
-description = "Chaos-tinged to-do app for juggling multiple projects."
+name = "handoff"
+version = "2026.2.23"
+description = "Handoff — see who's on the hook across all your projects."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
@@ -56,7 +56,7 @@ pythonpath = ["src"]
 link-mode = "copy"
 
 [project.scripts]
-todo = "scripts.cli:main"
+handoff = "scripts.cli:main"
 
 [tool.pyright]
 include = ["src", "scripts"]
