@@ -60,28 +60,31 @@ def render_calendar_page() -> None:
     week_offset = int(st.session_state.get(offset_key, 0))
     reference_date = today + timedelta(weeks=week_offset)
 
-    controls = st.columns([1, 2, 1])
-    with controls[0]:
-        if st.button("← Previous week"):
+    start_dt, end_dt = _get_week_bounds(reference_date)
+    days = [start_dt.date() + timedelta(days=i) for i in range(7)]
+
+    # Navigation row: same 7 columns as day columns so "Previous" aligns with Monday,
+    # "Next week" with Sunday.
+    nav_cols = st.columns(7)
+    with nav_cols[0]:
+        if st.button("← Previous week", key="calendar_prev"):
             st.session_state[offset_key] = week_offset - 1
             st.rerun()
-    with controls[2]:
-        if st.button("Next week →"):
-            st.session_state[offset_key] = week_offset + 1
-            st.rerun()
-    with controls[1]:
+    with nav_cols[3]:
         selected_date = st.date_input(
             "View week of",
             value=reference_date,
             key=selected_date_key,
         )
         if selected_date != reference_date:
-            # Jump to the week containing the selected date.
             delta_days = (selected_date - today).days
             st.session_state[offset_key] = delta_days // 7
-            reference_date = selected_date
+            st.rerun()
+    with nav_cols[6]:
+        if st.button("Next week →", key="calendar_next"):
+            st.session_state[offset_key] = week_offset + 1
+            st.rerun()
 
-    start_dt, end_dt = _get_week_bounds(reference_date)
     st.subheader(f"Week of {start_dt.date().isoformat()} – {end_dt.date().isoformat()}")
 
     todos = get_todos_by_timeframe(start_dt, end_dt)
@@ -91,11 +94,13 @@ def render_calendar_page() -> None:
         st.info("No todos with deadlines in this week.")
         return
 
-    days = [start_dt.date() + timedelta(days=i) for i in range(7)]
     cols = st.columns(7)
     for idx, day in enumerate(days):
         with cols[idx]:
-            st.markdown(f"**{day.strftime('%a %d %b')}**")
+            header = f"**{day.strftime('%a %d %b')}**"
+            if day == today:
+                header += " — *Today*"
+            st.markdown(header)
             day_todos = grouped.get(day, [])
             if not day_todos:
                 st.caption("No todos")
@@ -128,22 +133,26 @@ def render_calendar_page() -> None:
 
                 st.markdown(label)
 
-                # Inline deadline adjustments for handoff todos.
+                # Inline deadline adjustments for handoff todos (compact: one row).
                 if status_value == TodoStatus.DELEGATED.value:
                     current_deadline_date = todo.deadline.date() if todo.deadline else day
                     todo_id = int(todo.id)
                     date_key = f"calendar_deadline_{todo_id}"
-                    new_date = st.date_input(
-                        "Deadline",
-                        value=current_deadline_date,
-                        key=date_key,
-                    )
                     update_key = f"calendar_update_{todo_id}"
-                    if st.button("Update", key=update_key):
-                        new_deadline_dt = datetime.combine(
-                            new_date,
-                            time(hour=18, minute=0),
+                    adj_c1, adj_c2 = st.columns([2, 1])
+                    with adj_c1:
+                        new_date = st.date_input(
+                            "Deadline",
+                            value=current_deadline_date,
+                            key=date_key,
+                            label_visibility="collapsed",
                         )
-                        update_todo(todo_id, deadline=new_deadline_dt)
-                        st.success("Deadline updated.")
-                        st.rerun()
+                    with adj_c2:
+                        if st.button("Update", key=update_key):
+                            new_deadline_dt = datetime.combine(
+                                new_date,
+                                time(hour=18, minute=0),
+                            )
+                            update_todo(todo_id, deadline=new_deadline_dt)
+                            st.success("Deadline updated.")
+                            st.rerun()
