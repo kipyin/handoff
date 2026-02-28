@@ -293,29 +293,94 @@ def _apply_native_filters(
     return filtered_df, filter_state
 
 
+def _row_equals(current: dict, prev: dict, project_by_name: dict[str, int]) -> bool:
+    """Return True if current row has same persistable fields as prev (from last snapshot)."""
+    if current.get("project", "").strip() != (prev.get("project") or "").strip():
+        return False
+    if (current.get("name") or "").strip() != (prev.get("name") or "").strip():
+        return False
+    if (current.get("status") or "").strip() != (prev.get("status") or "").strip():
+        return False
+    c_notes = (current.get("notes") or "").strip() or None
+    p_notes = (prev.get("notes") or "").strip() or None
+    if c_notes != p_notes:
+        return False
+    curr_helpers = current.get("helper")
+    prev_helpers = prev.get("helper")
+    curr_set = (
+        set(curr_helpers)
+        if isinstance(curr_helpers, list)
+        else {curr_helpers} if curr_helpers and str(curr_helpers).strip() else set()
+    )
+    prev_set = (
+        set(prev_helpers)
+        if isinstance(prev_helpers, list)
+        else {prev_helpers} if prev_helpers and str(prev_helpers).strip() else set()
+    )
+    if curr_set != prev_set:
+        return False
+    curr_deadline = current.get("deadline")
+    prev_deadline = prev.get("deadline")
+    if curr_deadline is None and prev_deadline is None:
+        pass
+    elif (curr_deadline is None) != (prev_deadline is None):
+        return False
+    else:
+        curr_d = (
+            curr_deadline.date()
+            if hasattr(curr_deadline, "date") and callable(curr_deadline.date)
+            else curr_deadline
+        )
+        if isinstance(prev_deadline, str):
+            prev_d = datetime.fromisoformat(prev_deadline[:10]).date()
+        elif hasattr(prev_deadline, "date") and callable(prev_deadline.date):
+            prev_d = prev_deadline.date()
+        else:
+            prev_d = prev_deadline
+        if curr_d != prev_d:
+            return False
+    return True
+
+
 def _save_rows(
     edited_df: pd.DataFrame,
     *,
     projects: list,
     default_project_id: int | None,
     context_label: str,
+    last_snapshot_json: str | None = None,
 ) -> dict[str, object]:
     """Validate and persist edited rows, returning operation summary.
 
     Orchestrates validation and persistence: maps edited rows to create/update/delete
-    via handoff.data and returns a summary for the UI.
+    via handoff.data and returns a summary for the UI. When last_snapshot_json is
+    provided, existing rows that are unchanged are skipped (no update_todo call).
 
     Args:
         edited_df (pd.DataFrame): DataFrame of edited rows from the data_editor.
         projects (list): List of project domain objects (for name->id lookup).
         default_project_id (int | None): Default project for rows without a project column.
         context_label (str): Label for logging (e.g. "view=main").
+        last_snapshot_json (str | None): JSON string of the last saved state; used to skip
+            unchanged rows when persisting.
 
     Returns:
         dict[str, object]: Summary with keys created, updated, deleted, skipped, errors,
             created_ids, updated_ids, last_created_project_id, last_created_helper.
     """
+    import json as _json
+
     project_by_name = {project.name: project.id for project in projects}
+    prev_by_id: dict[int, dict] = {}
+    if last_snapshot_json:
+        try:
+            prev_records = _json.loads(last_snapshot_json)
+            for rec in prev_records if isinstance(prev_records, list) else []:
+                tid = rec.get("__todo_id")
+                if tid is not None and not (isinstance(tid, float) and pd.isna(tid)):
+                    prev_by_id[int(tid)] = rec
+        except (TypeError, ValueError):
+            pass
 
     summary: dict[str, object] = {
         "created": 0,
@@ -369,6 +434,9 @@ def _save_rows(
         notes_val = (row.get("notes") or "").strip() or None
 
         if is_existing:
+            prev_row = prev_by_id.get(todo_id) if todo_id is not None else None
+            if prev_row is not None and _row_equals(row, prev_row, project_by_name):
+                continue  # Skip unchanged row
             updated = update_todo(
                 todo_id,
                 project_id=project_id,
@@ -638,6 +706,7 @@ def _render_editable_table(
                 projects=projects,
                 default_project_id=default_project_id,
                 context_label=context_label,
+                last_snapshot_json=last_snapshot,
             )
         except Exception as exc:  # noqa: BLE001
             logger.exception("Autosave failed for {context}: {}", context_label, exc)
