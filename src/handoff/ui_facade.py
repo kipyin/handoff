@@ -30,7 +30,7 @@ from .ui_components import (
 
 
 def setup(app_version: str) -> None:
-    """Initialise global layout, database, and sidebar.
+    """Initialise global layout and database.
 
     This function should be called once per Streamlit page before rendering any
     concrete content.
