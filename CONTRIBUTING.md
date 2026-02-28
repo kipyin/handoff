@@ -17,17 +17,17 @@ uv sync
 ### Running the app
 
 ```bash
-uv run todo run
+uv run handoff run
 ```
 
-The Typer CLI under `scripts/cli.py` is exposed as the `todo` command:
+The Typer CLI under `scripts/cli.py` is exposed as the `handoff` command:
 
-- `uv run todo run` – start the Streamlit app
-- `uv run todo sync` – sync dependencies
-- `uv run todo check` – Ruff lint + format
-- `uv run todo typecheck` – type checking with pyright over `src/` and `scripts/`
-- `uv run todo test` – run the pytest suite
-- `uv run todo ci` – run lint, format, type checking, and tests together
+- `uv run handoff run` – start the Streamlit app
+- `uv run handoff sync` – sync dependencies
+- `uv run handoff check` – Ruff lint + format
+- `uv run handoff typecheck` – type checking with pyright over `src/` and `scripts/`
+- `uv run handoff test` – run the pytest suite
+- `uv run handoff ci` – run lint, format, type checking, and tests together
 
 Type checking (optional but recommended for larger changes):
 
@@ -47,7 +47,7 @@ type-checking setup, etc.), follow this flow:
 3. Bump the CalVer patch version when shipping user-visible changes:
    - Use the CLI helper so `pyproject.toml` and `src/todo_app/version.py` stay in sync:
      ```bash
-     uv run todo bump-version 2026.2.XY
+     uv run handoff bump-version 2026.2.XY
      ```
 4. Update documentation:
    - Add a new section to `RELEASE_NOTES.md` under the new version.
@@ -57,9 +57,9 @@ type-checking setup, etc.), follow this flow:
      - `[Optional]` – internal-only cleanups or minor fixes that users can safely skip.
    - Update `README.md` if behavior, commands, or UX changed.
 5. Run checks before merging:
-   - `uv run todo check`
-   - `uv run todo typecheck` (or `uv run pyright src scripts`)
-   - `uv run todo test` (or `uv run todo ci` to run everything together)
+   - `uv run handoff check`
+   - `uv run handoff typecheck` (or `uv run pyright src scripts`)
+   - `uv run handoff test` (or `uv run handoff ci` to run everything together)
 6. Merge back into `main` once tests pass.
 
 ### Cursor rules and agent guidance

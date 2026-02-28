@@ -1,10 +1,25 @@
 # Release notes
 
+## 2026.2.23 [Recommended]
+
+
+- **Rebrand to Handoff:** Rename the app to *Handoff* with the tagline “See who’s on the hook across all your projects.” Update all UI titles, sidebar, About section, and docs. CLI command is now `handoff` (was `todo`). User data directory is now `handoff` (e.g. `%APPDATA%\handoff`); `HANDOFF_DB_PATH` is the preferred env var (still support `TODO_APP_DB_PATH` for backward compatibility).
+- **Deadline column format:** Format deadline columns in the UI as “Tue, Mar 4th” (moment-style `ddd, MMM Do`) via a display formatter; keep the date column editable.
+- **Updater PermissionError fix:** When applying a patch zip, skip files that cannot be overwritten (e.g. PyArmor runtime `.pyd` locked by the running process on Windows) instead of failing; report skipped files in the success message and advise restart + re-apply if needed.
+- **Patch version check:** When applying a code-only patch zip, the updater now compares the patch version (from a `VERSION` file in the zip) with the current app version. If the patch is older, applying is blocked with a clear message; a checkbox on the Settings page lets you confirm and apply anyway if you understand the risk.
+- **Backup versioning:** Timestamped backups created before applying a patch now include the app version in the folder name (e.g. `backup/2026.2.22_20260228-143022`). Restore snapshot labels in the UI show both version and timestamp where available.
+- **Export timestamps:** JSON and CSV exports from the Settings page now include a timestamp in the filename (e.g. `todo_backup_2026-02-28_143022.json`, `todo_todos_2026-02-28_143022.csv`).
+- **Update panel location:** The in-app update and backup-restore panel has been moved from `todo_app.update_ui` into the Settings page implementation (`pages/settings.py`). The `update_ui.py` module has been removed; Settings imports updater logic directly from `todo_app.updater`.
+- **Todo table height:** The main todos table now uses Streamlit’s `height="content"` so the editor grows with the number of rows instead of a fixed viewport.
+- **Calendar improvements:** Week navigation uses a 7-column layout so “Previous week” aligns with Monday and “Next week” with Sunday; the “View week of” date picker sits in the centre. Deadline and Update controls for delegated todos are more compact (single row, smaller button). The current day is marked with “— *Today*” in the column header.
+- **Focus page:** A short caption has been added under the title explaining the page’s purpose: choose a few delegated items to focus on today, then mark them done or defer in one go.
+
+
 ## 2026.2.22 [Optional]
 
 - **Legacy pages cleanup:** Remove legacy root `pages/` Streamlit shims (`2_Projects.py`, `3_Calendar.py`); navigation is now via `app.py` and Streamlit's `st.navigation` API only.
 - **Type checker config:** Move Pyright configuration into `[tool.pyright]` in `pyproject.toml` and remove the standalone `pyrightconfig.json` file.
-- **Patch tooling simplification:** Remove the legacy `scripts/build_patch.py` helper and associated CLI docs; use `uv run todo build-obfuscated-patch` (after `build-zip`) for patch builds.
+- **Patch tooling simplification:** Remove the legacy `scripts/build_patch.py` helper and associated CLI docs; use `uv run handoff build-obfuscated-patch` (after `build-zip`) for patch builds.
 
 ## 2026.2.21 [Recommended]
 

@@ -1,6 +1,6 @@
-# Chaos Queue
+# Handoff
 
-Chaos-tinged to-do app for juggling tasks across different engagements (projects). Personal use; runs locally with SQLite.
+Handoff — see who's on the hook across all your projects. A local to-do app for juggling tasks across different engagements (projects). Personal use; runs locally with SQLite.
 
 ## Why this over a spreadsheet?
 
@@ -32,10 +32,10 @@ Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
 uv sync
 
 # Run the app
-uv run todo
+uv run handoff
 ```
 
-By default, the SQLite database is stored in your per-user data directory so app updates do not overwrite your data (for example on Windows: `%APPDATA%\todo-app\todo.db`). You can override the location by setting the `TODO_APP_DB_PATH` environment variable before starting the app.
+By default, the SQLite database is stored in your per-user data directory so app updates do not overwrite your data (for example on Windows: `%APPDATA%\handoff\todo.db`). You can override the location by setting the `HANDOFF_DB_PATH` environment variable (or `TODO_APP_DB_PATH` for backward compatibility) before starting the app.
 
 `app.py` is intentionally kept thin and delegates version handling to `src/todo_app/version.py`, which exposes a single `__version__` constant used by the UI and tooling (for example the updater panel and build scripts).
 
@@ -63,7 +63,7 @@ The app uses **loguru** for logging, configured to write to:
 
 - **Standard output** (what you see in the terminal when running Streamlit).
 - **Rotating log file** under your user data directory (for example on Windows:
-`%APPDATA%\todo-app\logs\todo-app.log`).
+`%APPDATA%\handoff\logs\handoff.log`).
 
 The configuration lives in `src/todo_app/logging.py` and is initialised from
 `todo_app.ui_facade.setup()`.
@@ -89,19 +89,19 @@ package so that distributed code is protected; `app.py` stays readable. You need
 in your dev environment (`uv sync` installs it):
 
 ```bash
-uv run todo build-zip
+uv run handoff build-zip
 ```
 
-This produces a zip under `dist/` (named like `todo-app-<version>-windows-embed.zip`).
+This produces a zip under `dist/` (named like `handoff-<version>-windows-embed.zip`).
 Extract it, then double-click `run.bat` to start the app. The SQLite database is still
 stored in your user data directory, not inside the extracted folder.
 
 For small logic-only changes you can ship a **code-only patch** zip instead of a full
 embedded bundle. For production usage, always use the obfuscated patch flow:
 
-- Run `uv run todo build-zip` to produce the embedded app build.
-- Then run `uv run todo build-obfuscated-patch` to create
-  `dist/todo-app-<version>-obfuscated-patch.zip` from the obfuscated build output so that the
+- Run `uv run handoff build-zip` to produce the embedded app build.
+- Then run `uv run handoff build-obfuscated-patch` to create
+  `dist/handoff-<version>-obfuscated-patch.zip` from the obfuscated build output so that the
   in-app updater can apply it to PyArmor-built installs.
 
 On a client machine:
@@ -132,31 +132,31 @@ The Typer CLI under `scripts/cli.py` wraps common development commands:
 
 ```bash
 # Run the app
-uv run todo run
+uv run handoff run
 
 # Install/sync dependencies
-uv run todo sync
+uv run handoff sync
 
 # Lint and format
-uv run todo check
+uv run handoff check
 
 # Type checking
-uv run todo typecheck
+uv run handoff typecheck
 
 # Tests
-uv run todo test
+uv run handoff test
 
 # All checks (lint, format, type checking, tests)
-uv run todo ci
+uv run handoff ci
 
 # Build embedded Windows zip (obfuscates src/todo_app with PyArmor)
-uv run todo build-zip
+uv run handoff build-zip
 
 # Build patch from obfuscated build (for PyArmor-built installs; run after build-zip)
-uv run todo build-obfuscated-patch
+uv run handoff build-obfuscated-patch
 
 # Bump version in pyproject.toml and todo_app.version
-uv run todo bump-version 2026.2.21
+uv run handoff bump-version 2026.2.21
 ```
 
 Version sync guard:
