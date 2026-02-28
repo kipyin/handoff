@@ -7,7 +7,7 @@ from datetime import date, datetime, time, timedelta
 import pandas as pd
 import streamlit as st
 
-from handoff.data import query_todos
+from handoff.data import helpers_from_db, query_todos
 from handoff.models import TodoStatus
 
 
@@ -110,12 +110,12 @@ def render_analytics_page() -> None:
         return
     rows = []
     for todo in handoff_todos:
-        rows.append(
-            {
-                "helper": todo.helper or "(unassigned)",
-                "id": todo.id,
-            }
-        )
+        helpers = helpers_from_db(todo.helper)
+        if not helpers:
+            rows.append({"helper": "(unassigned)", "id": todo.id})
+        else:
+            for h in helpers:
+                rows.append({"helper": h, "id": todo.id})
     df_handoff = pd.DataFrame(rows)
     helper_counts = df_handoff.groupby("helper")["id"].count().reset_index(name="handoff")
     helper_counts = helper_counts.sort_values("handoff", ascending=False)

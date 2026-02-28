@@ -1,5 +1,6 @@
 """Data access helpers for projects/todos and common query workflows."""
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -12,18 +13,49 @@ from handoff.models import Project, Todo, TodoStatus
 _UNSET = object()
 
 
-def normalize_helper_name(helper: str | None) -> str | None:
-    """Return a normalized helper value.
+def helpers_from_db(raw: str | None) -> list[str]:
+    """Parse helper column value (JSON array or legacy single string) to list of names."""
+    if not raw or not raw.strip():
+        return []
+    s = raw.strip()
+    if s.startswith("["):
+        try:
+            parsed = json.loads(s)
+            if isinstance(parsed, list):
+                return [str(x).strip() for x in parsed if str(x).strip()]
+            return []
+        except (json.JSONDecodeError, TypeError):
+            return [s] if s else []
+    return [s] if s else []
 
-    Args:
-        helper: Raw helper text from UI.
 
-    Returns:
-        A stripped helper string or None when empty.
+def _helpers_to_db(helpers: str | list[str] | None) -> str | None:
+    """Serialize helpers (list or single string) to JSON array string for DB."""
+    if helpers is None:
+        return None
+    if isinstance(helpers, str):
+        cleaned = helpers.strip()
+        return json.dumps([cleaned]) if cleaned else None
+    if isinstance(helpers, list):
+        names = [str(x).strip() for x in helpers if str(x).strip()]
+        return json.dumps(names) if names else None
+    return None
+
+
+def normalize_helper_name(helper: str | list[str] | None) -> str | None:
+    """Return a normalized single-helper value for backward compatibility.
+
+    For list input, returns the first helper or None. Used where a single
+    default is needed (e.g. new row default). For full list use _helpers_from_db.
     """
     if helper is None:
         return None
-    cleaned = helper.strip()
+    if isinstance(helper, list):
+        for h in helper:
+            if h and str(h).strip():
+                return str(h).strip()
+        return None
+    cleaned = str(helper).strip()
     return cleaned or None
 
 
@@ -76,7 +108,7 @@ def create_todo(
     name: str,
     status: TodoStatus = TodoStatus.DELEGATED,
     deadline: datetime | None = None,
-    helper: str | None = None,
+    helper: str | list[str] | None = None,
     notes: str | None = None,
 ) -> Todo:
     """Create a new todo in a project.
@@ -86,7 +118,7 @@ def create_todo(
         name: Todo title/name.
         status: One of handoff, done, canceled.
         deadline: Optional due date/time.
-        helper: Optional assignee/helper name.
+        helper: Optional assignee(s): single name, or list of names (stored as JSON).
         notes: Optional text (can include links, file paths, etc.).
 
     Returns:
@@ -98,7 +130,7 @@ def create_todo(
             name=name,
             status=status,
             deadline=deadline,
-            helper=normalize_helper_name(helper),
+            helper=_helpers_to_db(helper),
             notes=notes or None,
         )
         session.add(todo)
@@ -114,7 +146,7 @@ def update_todo(
     name: str | None | object = _UNSET,
     status: TodoStatus | None | object = _UNSET,
     deadline: datetime | None | object = _UNSET,
-    helper: str | None | object = _UNSET,
+    helper: str | list[str] | None | object = _UNSET,
     notes: str | None | object = _UNSET,
 ) -> Todo | None:
     """Update a todo by id. Only provided fields are updated."""
@@ -133,7 +165,7 @@ def update_todo(
         if deadline is not _UNSET:
             todo.deadline = deadline
         if helper is not _UNSET:
-            todo.helper = normalize_helper_name(helper)
+            todo.helper = _helpers_to_db(helper)
         if notes is not _UNSET:
             todo.notes = notes
         # Track when a todo is marked as done.
@@ -209,7 +241,13 @@ def query_todos(
 
         normalized_helper = normalize_helper_name(helper_name)
         if normalized_helper:
-            stmt = stmt.where(Todo.helper.ilike(f"%{normalized_helper}%"))
+            # Match JSON array (e.g. ["Alice"]) or legacy plain string
+            stmt = stmt.where(
+                or_(
+                    Todo.helper.ilike(f'%"{normalized_helper}"%'),
+                    Todo.helper.ilike(f"%{normalized_helper}%"),
+                )
+            )
 
         if statuses:
             stmt = stmt.where(Todo.status.in_(statuses))
@@ -287,18 +325,18 @@ def get_todos_by_timeframe(
 
 
 def list_helpers() -> list[str]:
-    """Return all distinct helper names, sorted alphabetically."""
+    """Return all distinct helper names (from JSON array or legacy single value), sorted."""
     with session_context() as session:
         stmt = select(Todo.helper).where(Todo.helper.isnot(None))
-        helpers = session.exec(stmt).all()
+        raw_values = session.exec(stmt).all()
         canonical_by_lower: dict[str, str] = {}
-        for helper in helpers:
-            normalized = normalize_helper_name(helper)
-            if not normalized:
-                continue
-            lowered = normalized.lower()
-            if lowered not in canonical_by_lower:
-                canonical_by_lower[lowered] = normalized
+        for raw in raw_values:
+            for name in helpers_from_db(raw):
+                if not name:
+                    continue
+                lowered = name.lower()
+                if lowered not in canonical_by_lower:
+                    canonical_by_lower[lowered] = name
         return sorted(canonical_by_lower.values(), key=str.lower)
 
 

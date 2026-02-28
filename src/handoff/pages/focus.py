@@ -7,7 +7,7 @@ from datetime import date, datetime, time, timedelta
 import pandas as pd
 import streamlit as st
 
-from handoff.data import query_todos, update_todo
+from handoff.data import helpers_from_db, query_todos, update_todo
 from handoff.models import TodoStatus
 from handoff.ui_components import _deadline_preset_bounds
 
@@ -44,7 +44,7 @@ def _build_focus_dataframe() -> pd.DataFrame:
                 "id": todo.id,
                 "name": todo.name,
                 "project": todo.project.name if todo.project else "",
-                "helper": todo.helper or "",
+                "helper": ", ".join(helpers_from_db(todo.helper)) or "",
                 "deadline": deadline_date,
                 "bucket": bucket,
             }
@@ -57,7 +57,7 @@ def _build_focus_dataframe() -> pd.DataFrame:
                 "id": todo.id,
                 "name": todo.name,
                 "project": todo.project.name if todo.project else "",
-                "helper": todo.helper or "",
+                "helper": ", ".join(helpers_from_db(todo.helper)) or "",
                 "deadline": deadline_date,
                 "bucket": bucket,
             }

@@ -20,6 +20,7 @@ from loguru import logger
 from handoff.data import (
     create_todo,
     delete_todo,
+    helpers_from_db,
     list_helpers,
     list_projects,
     normalize_helper_name,
@@ -95,7 +96,7 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "id": todo.id,
             "name": todo.name,
             "status": status_value,
-            "helper": todo.helper or "",
+            "helper": helpers_from_db(todo.helper),
             "deadline": deadline_date,
             "notes": todo.notes or "",
             "created_at": todo.created_at,
@@ -255,9 +256,12 @@ def _apply_native_filters(
     filtered_df = source_df.copy()
     if query:
         searchable_cols = ["name", "notes", "helper", "project"]
+        search_df = filtered_df[searchable_cols].copy()
+        search_df["helper"] = search_df["helper"].apply(
+            lambda h: " ".join(h) if isinstance(h, list) else (h or "")
+        )
         mask = (
-            filtered_df[searchable_cols]
-            .fillna("")
+            search_df.fillna("")
             .agg(" ".join, axis=1)
             .str.contains(query, case=False, regex=False)
         )
@@ -267,7 +271,16 @@ def _apply_native_filters(
     if project_filters:
         filtered_df = filtered_df[filtered_df["project"].isin(project_filters)]
     if helper_filters:
-        filtered_df = filtered_df[filtered_df["helper"].fillna("").isin(helper_filters)]
+        helper_set = set(helper_filters)
+
+        def _row_has_helper(helpers_val: object) -> bool:
+            if isinstance(helpers_val, list):
+                return bool(set(helpers_val) & helper_set)
+            if helpers_val and str(helpers_val).strip():
+                return str(helpers_val).strip() in helper_set
+            return False
+
+        filtered_df = filtered_df[filtered_df["helper"].apply(_row_has_helper)]
     if start_date is not None and end_date is not None:
         deadline_series = pd.to_datetime(filtered_df["deadline"], errors="coerce").dt.date
         mask = (
@@ -352,7 +365,7 @@ def _save_rows(
             summary["errors"].append(f"Row {row_no}: {deadline_error}.")
             continue
 
-        helper_val = normalize_helper_name(row.get("helper"))
+        helper_val = row.get("helper")  # list or str; data layer serializes to JSON
         notes_val = (row.get("notes") or "").strip() or None
 
         if is_existing:
@@ -458,8 +471,12 @@ def _render_editable_table(
                 default_project_name = name
                 break
     remembered_helper = st.session_state.get(remember_helper_key)
-    if isinstance(remembered_helper, str) and remembered_helper:
-        default_helper = remembered_helper
+    if isinstance(remembered_helper, list):
+        default_helpers = remembered_helper
+    elif isinstance(remembered_helper, str) and remembered_helper:
+        default_helpers = [remembered_helper]
+    else:
+        default_helpers = [default_helper] if default_helper else []
 
     # Sort state and apply sort
     sort_col_key = f"{key_prefix}_sort_column"
@@ -542,9 +559,10 @@ def _render_editable_table(
                 default=default_status,
                 required=True,
             ),
-            "helper": st.column_config.TextColumn(
-                "Helper",
-                default=default_helper or None,
+            "helper": st.column_config.MultiselectColumn(
+                "Helpers",
+                options=list_helpers(),
+                default=default_helpers,
             ),
             "deadline": st.column_config.DateColumn("Deadline"),
             "notes": st.column_config.TextColumn("Notes"),
@@ -651,8 +669,12 @@ def _render_editable_table(
             last_created_helper = summary.get("last_created_helper")
             if last_created_project_id is not None:
                 st.session_state[remember_project_key] = last_created_project_id
-            if last_created_helper:
-                st.session_state[remember_helper_key] = last_created_helper
+            if last_created_helper is not None:
+                st.session_state[remember_helper_key] = (
+                    last_created_helper
+                    if isinstance(last_created_helper, list)
+                    else [last_created_helper]
+                )
 
             # Record the new snapshot so subsequent renders know there are no
             # outstanding edits, then rerun so the table reflects DB state.
