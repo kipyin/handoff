@@ -293,7 +293,7 @@ def _apply_native_filters(
     return filtered_df, filter_state
 
 
-def _row_equals(current: dict, prev: dict, project_by_name: dict[str, int]) -> bool:
+def _row_equals(current: dict, prev: dict) -> bool:
     """Return True if current row has same persistable fields as prev (from last snapshot)."""
     if current.get("project", "").strip() != (prev.get("project") or "").strip():
         return False
@@ -435,7 +435,7 @@ def _save_rows(
 
         if is_existing:
             prev_row = prev_by_id.get(todo_id) if todo_id is not None else None
-            if prev_row is not None and _row_equals(row, prev_row, project_by_name):
+            if prev_row is not None and _row_equals(row, prev_row):
                 continue  # Skip unchanged row
             updated = update_todo(
                 todo_id,
@@ -567,6 +567,15 @@ def _render_editable_table(
             na_position="last",
         ).reset_index(drop=True)
 
+    MAX_TODO_ROWS = 30
+    total_filtered = len(filtered_df)
+    if total_filtered > MAX_TODO_ROWS:
+        filtered_df = filtered_df.head(MAX_TODO_ROWS).reset_index(drop=True)
+    table_caption = (
+        f"Showing first {min(total_filtered, MAX_TODO_ROWS)} of {total_filtered} todos. "
+        "Use filters to narrow." if total_filtered > MAX_TODO_ROWS else ""
+    )
+
     working_df = filtered_df.reset_index(drop=True).copy()
     working_df["__todo_id"] = working_df.get("id")
     working_df["__created_at"] = working_df.get("created_at")
@@ -604,7 +613,8 @@ def _render_editable_table(
         "deadline",
         "notes",
     ]
-    st.caption("Filter using the controls above. Use row deletion in the table to remove todos.")
+    base_caption = "Filter using the controls above. Use row deletion in the table to remove todos."
+    st.caption(f"{base_caption} {table_caption}" if table_caption else base_caption)
     edited_df = st.data_editor(
         display_df,
         num_rows="dynamic",
