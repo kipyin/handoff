@@ -239,7 +239,11 @@ def _obfuscate_app_code_with_pyarmor() -> None:
 
 
 def _write_run_bat() -> None:
-    """Write a `run.bat` launcher that starts the Streamlit app."""
+    """Write a `run.bat` launcher that starts the Streamlit app.
+
+    If ./update exists and has files, applies the staged update (copy into app
+    root, then remove ./update) before starting the app.
+    """
     print("Writing run.bat launcher...")
     content = textwrap.dedent(
         r"""
@@ -248,6 +252,13 @@ def _write_run_bat() -> None:
 
         set SCRIPT_DIR=%~dp0
         cd /d "%SCRIPT_DIR%"
+
+        if exist "%SCRIPT_DIR%update\*" (
+            echo Applying update...
+            xcopy /E /Y "%SCRIPT_DIR%update\*" "%SCRIPT_DIR%" >nul
+            rmdir /s /q "%SCRIPT_DIR%update"
+            echo Update applied.
+        )
 
         set PYTHONHOME=%SCRIPT_DIR%python
         set PYTHONPATH=%SCRIPT_DIR%;%SCRIPT_DIR%src

@@ -16,11 +16,76 @@ import streamlit as st
 from loguru import logger
 
 ALLOWED_PREFIXES = ("app.py", "src/", "README.md", "RELEASE_NOTES.md")
+UPDATE_STAGING_DIR = "update"
 
 
 def _get_app_root() -> Path:
     """Return the root directory where app.py lives."""
     return Path(__file__).resolve().parents[2]
+
+
+def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) -> str:
+    """Extract a patch zip into app_root/update/ for run.bat to apply on next start.
+
+    Does not overwrite files in the app root. The app should then shut down so
+    that run.bat can copy from ./update into the app root and remove ./update.
+
+    Args:
+        file_like: A binary file-like object positioned at the start of the zip.
+        app_root: Optional explicit application root. Defaults to the directory
+            returned by :func:`_get_app_root`.
+
+    Returns:
+        A human-readable status message.
+    """
+    if app_root is None:
+        app_root = _get_app_root()
+
+    file_like.seek(0)
+    with zipfile.ZipFile(file_like) as zf:
+        namelist = zf.namelist()
+        target_version = None
+        if "VERSION" in namelist:
+            with zf.open("VERSION") as vf:
+                target_version = vf.read().decode("utf-8").strip()
+
+        members = []
+        for name in namelist:
+            if name.endswith("/"):
+                continue
+            if name == "VERSION":
+                continue
+            if name.startswith(ALLOWED_PREFIXES):
+                members.append(name)
+            else:
+                logger.warning("Skipping unexpected path in patch zip: {}", name)
+
+        if not members:
+            return "No applicable files found in patch zip."
+
+        staging = app_root / UPDATE_STAGING_DIR
+        staging.mkdir(parents=True, exist_ok=True)
+        for name in members:
+            target_path = staging / name
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with zf.open(name) as src, target_path.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+            except (PermissionError, OSError) as e:
+                logger.warning("Could not extract {} to staging: {}", name, e)
+                return f"Failed to extract to ./{UPDATE_STAGING_DIR}: {e}"
+
+    if target_version:
+        logger.info("Staged patch for version {} in {}", target_version, staging)
+        return (
+            f"Update files are ready (target version: {target_version}). "
+            "The app will close in 2 seconds. Please run run.bat again to complete the update."
+        )
+    logger.info("Staged patch in {}", staging)
+    return (
+        "Update files are ready. The app will close in 2 seconds. "
+        "Please run run.bat again to complete the update."
+    )
 
 
 def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
@@ -235,10 +300,9 @@ def render_update_panel(app_version: str) -> None:
     """
     st.markdown("### App updates")
     st.caption(
-        "Upload a code-only patch zip (e.g. from a Handoff release). A backup of "
-        "affected files is created before applying; the app will restart after a successful apply. "
-        "When using an obfuscated (PyArmor) build, some files may be skipped if they are in use; "
-        "close the app and re-apply the patch, or install the new version manually."
+        "Upload a code-only patch zip (e.g. from a Handoff release). The patch is extracted to "
+        "./update/ and the app will close in 2 seconds. Run run.bat again to apply the update and "
+        "start the app."
     )
 
     app_root = _get_app_root()
@@ -282,9 +346,9 @@ def render_update_panel(app_version: str) -> None:
             can_apply = True
         if st.button("Apply and Restart", key="settings_apply_patch", disabled=not can_apply):
             patch_file.seek(0)
-            msg = apply_patch_zip(patch_file, app_root=app_root)
+            msg = extract_patch_to_staging(patch_file, app_root=app_root)
             st.success(msg)
-            _schedule_shutdown()
+            _schedule_shutdown(2.0)
 
     st.markdown("### Restore from backup")
     st.caption(

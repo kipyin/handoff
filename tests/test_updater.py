@@ -11,6 +11,7 @@ from handoff.updater import (
     _iter_backup_snapshots,
     _restore_backup_snapshot,
     apply_patch_zip,
+    extract_patch_to_staging,
 )
 
 
@@ -67,6 +68,37 @@ def test_apply_patch_zip_applies_allowed_paths_and_creates_backup(tmp_path: Path
     snapshot = backups[0]
     assert (snapshot / "app.py").read_text(encoding="utf-8") == "old app"
     assert (snapshot / "src" / "module.py").read_text(encoding="utf-8") == "old src"
+
+
+def test_extract_patch_to_staging_writes_to_update_dir(tmp_path: Path) -> None:
+    """extract_patch_to_staging extracts zip into app_root/update/ and leaves app root unchanged."""
+    app_root = tmp_path
+    app_file = app_root / "app.py"
+    app_file.write_text("old app", encoding="utf-8")
+
+    zip_bytes = _build_patch_zip_bytes(
+        {"app.py": b"new app", "src/module.py": b"new src"},
+        version="2026.2.99",
+    )
+    message = extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+
+    assert "2026.2.99" in message
+    assert "run.bat" in message
+    # Staging dir contains new content.
+    staging = app_root / "update"
+    assert (staging / "app.py").read_text(encoding="utf-8") == "new app"
+    assert (staging / "src" / "module.py").read_text(encoding="utf-8") == "new src"
+    # App root is unchanged.
+    assert app_file.read_text(encoding="utf-8") == "old app"
+
+
+def test_extract_patch_to_staging_no_applicable_files(tmp_path: Path) -> None:
+    """extract_patch_to_staging returns message when zip has no allowed paths."""
+    app_root = tmp_path
+    zip_bytes = _build_patch_zip_bytes({"other/file.txt": b"content"})
+    message = extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+    assert message == "No applicable files found in patch zip."
+    assert not (app_root / "update").exists()
 
 
 def test_apply_patch_zip_with_only_disallowed_paths_returns_message(tmp_path: Path) -> None:
