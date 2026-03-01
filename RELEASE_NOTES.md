@@ -1,12 +1,16 @@
 # Release notes
 
+## 2026.3.0 [Recommended]
+
+- **Calendar:** Fixed `StreamlitAPIException` when using "Next week" or "Previous week": the date picker session state is now updated before the widget is created, so week navigation no longer triggers "cannot be modified after the widget with key ... is instantiated".
+
 ## 2026.2.24 [Recommended]
 
 - **Calendar:** Fixed the "Next week" and "Previous week" buttons so the week view updates correctly (date picker session state is now synced when using week navigation).
 - **Focus page removed:** The Focus page has been removed from the app; navigation no longer includes it.
 - **UI module:** The public UI entrypoint module has been renamed from `handoff.ui_facade` to `handoff.ui`; use `handoff.ui.setup()` and the same render_* page functions.
 - **Single helper:** The todo table uses a single Helper dropdown again (one helper per todo). The multiselect column was removed; existing multi-helper data is still read (first helper shown) and written as a single value.
-- **Todo table save:** Changes are now saved via the data editor’s `on_change` callback when you edit the table, instead of comparing a snapshot on every run.
+- **Todo table save:** Changes are saved automatically when the table state differs from the last saved snapshot (snapshot-diff autosave on each run).
 - **Refactor:** All todo table UI (filters, deadline presets, save logic) has been moved from `ui_components.py` into the Todos page (`handoff.pages.todos`). The `ui_components` module has been removed; `handoff.ui` delegates to the pages and inlines session init.
 - **Simpler app:** Removed the urgency column and the formatted deadline display column from the todo table; the table now shows a single editable Deadline (date) column. Calendar keeps a minimal local urgency cue (overdue/today/soon) for display only.
 - **Status rename:** Todo status previously stored as `delegated` is now stored and displayed as `handoff`. A one-time migration updates existing rows on first run. All UI and docs use "handoff" for this status.

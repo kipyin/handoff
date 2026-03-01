@@ -64,12 +64,18 @@ def render_calendar_page() -> None:
     days = [start_dt.date() + timedelta(days=i) for i in range(7)]
 
     # Navigation row: same 7 columns as day columns so "Previous" aligns with Monday,
-    # "Next week" with Sunday.
+    # "Next week" with Sunday. Handle Prev/Next before rendering the date_input so we
+    # can update calendar_selected_date before the widget with that key is created.
     nav_cols = st.columns(7)
     with nav_cols[0]:
         if st.button("← Previous week", key="calendar_prev"):
             st.session_state[offset_key] = week_offset - 1
             st.session_state[selected_date_key] = reference_date + timedelta(days=-7)
+            st.rerun()
+    with nav_cols[6]:
+        if st.button("Next week →", key="calendar_next"):
+            st.session_state[offset_key] = week_offset + 1
+            st.session_state[selected_date_key] = reference_date + timedelta(days=7)
             st.rerun()
     with nav_cols[3]:
         selected_date = st.date_input(
@@ -80,11 +86,6 @@ def render_calendar_page() -> None:
         if selected_date != reference_date:
             delta_days = (selected_date - today).days
             st.session_state[offset_key] = delta_days // 7
-            st.rerun()
-    with nav_cols[6]:
-        if st.button("Next week →", key="calendar_next"):
-            st.session_state[offset_key] = week_offset + 1
-            st.session_state[selected_date_key] = reference_date + timedelta(days=7)
             st.rerun()
 
     st.subheader(f"Week of {start_dt.date().isoformat()} – {end_dt.date().isoformat()}")
@@ -150,7 +151,7 @@ def render_calendar_page() -> None:
                             label_visibility="collapsed",
                         )
                     with adj_c2:
-                        if st.button("Update", key=update_key):
+                        if st.button("U", key=update_key):
                             new_deadline_dt = datetime.combine(
                                 new_date,
                                 time(hour=18, minute=0),
