@@ -108,10 +108,11 @@ On a client machine:
 
 1. The user runs the app as usual (for example from the embedded zip via `run.bat`).
 2. In the app's navigation, they open the **Settings** page, use **Update app** to upload the
-   patch zip, and click **Apply and Restart**. If there are unsaved changes on the main Todos
-   table, the button is disabled until those changes are saved.
-3. After applying the patch, the app extracts the update into the app directory and then
-   exits automatically; reopen `run.bat` to start the updated version.
+   patch zip, and click **Apply and Restart**. The patch is extracted to `./update/` and the
+   app exits after 2 seconds.
+3. The user runs `run.bat` again. The batch file detects files in `./update/`, copies them
+   into the app directory (overwriting as needed), removes `./update/`, then starts the app.
+   This avoids replacing files (e.g. PyArmor runtime) while the process is still running.
 
 ### Backups and rollback
 
