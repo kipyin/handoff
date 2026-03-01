@@ -26,6 +26,7 @@ def run_cmd(
         cwd: Optional working directory.
         env: Optional environment overrides.
         description: Optional human-friendly description shown before running.
+
     """
     cmd_str = " ".join(args)
     if description:

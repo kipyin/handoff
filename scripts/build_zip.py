@@ -33,7 +33,12 @@ EMBED_ZIP_PATH = BUILD_ROOT / EMBED_ZIP_NAME
 
 
 def _read_project_metadata() -> tuple[str, str]:
-    """Return (name, version) from pyproject.toml."""
+    """Return (name, version) from pyproject.toml.
+
+    Returns:
+        Tuple of (project name, project version) from [project] section.
+
+    """
     pyproject = ROOT / "pyproject.toml"
     with pyproject.open("rb") as f:
         data = tomllib.load(f)
@@ -48,6 +53,10 @@ def _get_runtime_deps() -> list[str]:
 
     Reads `[project.dependencies]` so the embedded environment matches the
     main application's runtime requirements.
+
+    Returns:
+        List of dependency specifier strings.
+
     """
     pyproject = ROOT / "pyproject.toml"
     with pyproject.open("rb") as f:
@@ -199,7 +208,7 @@ def _obfuscate_app_code_with_pyarmor() -> None:
     """Obfuscate the application package in the build directory using PyArmor.
 
     This runs PyArmor against a copied source tree under SRC_PLAIN_DIR and
-    writes obfuscated modules and the runtime package under ``APP_BUILD_DIR/src``.
+    writes obfuscated modules and the runtime package under APP_BUILD_DIR/src.
     """
     if not SRC_PLAIN_DIR.exists():
         raise RuntimeError(
@@ -276,6 +285,7 @@ def _make_zip(name: str, version: str) -> Path:
     Args:
         name: Application name from `pyproject.toml`.
         version: Application version from `pyproject.toml`.
+
     """
     zip_name = f"{name}-{version}-windows-embed.zip"
     dist_path = DIST_ROOT / zip_name

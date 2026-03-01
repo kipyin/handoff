@@ -26,6 +26,7 @@ def _validate_version(value: str) -> str:
 
     Raises:
         argparse.ArgumentTypeError: If the version is empty or contains whitespace.
+
     """
     normalized = value.strip()
     if not normalized or any(ch.isspace() for ch in normalized):
@@ -45,6 +46,7 @@ def _replace_project_version(pyproject_text: str, new_version: str) -> str:
 
     Raises:
         RuntimeError: If a `[project] version = ...` entry cannot be found.
+
     """
     lines = pyproject_text.splitlines()
     in_project_section = False
@@ -66,7 +68,19 @@ def _replace_project_version(pyproject_text: str, new_version: str) -> str:
 
 
 def _replace_version_constant(version_text: str, new_version: str) -> str:
-    """Replace __version__ literal in the version module."""
+    """Replace __version__ literal in the version module.
+
+    Args:
+        version_text: Original content of version.py.
+        new_version: Target version string.
+
+    Returns:
+        Updated version.py content with __version__ set to new_version.
+
+    Raises:
+        RuntimeError: If a unique __version__ assignment cannot be found.
+
+    """
     pattern = r'(?m)^(__version__\s*=\s*)"[^"]*"\s*$'
     updated, count = re.subn(pattern, rf'\1"{new_version}"', version_text)
     if count != 1:
@@ -78,7 +92,8 @@ def bump_version(new_version: str) -> None:
     """Update pyproject and version module to the given value.
 
     Args:
-        new_version: Target version string (for example, ``2026.3.0``).
+        new_version: Target version string (for example, 2026.3.0).
+
     """
     pyproject_original = PYPROJECT_PATH.read_text(encoding="utf-8")
     version_original = VERSION_PATH.read_text(encoding="utf-8")
