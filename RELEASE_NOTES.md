@@ -2,9 +2,14 @@
 
 ## 2026.2.24 [Recommended]
 
-- **Simpler app:** Removed the urgency column and the formatted deadline display column from the todo table; the table now shows a single editable Deadline (date) column. Focus and calendar pages updated accordingly; calendar keeps a minimal local urgency cue (overdue/today/soon) for display only.
+- **Calendar:** Fixed the "Next week" and "Previous week" buttons so the week view updates correctly (date picker session state is now synced when using week navigation).
+- **Focus page removed:** The Focus page has been removed from the app; navigation no longer includes it.
+- **UI module:** The public UI entrypoint module has been renamed from `handoff.ui_facade` to `handoff.ui`; use `handoff.ui.setup()` and the same render_* page functions.
+- **Single helper:** The todo table uses a single Helper dropdown again (one helper per todo). The multiselect column was removed; existing multi-helper data is still read (first helper shown) and written as a single value.
+- **Todo table save:** Changes are now saved via the data editor’s `on_change` callback when you edit the table, instead of comparing a snapshot on every run.
+- **Refactor:** All todo table UI (filters, deadline presets, save logic) has been moved from `ui_components.py` into the Todos page (`handoff.pages.todos`). The `ui_components` module has been removed; `handoff.ui` delegates to the pages and inlines session init.
+- **Simpler app:** Removed the urgency column and the formatted deadline display column from the todo table; the table now shows a single editable Deadline (date) column. Calendar keeps a minimal local urgency cue (overdue/today/soon) for display only.
 - **Status rename:** Todo status previously stored as `delegated` is now stored and displayed as `handoff`. A one-time migration updates existing rows on first run. All UI and docs use "handoff" for this status.
-- **Multiple helpers:** Todos can have multiple helpers. The main table uses a multiselect column; helpers are stored as a JSON array in the database. Legacy single-helper values are read and written correctly.
 - **Todo save optimisation:** When saving the todo table, only rows that actually changed are written to the database; unchanged rows are skipped.
 - **Projects page:** Replaced the card layout with a table view. Edit project names and archive state in the table; check "Confirm delete" for projects to remove, then click **Save changes**. When one or more projects are marked for deletion, a confirmation step appears before applying (list of names and "Confirm and delete" / "Cancel"). Project statistics (handoff/done/canceled counts) have been removed from this page.
 - **Calendar:** Deadline and Update controls for handoff todos are more compact (single row). Week navigation is aligned so "Previous week" lines up with Monday and "Next week" with Sunday. The current day column is labelled "— *Today*".

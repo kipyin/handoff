@@ -2,7 +2,7 @@
 
 from datetime import date, timedelta
 
-from handoff.ui import (
+from handoff.pages.todos import (
     DEADLINE_ANY,
     DEADLINE_CUSTOM,
     DEADLINE_THIS_WEEK,

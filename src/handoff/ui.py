@@ -1,8 +1,7 @@
 """Public UI entrypoints for the Handoff app.
 
 This module provides a stable, concise import path for the Streamlit UI while
-delegating concrete page implementations to :mod:`handoff.pages` and shared
-components in :mod:`handoff.ui_components`.
+delegating concrete page implementations to :mod:`handoff.pages`.
 """
 
 from __future__ import annotations
@@ -17,15 +16,14 @@ from .pages.docs import render_docs_page as _render_docs_page_impl
 from .pages.projects import render_projects_page as _render_projects_page_impl
 from .pages.settings import render_settings_page as _render_settings_page_impl
 from .pages.todos import render_todos_page as _render_todos_page_impl
-from .ui_components import (
-    DEADLINE_ANY,
-    DEADLINE_CUSTOM,
-    DEADLINE_THIS_WEEK,
-    DEADLINE_TODAY,
-    DEADLINE_TOMORROW,
-    _deadline_preset_bounds,
-    _init_session_state,
-)
+
+
+def _init_session_state() -> None:
+    """Initialize Streamlit session defaults."""
+    defaults: dict[str, object] = {}
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
 def setup(app_version: str) -> None:
@@ -83,12 +81,6 @@ def render_docs_page() -> None:
 
 
 __all__ = [
-    "DEADLINE_ANY",
-    "DEADLINE_CUSTOM",
-    "DEADLINE_THIS_WEEK",
-    "DEADLINE_TODAY",
-    "DEADLINE_TOMORROW",
-    "_deadline_preset_bounds",
     "setup",
     "render_todos_page",
     "render_projects_page",

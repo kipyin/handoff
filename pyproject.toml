@@ -62,10 +62,8 @@ handoff = "scripts.cli:main"
 include = ["src", "scripts"]
 exclude = [
     "src/handoff/data.py",
-    "src/handoff/ui_components.py",
     "src/handoff/pages/analytics.py",
     "src/handoff/pages/calendar.py",
-    "src/handoff/pages/focus.py",
 ]
 venvPath = "."
 venv = ".venv"

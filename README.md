@@ -66,7 +66,7 @@ The app uses **loguru** for logging, configured to write to:
 `%APPDATA%\handoff\logs\handoff.log`).
 
 The configuration lives in `src/handoff/logging.py` and is initialised from
-`handoff.ui_facade.setup()`.
+`handoff.ui.setup()`.
 
 - **During development**, run the app from a terminal to see logs live as you interact:
   ```bash
@@ -79,7 +79,7 @@ The configuration lives in `src/handoff/logging.py` and is initialised from
   - Save summary counts and high-level query info.
 
 For deeper diagnostics you can extend the existing `loguru` calls in
-`src/handoff/data.py`, `src/handoff/db.py`, or `src/handoff/ui_components.py`.
+`src/handoff/data.py`, `src/handoff/db.py`, or `src/handoff/pages/todos.py`.
 
 ## Windows embedded zip build and obfuscated patches
 
@@ -170,7 +170,7 @@ Version sync guard:
 ## Project layout
 
 - `app.py` — Thin Streamlit entrypoint + navigation
-- `src/handoff/ui_facade.py` — Public Streamlit UI entrypoints
+- `src/handoff/ui.py` — Public Streamlit UI entrypoints
 - `src/handoff/` — Package: `models.py`, `db.py`, `data.py`
 - `pages/` — Legacy Streamlit entry scripts for Projects/Calendar (primary nav is in `app.py`)
 - `tests/` — Pytest tests
