@@ -55,7 +55,7 @@ def _render_data_export_section() -> None:
 def _render_about_section() -> None:
     """Render a compact About section at the end of the Settings page."""
     st.markdown("### About Handoff")
-    st.caption(f"Version: {APP_VERSION}”")
+    st.caption(f"Version: {APP_VERSION}")
 
     st.write(
         "Handoff — see who's on the hook across all your projects. A local, SQLite-backed "
