@@ -1,5 +1,18 @@
 # Release notes
 
+## 2026.2.24 [Recommended]
+
+- **Simpler app:** Removed the urgency column and the formatted deadline display column from the todo table; the table now shows a single editable Deadline (date) column. Focus and calendar pages updated accordingly; calendar keeps a minimal local urgency cue (overdue/today/soon) for display only.
+- **Status rename:** Todo status previously stored as `delegated` is now stored and displayed as `handoff`. A one-time migration updates existing rows on first run. All UI and docs use "handoff" for this status.
+- **Multiple helpers:** Todos can have multiple helpers. The main table uses a multiselect column; helpers are stored as a JSON array in the database. Legacy single-helper values are read and written correctly.
+- **Todo save optimisation:** When saving the todo table, only rows that actually changed are written to the database; unchanged rows are skipped.
+- **Projects page:** Replaced the card layout with a table view. Edit project names and archive state in the table; check "Confirm delete" for projects to remove, then click **Save changes**. Project statistics (handoff/done/canceled counts) have been removed from this page.
+- **Calendar:** Deadline and Update controls for handoff todos are more compact (single row). Week navigation is aligned so "Previous week" lines up with Monday and "Next week" with Sunday. The current day column is labelled "— *Today*".
+- **Todo table limit:** When more than 30 todos match the current filters, the table shows the first 30 and a caption; use filters to narrow the list.
+- **Integration tests:** Added Streamlit AppTest-based smoke tests for the Todos, Projects, Calendar, and Settings pages (each page tested in isolation with a temporary database).
+- **PyArmor / in-app update:** When using an obfuscated build, the Settings update panel now states that some files (e.g. PyArmor runtime) may be skipped while the app is running; close the app and re-apply the patch, or install the new version manually.
+- **Database filename:** The app still uses `todo.db` as the default database filename. A future release may rename it to e.g. `handoff.db` with a one-time migration; no change in this release.
+
 ## 2026.2.23 [Recommended]
 
 

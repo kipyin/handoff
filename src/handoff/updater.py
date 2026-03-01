@@ -236,7 +236,9 @@ def render_update_panel(app_version: str) -> None:
     st.markdown("### App updates")
     st.caption(
         "Upload a code-only patch zip (e.g. from a Handoff release). A backup of "
-        "affected files is created before applying; the app will restart after a successful apply."
+        "affected files is created before applying; the app will restart after a successful apply. "
+        "When using an obfuscated (PyArmor) build, some files may be skipped if they are in use; "
+        "close the app and re-apply the patch, or install the new version manually."
     )
 
     app_root = _get_app_root()
