@@ -12,6 +12,7 @@
 - **DRY:** Shared `handoff.dates.week_bounds(reference)` for Monday–Sunday week logic used by todos deadline presets and the calendar. Updater zip parsing (VERSION + member list) extracted into `_read_patch_members(zf)` and reused by `extract_patch_to_staging` and `apply_patch_zip`.
 - **Readability:** Todos page refactors: `_row_equals` uses `_normalize_str_field` and `_normalize_deadline_for_compare`; `_save_rows` uses `_parse_previous_snapshot`; `_apply_native_filters` delegates to `_apply_dataframe_filters`; `_render_editable_table` uses `_compute_defaults_from_filters` and `_sort_and_build_display_df`.
 - **Test:** Calendar smoke test no longer expects a `date_input` widget (date picker is commented out in the UI).
+- **Streamlit config launcher:** The app is started via `python -m handoff` so Streamlit options take effect. The launcher applies env vars from `handoff.config` (showErrorDetails, toolbarMode, showSidebarNavigation, showErrorLinks, gatherUsageStats) before starting Streamlit. Both `uv run handoff run` and the embedded build's `run.bat` use this launcher; there is no user-editable config file, and the package is obfuscated with PyArmor at deploy.
 
 ## 2026.3.0 [Recommended]
 

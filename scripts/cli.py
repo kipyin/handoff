@@ -17,9 +17,9 @@ console = Console()
 
 @app.command()
 def run() -> None:
-    """Run the Streamlit app."""
+    """Run the Streamlit app (applies Streamlit options from handoff.config)."""
     run_cmd(
-        ["uv", "run", "streamlit", "run", "app.py"],
+        ["uv", "run", "python", "-m", "handoff"],
         cwd=ROOT,
         description="Starting Streamlit app...",
     )
