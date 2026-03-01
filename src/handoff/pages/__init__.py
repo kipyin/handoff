@@ -1,5 +1,5 @@
 """Page implementations for the engagement to-do app.
 
 This package hosts the concrete Streamlit page layouts used by the public
-UI façade in :mod:`handoff.ui_facade`.
+UI in :mod:`handoff.ui`.
 """

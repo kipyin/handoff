@@ -21,14 +21,14 @@ def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import handoff.db as db  # noqa: F401
 
     importlib.reload(db)
-    import handoff.ui_facade as uf  # noqa: F401
+    import handoff.ui as ui  # noqa: F401
 
-    importlib.reload(uf)
+    importlib.reload(ui)
 
 
 @pytest.fixture
 def app_test_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Set up a temporary DB path and reload handoff.db / ui_facade so app uses it."""
+    """Set up a temporary DB path and reload handoff.db / ui so app uses it."""
     db_path = tmp_path / "handoff_test.db"
     _reload_db_for_test(db_path, monkeypatch)
     return db_path
@@ -36,37 +36,37 @@ def app_test_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _todos_page_entry() -> None:
     """Single-page entrypoint for Todos: setup + render."""
-    import handoff.ui_facade as uf
+    import handoff.ui as ui
     from handoff.pages.todos import render_todos_page
 
-    uf.setup("2026.2.24")
+    ui.setup("2026.2.24")
     render_todos_page()
 
 
 def _projects_page_entry() -> None:
     """Single-page entrypoint for Projects: setup + render."""
-    import handoff.ui_facade as uf
+    import handoff.ui as ui
     from handoff.pages.projects import render_projects_page
 
-    uf.setup("2026.2.24")
+    ui.setup("2026.2.24")
     render_projects_page()
 
 
 def _calendar_page_entry() -> None:
     """Single-page entrypoint for Calendar: setup + render."""
-    import handoff.ui_facade as uf
+    import handoff.ui as ui
     from handoff.pages.calendar import render_calendar_page
 
-    uf.setup("2026.2.24")
+    ui.setup("2026.2.24")
     render_calendar_page()
 
 
 def _settings_page_entry() -> None:
     """Single-page entrypoint for Settings: setup + render."""
-    import handoff.ui_facade as uf
+    import handoff.ui as ui
     from handoff.pages.settings import render_settings_page
 
-    uf.setup("2026.2.24")
+    ui.setup("2026.2.24")
     render_settings_page()
 
 

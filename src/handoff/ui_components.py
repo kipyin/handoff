@@ -96,7 +96,7 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "id": todo.id,
             "name": todo.name,
             "status": status_value,
-            "helper": helpers_from_db(todo.helper),
+            "helper": normalize_helper_name(todo.helper) or "",
             "deadline": deadline_date,
             "notes": todo.notes or "",
             "created_at": todo.created_at,
@@ -259,9 +259,7 @@ def _apply_native_filters(
     if query:
         searchable_cols = ["name", "notes", "helper", "project"]
         search_df = filtered_df[searchable_cols].copy()
-        search_df["helper"] = search_df["helper"].apply(
-            lambda h: " ".join(h) if isinstance(h, list) else (h or "")
-        )
+        search_df["helper"] = search_df["helper"].fillna("").astype(str)
         mask = (
             search_df.fillna("").agg(" ".join, axis=1).str.contains(query, case=False, regex=False)
         )
@@ -273,11 +271,9 @@ def _apply_native_filters(
     if helper_filters:
         helper_set = set(helper_filters)
 
-        def _row_has_helper(helpers_val: object) -> bool:
-            if isinstance(helpers_val, list):
-                return bool(set(helpers_val) & helper_set)
-            if helpers_val and str(helpers_val).strip():
-                return str(helpers_val).strip() in helper_set
+        def _row_has_helper(helper_val: object) -> bool:
+            if helper_val and str(helper_val).strip():
+                return str(helper_val).strip() in helper_set
             return False
 
         filtered_df = filtered_df[filtered_df["helper"].apply(_row_has_helper)]
@@ -305,23 +301,9 @@ def _row_equals(current: dict, prev: dict) -> bool:
     p_notes = (prev.get("notes") or "").strip() or None
     if c_notes != p_notes:
         return False
-    curr_helpers = current.get("helper")
-    prev_helpers = prev.get("helper")
-    curr_set = (
-        set(curr_helpers)
-        if isinstance(curr_helpers, list)
-        else {curr_helpers}
-        if curr_helpers and str(curr_helpers).strip()
-        else set()
-    )
-    prev_set = (
-        set(prev_helpers)
-        if isinstance(prev_helpers, list)
-        else {prev_helpers}
-        if prev_helpers and str(prev_helpers).strip()
-        else set()
-    )
-    if curr_set != prev_set:
+    curr_helper = (current.get("helper") or "").strip() or None
+    prev_helper = (prev.get("helper") or "").strip() or None
+    if curr_helper != prev_helper:
         return False
     curr_deadline = current.get("deadline")
     prev_deadline = prev.get("deadline")
@@ -434,7 +416,7 @@ def _save_rows(
             summary["errors"].append(f"Row {row_no}: {deadline_error}.")
             continue
 
-        helper_val = row.get("helper")  # list or str; data layer serializes to JSON
+        helper_val = row.get("helper")  # str; data layer serializes to JSON
         notes_val = (row.get("notes") or "").strip() or None
 
         if is_existing:
@@ -543,12 +525,8 @@ def _render_editable_table(
                 default_project_name = name
                 break
     remembered_helper = st.session_state.get(remember_helper_key)
-    if isinstance(remembered_helper, list):
-        default_helpers = remembered_helper
-    elif isinstance(remembered_helper, str) and remembered_helper:
-        default_helpers = [remembered_helper]
-    else:
-        default_helpers = [default_helper] if default_helper else []
+    if isinstance(remembered_helper, str) and remembered_helper:
+        default_helper = remembered_helper
 
     # Sort state and apply sort
     sort_col_key = f"{key_prefix}_sort_column"
@@ -621,13 +599,119 @@ def _render_editable_table(
     ]
     base_caption = "Filter using the controls above. Use row deletion in the table to remove todos."
     st.caption(f"{base_caption} {table_caption}" if table_caption else base_caption)
+
+    snapshot_key = f"{key_prefix}_last_saved_snapshot"
+    status_key = f"{key_prefix}_saving_status"
+    error_key = f"{key_prefix}_saving_error"
+    editor_state_key = f"{key_prefix}_table"
+
+    _SAVE_CTX_KEY = "_todos_save_ctx"
+    if _SAVE_CTX_KEY not in st.session_state:
+        st.session_state[_SAVE_CTX_KEY] = {}
+    st.session_state[_SAVE_CTX_KEY][key_prefix] = {
+        "projects": projects,
+        "default_project_id": default_project_id,
+        "context_label": context_label,
+        "display_df": display_df,
+        "remember_project_key": remember_project_key,
+        "remember_helper_key": remember_helper_key,
+        "snapshot_key": snapshot_key,
+        "status_key": status_key,
+        "error_key": error_key,
+    }
+
+    def _on_table_change() -> None:
+        ctx = st.session_state.get(_SAVE_CTX_KEY, {}).get(key_prefix)
+        edited_df = st.session_state.get(editor_state_key)
+        if ctx is None or edited_df is None or not isinstance(edited_df, pd.DataFrame):
+            return
+        last_snapshot = st.session_state.get(ctx["snapshot_key"])
+        st.session_state[ctx["status_key"]] = "saving"
+        st.session_state[ctx["error_key"]] = ""
+        logger.info(
+            "Autosave (on_change) for {context} with rows={rows}",
+            context=ctx["context_label"],
+            rows=len(edited_df),
+        )
+        deleted = 0
+        skipped_for_delete = 0
+        delete_errors: list[str] = []
+        display_df_ctx = ctx["display_df"]
+        editor_state = st.session_state.get(editor_state_key)
+        deleted_rows_indices: list[int] = []
+        if hasattr(editor_state, "get"):
+            deleted_rows_indices = editor_state.get("deleted_rows") or []
+        for raw_idx in deleted_rows_indices:
+            try:
+                idx = int(raw_idx)
+            except (TypeError, ValueError):
+                continue
+            if not 0 <= idx < len(display_df_ctx):
+                continue
+            raw_id = display_df_ctx.iloc[idx].get("__todo_id")
+            if raw_id is None or pd.isna(raw_id):
+                continue
+            todo_id = int(raw_id)
+            if delete_todo(todo_id):
+                deleted += 1
+            else:
+                skipped_for_delete += 1
+                delete_errors.append(
+                    f"Row {idx + 1}: todo id {todo_id} not found for delete."
+                )
+        try:
+            summary = _save_rows(
+                edited_df,
+                projects=ctx["projects"],
+                default_project_id=ctx["default_project_id"],
+                context_label=ctx["context_label"],
+                last_snapshot_json=last_snapshot,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception(
+                "Autosave failed for {context}: {}",
+                ctx["context_label"],
+                exc,
+            )
+            st.session_state[ctx["status_key"]] = "error"
+            st.session_state[ctx["error_key"]] = "Autosave failed. See logs for details."
+            return
+        summary["deleted"] = summary.get("deleted", 0) + deleted
+        summary["skipped"] = summary.get("skipped", 0) + skipped_for_delete
+        if delete_errors:
+            summary.setdefault("errors", []).extend(delete_errors)
+        logger.info(
+            "Autosave result context={context}: created={created}, updated={updated}, "
+            "deleted={deleted}, skipped={skipped}",
+            context=ctx["context_label"],
+            created=summary["created"],
+            updated=summary["updated"],
+            deleted=summary["deleted"],
+            skipped=summary["skipped"],
+        )
+        last_created_project_id = summary.get("last_created_project_id")
+        last_created_helper = summary.get("last_created_helper")
+        if last_created_project_id is not None:
+            st.session_state[ctx["remember_project_key"]] = last_created_project_id
+        if last_created_helper is not None:
+            st.session_state[ctx["remember_helper_key"]] = (
+                last_created_helper
+                if isinstance(last_created_helper, str)
+                else (last_created_helper[0] if last_created_helper else "")
+            )
+        current_snapshot = edited_df.to_json(date_format="iso", orient="records")
+        st.session_state[ctx["snapshot_key"]] = current_snapshot
+        st.session_state[ctx["status_key"]] = "saved"
+        st.rerun()
+
     edited_df = st.data_editor(
         display_df,
         num_rows="dynamic",
         height="content",
-        key=f"{key_prefix}_table",
+        key=editor_state_key,
         hide_index=True,
         column_order=column_order,
+        on_change=_on_table_change,
         column_config={
             "__todo_id": None,
             "__created_at": None,
@@ -644,129 +728,21 @@ def _render_editable_table(
                 default=default_status,
                 required=True,
             ),
-            "helper": st.column_config.MultiselectColumn(
-                "Helpers",
-                options=list_helpers(),
-                default=default_helpers,
+            "helper": st.column_config.SelectboxColumn(
+                "Helper",
+                options=[""] + list_helpers(),
+                default=default_helper,
             ),
             "deadline": st.column_config.DateColumn("Deadline"),
             "notes": st.column_config.TextColumn("Notes"),
         },
     )
 
-    # Autosave: compare current table state to the last persisted snapshot and
-    # persist changes automatically when they differ.
-    snapshot_key = f"{key_prefix}_last_saved_snapshot"
-    status_key = f"{key_prefix}_saving_status"
-    error_key = f"{key_prefix}_saving_error"
     current_snapshot = edited_df.to_json(date_format="iso", orient="records")
-    last_snapshot = st.session_state.get(snapshot_key)
-
-    if last_snapshot is None:
-        # First render: treat the current DB state as the baseline without
-        # writing anything back, so we don't show a spurious unsaved warning.
+    if st.session_state.get(snapshot_key) is None:
         st.session_state[snapshot_key] = current_snapshot
         st.session_state[status_key] = "saved"
         st.session_state[error_key] = ""
-    elif current_snapshot != last_snapshot:
-        st.session_state[status_key] = "saving"
-        st.session_state[error_key] = ""
-        logger.info(
-            "Autosave starting for {context} with rows={rows}",
-            context=context_label,
-            rows=len(edited_df),
-        )
-        deleted = 0
-        skipped_for_delete = 0
-        deleted_ids: list[int] = []
-        delete_errors: list[str] = []
-
-        editor_state_key = f"{key_prefix}_table"
-        editor_state = st.session_state.get(editor_state_key)
-        deleted_rows_indices: list[int] = []
-        if hasattr(editor_state, "get"):
-            deleted_rows_indices = editor_state.get("deleted_rows") or []
-
-        if deleted_rows_indices:
-            normalized_indices: list[int] = []
-            for raw_idx in deleted_rows_indices:
-                try:
-                    normalized_indices.append(int(raw_idx))
-                except (TypeError, ValueError):
-                    continue
-
-            seen_ids: set[int] = set()
-            for row_idx in normalized_indices:
-                if not 0 <= row_idx < len(display_df):
-                    continue
-                raw_id = display_df.iloc[row_idx].get("__todo_id")
-                if raw_id is None or pd.isna(raw_id):
-                    # Deleted row was never persisted; nothing to do.
-                    continue
-                todo_id = int(raw_id)
-                if todo_id in seen_ids:
-                    continue
-                seen_ids.add(todo_id)
-                delete_ok = delete_todo(todo_id)
-                if delete_ok:
-                    deleted += 1
-                    deleted_ids.append(todo_id)
-                else:
-                    skipped_for_delete += 1
-                    delete_errors.append(
-                        f"Row {row_idx + 1}: todo id {todo_id} not found for delete."
-                    )
-
-        try:
-            summary = _save_rows(
-                edited_df,
-                projects=projects,
-                default_project_id=default_project_id,
-                context_label=context_label,
-                last_snapshot_json=last_snapshot,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Autosave failed for {context}: {}", context_label, exc)
-            st.session_state[status_key] = "error"
-            st.session_state[error_key] = "Autosave failed. See logs for details."
-        else:
-            summary["deleted"] = summary.get("deleted", 0) + deleted
-            summary["skipped"] = summary.get("skipped", 0) + skipped_for_delete
-            if delete_errors:
-                summary.setdefault("errors", []).extend(delete_errors)
-
-            created_ids = summary.get("created_ids", [])
-            updated_ids = summary.get("updated_ids", [])
-            logger.info(
-                "Autosave result context={context}: created={created} ids={created_ids}, "
-                "updated={updated} ids={updated_ids}, deleted={deleted} ids={deleted_ids}, "
-                "skipped={skipped}",
-                context=context_label,
-                created=summary["created"],
-                created_ids=created_ids,
-                updated=summary["updated"],
-                updated_ids=updated_ids,
-                deleted=summary["deleted"],
-                deleted_ids=deleted_ids,
-                skipped=summary["skipped"],
-            )
-            # Update remembered defaults for new rows based on the last created todo.
-            last_created_project_id = summary.get("last_created_project_id")
-            last_created_helper = summary.get("last_created_helper")
-            if last_created_project_id is not None:
-                st.session_state[remember_project_key] = last_created_project_id
-            if last_created_helper is not None:
-                st.session_state[remember_helper_key] = (
-                    last_created_helper
-                    if isinstance(last_created_helper, list)
-                    else [last_created_helper]
-                )
-
-            # Record the new snapshot so subsequent renders know there are no
-            # outstanding edits, then rerun so the table reflects DB state.
-            st.session_state[snapshot_key] = current_snapshot
-            st.session_state[status_key] = "saved"
-            st.rerun()
 
     # Saving status message for the bottom of the table.
     status_value = st.session_state.get(status_key, "saved")

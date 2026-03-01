@@ -69,6 +69,7 @@ def render_calendar_page() -> None:
     with nav_cols[0]:
         if st.button("← Previous week", key="calendar_prev"):
             st.session_state[offset_key] = week_offset - 1
+            st.session_state[selected_date_key] = reference_date + timedelta(days=-7)
             st.rerun()
     with nav_cols[3]:
         selected_date = st.date_input(
@@ -83,6 +84,7 @@ def render_calendar_page() -> None:
     with nav_cols[6]:
         if st.button("Next week →", key="calendar_next"):
             st.session_state[offset_key] = week_offset + 1
+            st.session_state[selected_date_key] = reference_date + timedelta(days=7)
             st.rerun()
 
     st.subheader(f"Week of {start_dt.date().isoformat()} – {end_dt.date().isoformat()}")

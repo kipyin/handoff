@@ -14,7 +14,6 @@ from .logging import configure_logging
 from .pages.analytics import render_analytics_page as _render_analytics_page_impl
 from .pages.calendar import render_calendar_page as _render_calendar_page_impl
 from .pages.docs import render_docs_page as _render_docs_page_impl
-from .pages.focus import render_focus_page as _render_focus_page_impl
 from .pages.projects import render_projects_page as _render_projects_page_impl
 from .pages.settings import render_settings_page as _render_settings_page_impl
 from .pages.todos import render_todos_page as _render_todos_page_impl
@@ -73,11 +72,6 @@ def render_analytics_page() -> None:
     _render_analytics_page_impl()
 
 
-def render_focus_page() -> None:
-    """Render the focus/daily planning page."""
-    _render_focus_page_impl()
-
-
 def render_settings_page() -> None:
     """Render the settings and about page."""
     _render_settings_page_impl()
@@ -100,7 +94,6 @@ __all__ = [
     "render_projects_page",
     "render_calendar_page",
     "render_analytics_page",
-    "render_focus_page",
     "render_settings_page",
     "render_docs_page",
 ]
