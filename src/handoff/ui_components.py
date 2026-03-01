@@ -102,7 +102,9 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
             "created_at": todo.created_at,
         }
         if include_project:
-            row["project"] = todo.project.name if todo.project else ""  # TODO: should always include project. 
+            row["project"] = (
+                todo.project.name if todo.project else ""
+            )  # TODO: should always include project.
         rows.append(row)
     if rows:
         return pd.DataFrame(rows)
@@ -261,9 +263,7 @@ def _apply_native_filters(
             lambda h: " ".join(h) if isinstance(h, list) else (h or "")
         )
         mask = (
-            search_df.fillna("")
-            .agg(" ".join, axis=1)
-            .str.contains(query, case=False, regex=False)
+            search_df.fillna("").agg(" ".join, axis=1).str.contains(query, case=False, regex=False)
         )
         filtered_df = filtered_df[mask]
     if status_filters:
@@ -310,12 +310,16 @@ def _row_equals(current: dict, prev: dict) -> bool:
     curr_set = (
         set(curr_helpers)
         if isinstance(curr_helpers, list)
-        else {curr_helpers} if curr_helpers and str(curr_helpers).strip() else set()
+        else {curr_helpers}
+        if curr_helpers and str(curr_helpers).strip()
+        else set()
     )
     prev_set = (
         set(prev_helpers)
         if isinstance(prev_helpers, list)
-        else {prev_helpers} if prev_helpers and str(prev_helpers).strip() else set()
+        else {prev_helpers}
+        if prev_helpers and str(prev_helpers).strip()
+        else set()
     )
     if curr_set != prev_set:
         return False
@@ -573,7 +577,9 @@ def _render_editable_table(
         filtered_df = filtered_df.head(MAX_TODO_ROWS).reset_index(drop=True)
     table_caption = (
         f"Showing first {min(total_filtered, MAX_TODO_ROWS)} of {total_filtered} todos. "
-        "Use filters to narrow." if total_filtered > MAX_TODO_ROWS else ""
+        "Use filters to narrow."
+        if total_filtered > MAX_TODO_ROWS
+        else ""
     )
 
     working_df = filtered_df.reset_index(drop=True).copy()
@@ -618,6 +624,7 @@ def _render_editable_table(
     edited_df = st.data_editor(
         display_df,
         num_rows="dynamic",
+        height="content",
         key=f"{key_prefix}_table",
         hide_index=True,
         column_order=column_order,
