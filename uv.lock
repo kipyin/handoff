@@ -191,7 +191,7 @@ wheels = [
 
 [[package]]
 name = "handoff"
-version = "2026.2.24"
+version = "2026.3.0"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },
