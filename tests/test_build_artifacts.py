@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-import scripts.build_obfuscated_patch as build_obfuscated_patch_module
+import scripts.build_patch as build_patch_module
 import scripts.build_zip as build_zip_module
 
 
@@ -81,11 +81,11 @@ def test_make_zip_includes_docs_and_core_files(
     assert "handoff/pages/2_Projects.py" in names
 
 
-def test_build_obfuscated_patch_includes_docs_and_core_files(
+def test_build_patch_includes_docs_and_core_files(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """build_obfuscated_patch writes docs, app.py, and core package into the patch zip."""
+    """build_patch writes docs, app.py, and core package into the patch zip."""
     root = tmp_path
 
     # Top-level documentation files.
@@ -106,11 +106,11 @@ def test_build_obfuscated_patch_includes_docs_and_core_files(
 
     dist_root = root / "dist"
 
-    monkeypatch.setattr(build_obfuscated_patch_module, "ROOT", root)
-    monkeypatch.setattr(build_obfuscated_patch_module, "BUILD_APP_DIR", build_app_dir)
-    monkeypatch.setattr(build_obfuscated_patch_module, "DIST_ROOT", dist_root)
+    monkeypatch.setattr(build_patch_module, "ROOT", root)
+    monkeypatch.setattr(build_patch_module, "BUILD_APP_DIR", build_app_dir)
+    monkeypatch.setattr(build_patch_module, "DIST_ROOT", dist_root)
 
-    zip_path = build_obfuscated_patch_module.build_obfuscated_patch(include_pages=False)
+    zip_path = build_patch_module.build_patch(include_pages=False)
 
     with zipfile.ZipFile(zip_path, "r") as zf:
         names = set(zf.namelist())

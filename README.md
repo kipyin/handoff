@@ -100,7 +100,7 @@ For small logic-only changes you can ship a **code-only patch** zip instead of a
 embedded bundle. For production usage, always use the obfuscated patch flow:
 
 - Run `uv run handoff build-zip` to produce the embedded app build.
-- Then run `uv run handoff build-obfuscated-patch` to create
+- Then run `uv run handoff build-patch` to create
   `dist/handoff-<version>-obfuscated-patch.zip` from the obfuscated build output so that the
   in-app updater can apply it to PyArmor-built installs.
 
@@ -154,7 +154,7 @@ uv run handoff ci
 uv run handoff build-zip
 
 # Build patch from obfuscated build (for PyArmor-built installs; run after build-zip)
-uv run handoff build-obfuscated-patch
+uv run handoff build-patch
 
 # Bump version in pyproject.toml and handoff.version
 uv run handoff bump-version 2026.2.21

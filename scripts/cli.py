@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 
 from . import ROOT
-from . import build_obfuscated_patch as build_obfuscated_patch_module
+from . import build_patch as build_patch_module
 from . import build_zip as build_zip_module
 from . import bump_version as bump_version_module
 from .subprocess_utils import run_cmd
@@ -101,17 +101,17 @@ def bump_version(
     console.print(f"Bumped version to {version}", style="bold green")
 
 
-@app.command("build-obfuscated-patch")
-def build_obfuscated_patch(
+@app.command("build-patch")
+def build_patch(
     include_pages: bool = typer.Option(
         True,
         "--include-pages/--skip-pages",
         help="Include the pages/ directory (from source) in the patch zip.",
     ),
 ) -> None:
-    """Build a patch zip from the obfuscated build (run after build-zip for PyArmor installs)."""
-    path = build_obfuscated_patch_module.build_obfuscated_patch(include_pages=include_pages)
-    console.print(f"Obfuscated patch zip created at {path}", style="bold green")
+    """Build a patch zip from the build output (run after build-zip for PyArmor installs)."""
+    path = build_patch_module.build_patch(include_pages=include_pages)
+    console.print(f"Patch zip created at {path}", style="bold green")
 
 
 def main() -> None:
