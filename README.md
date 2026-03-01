@@ -110,15 +110,17 @@ On a client machine:
 2. In the app's navigation, they open the **Settings** page, use **Update app** to upload the
    patch zip, and click **Apply and Restart**. The patch is extracted to `./update/` and the
    app exits after 2 seconds.
-3. The user runs `run.bat` again. The batch file detects files in `./update/`, copies them
-   into the app directory (overwriting as needed), removes `./update/`, then starts the app.
-   This avoids replacing files (e.g. PyArmor runtime) while the process is still running.
+3. The user runs `run.bat` again. The batch file detects files in `./update/`, creates a
+   timestamped backup of any files that will be overwritten, then copies the update into
+   the app directory and removes `./update/`. The app then starts. This avoids replacing
+   files (e.g. PyArmor runtime) while the process is still running.
 
 ### Backups and rollback
 
-When applying a code-only patch, the updater creates a **timestamped backup**
-of any overwritten files under a `backup/<YYYYMMDD-HHMMSS>/` directory inside the app
-root. You can roll back from a bad patch directly from the **Settings** page:
+When you run `run.bat` after staging an update, the app creates a **timestamped backup**
+of any overwritten files under `backup/<YYYYMMDD-HHMMSS>/` in the app root. The next time
+you open the **Settings** page, the app shows where the backup was saved. You can roll
+back from a bad patch directly from the **Settings** page:
 
 1. Open the **Settings** page and locate the **Restore from backup** section under **Update app**.
 2. Pick a snapshot (named by timestamp).

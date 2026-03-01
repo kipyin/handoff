@@ -191,6 +191,76 @@ def _clear_pycache(app_root: Path) -> None:
                 shutil.rmtree(pycache_dir, ignore_errors=True)
 
 
+LAST_UPDATE_BACKUP_FILE = ".last_update_backup"
+
+
+def apply_staged_update(app_root: Path | None = None) -> str | None:
+    """Apply the staged update from app_root/update/ and create a timestamped backup.
+
+    If app_root/update/ does not exist or has no files, returns None. Otherwise
+    backs up any existing files that will be overwritten to backup/YYYYMMDD-HHMMSS/,
+    copies update/ into the app root, removes update/, clears pycache, writes the
+    backup path to .last_update_backup for the UI, and returns the backup path string.
+
+    Args:
+        app_root: Optional explicit application root. Defaults to _get_app_root().
+
+    Returns:
+        Relative backup path (e.g. "backup/20260301-143022") or None if no update.
+    """
+    if app_root is None:
+        app_root = _get_app_root()
+
+    staging = app_root / UPDATE_STAGING_DIR
+    if not staging.exists() or not staging.is_dir():
+        return None
+
+    members: list[Path] = []
+    for path in staging.rglob("*"):
+        if path.is_file():
+            members.append(path.relative_to(staging))
+
+    if not members:
+        return None
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_root = app_root / "backup" / timestamp
+
+    for rel in members:
+        name = rel.as_posix()
+        target_path = app_root / name
+        if target_path.exists():
+            backup_path = backup_root / name
+            backup_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(target_path, backup_path)
+            except (PermissionError, OSError) as e:
+                logger.warning("Could not backup {}: {}", name, e)
+
+    for rel in members:
+        name = rel.as_posix()
+        src_path = staging / name
+        target_path = app_root / name
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(src_path, target_path)
+        except (PermissionError, OSError) as e:
+            logger.warning("Could not apply {}: {}", name, e)
+
+    shutil.rmtree(staging, ignore_errors=True)
+    _clear_pycache(app_root)
+
+    backup_path_str = f"backup/{timestamp}"
+    sentinel = app_root / LAST_UPDATE_BACKUP_FILE
+    try:
+        sentinel.write_text(backup_path_str, encoding="utf-8")
+    except OSError as e:
+        logger.warning("Could not write {}: {}", sentinel, e)
+
+    logger.info("Applied staged update; backup at {}", backup_path_str)
+    return backup_path_str
+
+
 def _get_backup_root(app_root: Path) -> Path:
     """Return the directory that holds timestamped backup snapshots.
 
@@ -392,6 +462,21 @@ def render_update_panel(app_version: str) -> None:
             msg = extract_patch_to_staging(patch_file, app_root=app_root)
             st.success(msg)
             _schedule_shutdown(2.0)
+
+    # One-time message after an update: show where the backup was saved.
+    sentinel = app_root / LAST_UPDATE_BACKUP_FILE
+    if sentinel.exists():
+        try:
+            backup_path = sentinel.read_text(encoding="utf-8").strip()
+            st.info(
+                f"Update applied. A backup of the previous files was saved to **{backup_path}**."
+            )
+        except OSError:
+            pass
+        try:
+            sentinel.unlink()
+        except OSError:
+            pass
 
     st.markdown("### Restore from backup")
     st.caption(

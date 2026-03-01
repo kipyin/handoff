@@ -11,6 +11,7 @@ from handoff.updater import (
     _iter_backup_snapshots,
     _restore_backup_snapshot,
     apply_patch_zip,
+    apply_staged_update,
     extract_patch_to_staging,
 )
 
@@ -169,3 +170,53 @@ def test_restore_backup_snapshot_copies_files_and_clears_pycache(tmp_path: Path)
     assert app_file.read_text(encoding="utf-8") == "from backup"
     assert src_file.read_text(encoding="utf-8") == "from backup src"
     assert not pycache_dir.exists()
+
+
+def test_apply_staged_update_creates_backup_applies_and_returns_path(tmp_path: Path) -> None:
+    """apply_staged_update creates backup, applies staged files, removes update/, returns path."""
+    app_root = tmp_path
+    app_file = app_root / "app.py"
+    src_dir = app_root / "src"
+    src_dir.mkdir()
+    src_file = src_dir / "module.py"
+
+    app_file.write_text("old app", encoding="utf-8")
+    src_file.write_text("old src", encoding="utf-8")
+
+    staging = app_root / "update"
+    staging.mkdir()
+    (staging / "app.py").write_text("new app", encoding="utf-8")
+    (staging / "src").mkdir()
+    (staging / "src" / "module.py").write_text("new src", encoding="utf-8")
+
+    result = apply_staged_update(app_root=app_root)
+
+    assert result is not None
+    assert result.startswith("backup/")
+    assert (app_root / result).exists()
+    assert app_file.read_text(encoding="utf-8") == "new app"
+    assert src_file.read_text(encoding="utf-8") == "new src"
+    assert not staging.exists()
+
+    backup_root = app_root / "backup"
+    backups = [p for p in backup_root.iterdir() if p.is_dir()]
+    assert len(backups) == 1
+    snapshot = backups[0]
+    assert (snapshot / "app.py").read_text(encoding="utf-8") == "old app"
+    assert (snapshot / "src" / "module.py").read_text(encoding="utf-8") == "old src"
+
+    sentinel = app_root / ".last_update_backup"
+    assert sentinel.read_text(encoding="utf-8").strip() == result
+
+
+def test_apply_staged_update_returns_none_when_no_update_dir(tmp_path: Path) -> None:
+    """apply_staged_update returns None when update/ does not exist."""
+    app_root = tmp_path
+    assert apply_staged_update(app_root=app_root) is None
+
+
+def test_apply_staged_update_returns_none_when_update_dir_empty(tmp_path: Path) -> None:
+    """apply_staged_update returns None when update/ exists but has no files."""
+    app_root = tmp_path
+    (app_root / "update").mkdir()
+    assert apply_staged_update(app_root=app_root) is None
