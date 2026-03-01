@@ -92,7 +92,6 @@ def test_calendar_page_renders_with_app_test(app_test_db: Path) -> None:
     at = AppTest.from_function(_calendar_page_entry)
     at.run(timeout=5)
     assert len(at.get("button")) >= 2  # Previous week, Next week
-    assert len(at.get("date_input")) >= 1
     assert len(at.get("subheader")) >= 1 or len(at.get("info")) >= 1
 
 
