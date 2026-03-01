@@ -3,6 +3,11 @@
 ## 2026.3.1 [Recommended]
 
 - **Todo table autosave:** Reverted to snapshot-diff after render (no `on_change`): changes are saved when the table state differs from the last saved snapshot at the end of each run, matching pre-2026.2.24 behavior.
+- **Code quality:** Removed unused code (`get_session`, no-op `_init_session_state`), fixed package `__version__` to re-export from `handoff.version`, re-enabled Analytics in the nav, and corrected `_clear_pycache` to only clear `app_root` and `app_root/src` (removed non-existent `pages` path).
+- **Performance:** Todos now load projects in one query via `selectinload(Todo.project)` (fixes N+1). The Todos page calls `list_helpers()` once per run and passes the result to filters and column config. Doc markdown (README, RELEASE_NOTES) is cached in session state to avoid repeated file I/O.
+- **DRY:** Shared `handoff.dates.week_bounds(reference)` for Monday–Sunday week logic used by todos deadline presets and the calendar. Updater zip parsing (VERSION + member list) extracted into `_read_patch_members(zf)` and reused by `extract_patch_to_staging` and `apply_patch_zip`.
+- **Readability:** Todos page refactors: `_row_equals` uses `_normalize_str_field` and `_normalize_deadline_for_compare`; `_save_rows` uses `_parse_previous_snapshot`; `_apply_native_filters` delegates to `_apply_dataframe_filters`; `_render_editable_table` uses `_compute_defaults_from_filters` and `_sort_and_build_display_df`.
+- **Test:** Calendar smoke test no longer expects a `date_input` widget (date picker is commented out in the UI).
 
 ## 2026.3.0 [Recommended]
 
