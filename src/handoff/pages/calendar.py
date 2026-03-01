@@ -63,6 +63,9 @@ def render_calendar_page() -> None:
     start_dt, end_dt = _get_week_bounds(reference_date)
     days = [start_dt.date() + timedelta(days=i) for i in range(7)]
 
+    if selected_date_key not in st.session_state:
+        st.session_state[selected_date_key] = reference_date
+
     # Navigation row: same 7 columns as day columns so "Previous" aligns with Monday,
     # "Next week" with Sunday. Handle Prev/Next before rendering the date_input so we
     # can update calendar_selected_date before the widget with that key is created.
@@ -78,11 +81,7 @@ def render_calendar_page() -> None:
             st.session_state[selected_date_key] = reference_date + timedelta(days=7)
             st.rerun()
     with nav_cols[3]:
-        selected_date = st.date_input(
-            "View week of",
-            value=reference_date,
-            key=selected_date_key,
-        )
+        selected_date = st.date_input("View week of", key=selected_date_key)
         if selected_date != reference_date:
             delta_days = (selected_date - today).days
             st.session_state[offset_key] = delta_days // 7
