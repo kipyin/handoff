@@ -9,7 +9,7 @@ from handoff.data import (
     archive_project,
     create_project,
     delete_project,
-    list_projects,
+    get_projects_with_todo_summary,
     rename_project,
     unarchive_project,
 )
@@ -85,23 +85,23 @@ def render_projects_page() -> None:
     st.subheader("Projects")
     _render_create_project_form()
 
-    show_archived = st.checkbox(
-        "Show archived projects",
-        key="projects_show_archived",
-    )
-
-    projects = list_projects(include_archived=show_archived)
-    if not projects:
+    summary_list = get_projects_with_todo_summary(include_archived=False)
+    if not summary_list:
         st.info("No projects yet. Use the form above to create the first project.")
         return
 
+    projects = [item["project"] for item in summary_list]
     rows = []
-    for p in projects:
+    for item in summary_list:
+        p = item["project"]
         rows.append(
             {
                 "__project_id": p.id,
                 "name": p.name,
                 "is_archived": getattr(p, "is_archived", False),
+                "handoff": item["handoff"],
+                "done": item["done"],
+                "canceled": item["canceled"],
                 "confirm_delete": False,
             }
         )
@@ -117,11 +117,14 @@ def render_projects_page() -> None:
         height="content",
         key="projects_table",
         hide_index=True,
-        column_order=["name", "is_archived", "confirm_delete"],
+        column_order=["name", "is_archived", "handoff", "done", "canceled", "confirm_delete"],
         column_config={
             "__project_id": None,
             "name": st.column_config.TextColumn("Project name", required=True),
             "is_archived": st.column_config.CheckboxColumn("Archived", default=False),
+            "handoff": st.column_config.NumberColumn("Handoff", disabled=True),
+            "done": st.column_config.NumberColumn("Done", disabled=True),
+            "canceled": st.column_config.NumberColumn("Canceled", disabled=True),
             "confirm_delete": st.column_config.CheckboxColumn(
                 "Delete",
                 default=False,

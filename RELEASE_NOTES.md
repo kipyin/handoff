@@ -2,6 +2,8 @@
 
 ## 2026.3.1 [Recommended]
 
+- **Update backup and UI:** When you run `run.bat` after staging an update, the app now creates a timestamped backup of overwritten files under `backup/YYYYMMDD-HHMMSS/` before applying the patch (previously no backup was created in the staging flow). The next time you open the **Settings** page, the app shows a one-time message with the backup path; the "Restore from backup" section lists snapshots as before.
+- **Projects page:** Removed the "Show archived projects" checkbox; the page now lists only active (non-archived) projects. Added read-only todo statistics next to each project: handoff, done, and canceled counts.
 - **Patch command rename:** The patch build script and CLI command have been renamed from `build-obfuscated-patch` to `build-patch`. Use `uv run handoff build-patch` (after `build-zip`) for patch builds; the script is now `scripts/build_patch.py`.
 - **Docstrings:** Standardized all module and function docstrings to Google style across the codebase. Summary lines, optional extended descriptions, and consistent Args/Returns/Raises (and Yields where relevant) are used in handoff, app, scripts, and tests. Sphinx/reST markup (:mod:, :func:, inline literals) has been removed in favour of plain prose so documentation is tooling-agnostic and readable in source.
 - **Todo table autosave:** Reverted to snapshot-diff after render (no `on_change`): changes are saved when the table state differs from the last saved snapshot at the end of each run, matching pre-2026.2.24 behavior.
