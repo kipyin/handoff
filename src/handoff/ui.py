@@ -18,14 +18,6 @@ from .pages.settings import render_settings_page as _render_settings_page_impl
 from .pages.todos import render_todos_page as _render_todos_page_impl
 
 
-def _init_session_state() -> None:
-    """Initialize Streamlit session defaults."""
-    defaults: dict[str, object] = {}
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
-
-
 def setup(app_version: str) -> None:
     """Initialise global layout and database.
 
@@ -34,6 +26,7 @@ def setup(app_version: str) -> None:
 
     Args:
         app_version: Application version string for display.
+
     """
     configure_logging()
     st.set_page_config(page_title="Handoff", page_icon="📥", layout="wide")
@@ -47,7 +40,6 @@ def setup(app_version: str) -> None:
             "See the log file for technical details.",
         )
         st.stop()
-    _init_session_state()
 
 
 def render_todos_page() -> None:
