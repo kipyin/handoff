@@ -1,10 +1,10 @@
 """Data access helpers for projects/todos and common query workflows."""
 
-import json
 from datetime import UTC, datetime
 from typing import Any
 
 from loguru import logger
+from sqlalchemy.orm import selectinload
 from sqlmodel import or_, select
 
 from handoff.db import session_context
@@ -13,40 +13,15 @@ from handoff.models import Project, Todo, TodoStatus
 _UNSET = object()
 
 
-def helpers_from_db(raw: str | None) -> list[str]:
-    """Parse helper column value (JSON array or legacy single string) to list of names."""
-    if not raw or not raw.strip():
-        return []
-    s = raw.strip()
-    if s.startswith("["):
-        try:
-            parsed = json.loads(s)
-            if isinstance(parsed, list):
-                return [str(x).strip() for x in parsed if str(x).strip()]
-            return []
-        except (json.JSONDecodeError, TypeError):
-            return [s] if s else []
-    return [s] if s else []
+def _helper_to_db(helper: str | list[str] | None) -> str | None:
+    """Coerce helper to a single trimmed string for DB storage.
 
+    Args:
+        helper: A single string, list of strings, or None.
 
-def _helpers_to_db(helpers: str | list[str] | None) -> str | None:
-    """Serialize helpers (list or single string) to JSON array string for DB."""
-    if helpers is None:
-        return None
-    if isinstance(helpers, str):
-        cleaned = helpers.strip()
-        return json.dumps([cleaned]) if cleaned else None
-    if isinstance(helpers, list):
-        names = [str(x).strip() for x in helpers if str(x).strip()]
-        return json.dumps(names) if names else None
-    return None
+    Returns:
+        Trimmed string, or None if empty or not provided.
 
-
-def normalize_helper_name(helper: str | list[str] | None) -> str | None:
-    """Return a normalized single-helper value for backward compatibility.
-
-    For list input, returns the first helper or None. Used where a single
-    default is needed (e.g. new row default). For full list use _helpers_from_db.
     """
     if helper is None:
         return None
@@ -67,6 +42,7 @@ def create_project(name: str) -> Project:
 
     Returns:
         The created Project.
+
     """
     with session_context() as session:
         project = Project(name=name)
@@ -85,6 +61,10 @@ def list_projects(*, include_archived: bool = False) -> list[Project]:
     Args:
         include_archived: When True, include archived projects; otherwise only
             active projects are returned.
+
+    Returns:
+        List of projects, newest first.
+
     """
     with session_context() as session:
         stmt = select(Project).order_by(Project.created_at.desc())
@@ -94,7 +74,15 @@ def list_projects(*, include_archived: bool = False) -> list[Project]:
 
 
 def get_project(project_id: int) -> Project | None:
-    """Return a project by id with its todos loaded."""
+    """Return a project by id with its todos loaded.
+
+    Args:
+        project_id: Id of the project.
+
+    Returns:
+        The project with todos eagerly loaded, or None if not found.
+
+    """
     with session_context() as session:
         project = session.get(Project, project_id)
         if project:
@@ -118,11 +106,12 @@ def create_todo(
         name: Todo title/name.
         status: One of handoff, done, canceled.
         deadline: Optional due date/time.
-        helper: Optional assignee(s): single name, or list of names (stored as JSON).
+        helper: Optional assignee name (single string).
         notes: Optional text (can include links, file paths, etc.).
 
     Returns:
         The created Todo.
+
     """
     with session_context() as session:
         todo = Todo(
@@ -130,7 +119,7 @@ def create_todo(
             name=name,
             status=status,
             deadline=deadline,
-            helper=_helpers_to_db(helper),
+            helper=_helper_to_db(helper),
             notes=notes or None,
         )
         session.add(todo)
@@ -149,7 +138,21 @@ def update_todo(
     helper: str | list[str] | None | object = _UNSET,
     notes: str | None | object = _UNSET,
 ) -> Todo | None:
-    """Update a todo by id. Only provided fields are updated."""
+    """Update a todo by id. Only provided fields are updated.
+
+    Args:
+        todo_id: Id of the todo to update.
+        project_id: Optional new project id.
+        name: Optional new name.
+        status: Optional new status.
+        deadline: Optional new deadline.
+        helper: Optional new helper (string or list).
+        notes: Optional new notes.
+
+    Returns:
+        Updated todo, or None if not found.
+
+    """
     with session_context() as session:
         todo = session.get(Todo, todo_id)
         if not todo:
@@ -165,7 +168,7 @@ def update_todo(
         if deadline is not _UNSET:
             todo.deadline = deadline
         if helper is not _UNSET:
-            todo.helper = _helpers_to_db(helper)
+            todo.helper = _helper_to_db(helper)
         if notes is not _UNSET:
             todo.notes = notes
         # Track when a todo is marked as done.
@@ -195,6 +198,7 @@ def delete_todo(todo_id: int) -> bool:
 
     Returns:
         True when deleted, otherwise False.
+
     """
     with session_context() as session:
         todo = session.get(Todo, todo_id)
@@ -227,27 +231,23 @@ def query_todos(
         start: Optional inclusive deadline lower bound.
         end: Optional inclusive deadline upper bound.
         search_text: Optional free-text search against name/notes/helper.
+        include_archived: When True, include archived todos; otherwise exclude them.
 
     Returns:
         Matching todos ordered by deadline then created_at.
+
     """
     with session_context() as session:
-        stmt = select(Todo)
+        stmt = select(Todo).options(selectinload(Todo.project))
         if not include_archived:
             stmt = stmt.where(Todo.is_archived.is_(False))
 
         if project_ids:
             stmt = stmt.where(Todo.project_id.in_(project_ids))
 
-        normalized_helper = normalize_helper_name(helper_name)
-        if normalized_helper:
-            # Match JSON array (e.g. ["Alice"]) or legacy plain string
-            stmt = stmt.where(
-                or_(
-                    Todo.helper.ilike(f'%"{normalized_helper}"%'),
-                    Todo.helper.ilike(f"%{normalized_helper}%"),
-                )
-            )
+        helper_stripped = (helper_name or "").strip()
+        if helper_stripped:
+            stmt = stmt.where(Todo.helper.ilike(f"%{helper_stripped}%"))
 
         if statuses:
             stmt = stmt.where(Todo.status.in_(statuses))
@@ -270,13 +270,11 @@ def query_todos(
 
         stmt = stmt.order_by(Todo.deadline.asc().nulls_last(), Todo.created_at.asc())
         todos = list(session.exec(stmt).all())
-        for todo in todos:
-            todo.project = session.get(Project, todo.project_id)
 
         filters_applied = any(
             [
                 project_ids,
-                normalized_helper,
+                bool(helper_stripped),
                 statuses,
                 start is not None,
                 end is not None,
@@ -287,8 +285,8 @@ def query_todos(
             parts = []
             if project_ids:
                 parts.append(f"project_ids={project_ids}")
-            if normalized_helper:
-                parts.append(f"helper={normalized_helper!r}")
+            if helper_stripped:
+                parts.append(f"helper={helper_stripped!r}")
             if statuses:
                 parts.append(f"statuses={[s.value for s in statuses]}")
             if start is not None:
@@ -306,37 +304,24 @@ def query_todos(
         return todos
 
 
-def get_todos_by_project(project_id: int) -> list[Todo]:
-    """Return all todos for a project, ordered by deadline (nulls last) then created_at."""
-    return query_todos(project_ids=[project_id])
-
-
-def get_todos_by_helper(helper_name: str) -> list[Todo]:
-    """Return all todos across all projects assigned to the given helper."""
-    return query_todos(helper_name=helper_name)
-
-
-def get_todos_by_timeframe(
-    start: datetime,
-    end: datetime,
-) -> list[Todo]:
-    """Return all todos whose deadline falls within [start, end] (inclusive of day)."""
-    return query_todos(start=start, end=end)
-
-
 def list_helpers() -> list[str]:
-    """Return all distinct helper names (from JSON array or legacy single value), sorted."""
+    """Return all distinct helper names (plain string column), sorted.
+
+    Returns:
+        Sorted list of unique non-empty helper names.
+
+    """
     with session_context() as session:
         stmt = select(Todo.helper).where(Todo.helper.isnot(None))
         raw_values = session.exec(stmt).all()
         canonical_by_lower: dict[str, str] = {}
         for raw in raw_values:
-            for name in helpers_from_db(raw):
-                if not name:
-                    continue
-                lowered = name.lower()
-                if lowered not in canonical_by_lower:
-                    canonical_by_lower[lowered] = name
+            name = (raw or "").strip()
+            if not name:
+                continue
+            lowered = name.lower()
+            if lowered not in canonical_by_lower:
+                canonical_by_lower[lowered] = name
         return sorted(canonical_by_lower.values(), key=str.lower)
 
 
@@ -349,6 +334,7 @@ def rename_project(project_id: int, name: str) -> Project | None:
 
     Returns:
         Updated project, or None when not found.
+
     """
     with session_context() as session:
         project = session.get(Project, project_id)
@@ -371,6 +357,7 @@ def delete_project(project_id: int) -> bool:
 
     Returns:
         True when deleted, otherwise False.
+
     """
     with session_context() as session:
         project = session.get(Project, project_id)
@@ -401,6 +388,7 @@ def archive_project(project_id: int, *, archive_todos: bool = True) -> bool:
 
     Returns:
         True when archived, otherwise False.
+
     """
     with session_context() as session:
         project = session.get(Project, project_id)
@@ -433,6 +421,7 @@ def unarchive_project(project_id: int) -> bool:
 
     Returns:
         True when unarchived, otherwise False.
+
     """
     with session_context() as session:
         project = session.get(Project, project_id)
@@ -454,6 +443,7 @@ def archive_todo(todo_id: int) -> bool:
 
     Returns:
         True when archived, otherwise False.
+
     """
     with session_context() as session:
         todo = session.get(Todo, todo_id)
@@ -475,6 +465,7 @@ def unarchive_todo(todo_id: int) -> bool:
 
     Returns:
         True when unarchived, otherwise False.
+
     """
     with session_context() as session:
         todo = session.get(Todo, todo_id)
@@ -489,7 +480,12 @@ def unarchive_todo(todo_id: int) -> bool:
 
 
 def get_export_payload() -> dict[str, Any]:
-    """Return JSON-serializable snapshot of projects and todos."""
+    """Return JSON-serializable snapshot of projects and todos.
+
+    Returns:
+        Dict with "projects" and "todos" keys, each a list of serialized records.
+
+    """
     with session_context() as session:
         projects = list(session.exec(select(Project).order_by(Project.created_at.asc())).all())
         todos = list(session.exec(select(Todo).order_by(Todo.created_at.asc())).all())
@@ -531,6 +527,13 @@ def get_projects_with_todo_summary(*, include_archived: bool = False) -> list[di
     - ``handoff``: Todos with status ``handoff``.
     - ``done``: Todos with status ``done``.
     - ``canceled``: Todos with status ``canceled``.
+
+    Args:
+        include_archived: When True, include archived projects.
+
+    Returns:
+        List of dicts with project, total, handoff, done, and canceled keys.
+
     """
     projects = list_projects(include_archived=include_archived)
     if not projects:

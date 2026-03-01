@@ -7,12 +7,22 @@ from datetime import date, datetime, time, timedelta
 
 import streamlit as st
 
-from handoff.data import get_todos_by_timeframe, update_todo
+from handoff.data import query_todos, update_todo
+from handoff.dates import week_bounds
 from handoff.models import Todo, TodoStatus
 
 
 def _urgency_for_display(deadline_date: date | None, status_value: str) -> str:
-    """Return urgency bucket for calendar display only (overdue, today, soon, none)."""
+    """Return urgency bucket for calendar display only (overdue, today, soon, none).
+
+    Args:
+        deadline_date: Todo deadline date, or None.
+        status_value: Todo status value (e.g. handoff, done).
+
+    Returns:
+        One of "overdue", "today", "soon", or "none".
+
+    """
     if status_value != TodoStatus.DELEGATED.value:
         return "none"
     if deadline_date is None:
@@ -22,26 +32,38 @@ def _urgency_for_display(deadline_date: date | None, status_value: str) -> str:
         return "overdue"
     if deadline_date == today:
         return "today"
-    weekday = today.weekday()
-    monday = today - timedelta(days=weekday)
-    sunday = monday + timedelta(days=6)
+    _, sunday = week_bounds(today)
     if today < deadline_date <= sunday:
         return "soon"
     return "none"
 
 
 def _get_week_bounds(reference: date) -> tuple[datetime, datetime]:
-    """Return start and end datetimes for the week containing reference date."""
-    weekday = reference.weekday()
-    monday = reference - timedelta(days=weekday)
-    sunday = monday + timedelta(days=6)
+    """Return start and end datetimes for the week containing reference date.
+
+    Args:
+        reference: Any date in the target week.
+
+    Returns:
+        Tuple of (monday 00:00, sunday 23:59:59) for that week.
+
+    """
+    monday, sunday = week_bounds(reference)
     start_dt = datetime.combine(monday, datetime.min.time())
     end_dt = datetime.combine(sunday, datetime.max.time())
     return start_dt, end_dt
 
 
 def _group_todos_by_day(todos: list[Todo]) -> dict[date, list[Todo]]:
-    """Group todos by their deadline date."""
+    """Group todos by their deadline date.
+
+    Args:
+        todos: List of todos (with deadline set).
+
+    Returns:
+        Dict mapping each deadline date to list of todos for that day.
+
+    """
     grouped: dict[date, list[Todo]] = defaultdict(list)
     for todo in todos:
         if not todo.deadline:
@@ -55,7 +77,6 @@ def render_calendar_page() -> None:
     """Render a week-at-a-glance view of todos."""
     today = date.today()
     offset_key = "calendar_week_offset"
-    selected_date_key = "calendar_selected_date"
 
     week_offset = int(st.session_state.get(offset_key, 0))
     reference_date = today + timedelta(weeks=week_offset)
@@ -63,33 +84,28 @@ def render_calendar_page() -> None:
     start_dt, end_dt = _get_week_bounds(reference_date)
     days = [start_dt.date() + timedelta(days=i) for i in range(7)]
 
-    if selected_date_key not in st.session_state:
-        st.session_state[selected_date_key] = reference_date
-
-    # Navigation row: same 7 columns as day columns so "Previous" aligns with Monday,
-    # "Next week" with Sunday. Handle Prev/Next before rendering the date_input so we
-    # can update calendar_selected_date before the widget with that key is created.
+    # Navigation row: Prev/Next week only (date picker removed to avoid session_state conflict).
     nav_cols = st.columns(7)
     with nav_cols[0]:
         if st.button("← Previous week", key="calendar_prev"):
             st.session_state[offset_key] = week_offset - 1
-            st.session_state[selected_date_key] = reference_date + timedelta(days=-7)
             st.rerun()
     with nav_cols[6]:
         if st.button("Next week →", key="calendar_next"):
             st.session_state[offset_key] = week_offset + 1
-            st.session_state[selected_date_key] = reference_date + timedelta(days=7)
             st.rerun()
-    with nav_cols[3]:
-        selected_date = st.date_input("View week of", key=selected_date_key)
-        if selected_date != reference_date:
-            delta_days = (selected_date - today).days
-            st.session_state[offset_key] = delta_days // 7
-            st.rerun()
+    # Date picker commented out: updating session_state[calendar_selected_date] in button
+    # callbacks after the date_input widget owns that key causes StreamlitAPIException.
+    # with nav_cols[3]:
+    #     selected_date = st.date_input("View week of", key="calendar_selected_date")
+    #     if selected_date != reference_date:
+    #         delta_days = (selected_date - today).days
+    #         st.session_state[offset_key] = delta_days // 7
+    #         st.rerun()
 
     st.subheader(f"Week of {start_dt.date().isoformat()} – {end_dt.date().isoformat()}")
 
-    todos = get_todos_by_timeframe(start_dt, end_dt)
+    todos = query_todos(start=start_dt, end=end_dt)
     grouped = _group_todos_by_day(todos)
 
     if not todos:

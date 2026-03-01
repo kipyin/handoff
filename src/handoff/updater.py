@@ -19,8 +19,44 @@ ALLOWED_PREFIXES = ("app.py", "src/", "README.md", "RELEASE_NOTES.md")
 UPDATE_STAGING_DIR = "update"
 
 
+def _read_patch_members(zf: zipfile.ZipFile) -> tuple[list[str], str | None]:
+    """Read patch zip member names and optional VERSION from an open ZipFile.
+
+    Skips directories and VERSION; includes only names that start with ALLOWED_PREFIXES.
+    Logs a warning for any other non-directory entry.
+
+    Args:
+        zf: An open zipfile.ZipFile positioned at the start.
+
+    Returns:
+        Tuple of (list of member paths to extract, optional version string from VERSION file).
+    """
+    namelist = zf.namelist()
+    target_version = None
+    if "VERSION" in namelist:
+        with zf.open("VERSION") as vf:
+            target_version = vf.read().decode("utf-8").strip()
+
+    members = []
+    for name in namelist:
+        if name.endswith("/"):
+            continue
+        if name == "VERSION":
+            continue
+        if name.startswith(ALLOWED_PREFIXES):
+            members.append(name)
+        else:
+            logger.warning("Skipping unexpected path in patch zip: {}", name)
+    return members, target_version
+
+
 def _get_app_root() -> Path:
-    """Return the root directory where app.py lives."""
+    """Return the root directory where app.py lives.
+
+    Returns:
+        Path to the application root (parent of src/).
+
+    """
     return Path(__file__).resolve().parents[2]
 
 
@@ -37,28 +73,14 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
 
     Returns:
         A human-readable status message.
+
     """
     if app_root is None:
         app_root = _get_app_root()
 
     file_like.seek(0)
     with zipfile.ZipFile(file_like) as zf:
-        namelist = zf.namelist()
-        target_version = None
-        if "VERSION" in namelist:
-            with zf.open("VERSION") as vf:
-                target_version = vf.read().decode("utf-8").strip()
-
-        members = []
-        for name in namelist:
-            if name.endswith("/"):
-                continue
-            if name == "VERSION":
-                continue
-            if name.startswith(ALLOWED_PREFIXES):
-                members.append(name)
-            else:
-                logger.warning("Skipping unexpected path in patch zip: {}", name)
+        members, target_version = _read_patch_members(zf)
 
         if not members:
             return "No applicable files found in patch zip."
@@ -98,29 +120,14 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
 
     Returns:
         A human-readable status message.
+
     """
     if app_root is None:
         app_root = _get_app_root()
 
     file_like.seek(0)
     with zipfile.ZipFile(file_like) as zf:
-        namelist = zf.namelist()
-        target_version = None
-        if "VERSION" in namelist:
-            with zf.open("VERSION") as vf:
-                target_version = vf.read().decode("utf-8").strip()
-
-        # Build list of files to extract, enforcing allowed prefixes.
-        members = []
-        for name in namelist:
-            if name.endswith("/"):
-                continue
-            if name == "VERSION":
-                continue
-            if name.startswith(ALLOWED_PREFIXES):
-                members.append(name)
-            else:
-                logger.warning("Skipping unexpected path in patch zip: {}", name)
+        members, target_version = _read_patch_members(zf)
 
         if not members:
             return "No applicable files found in patch zip."
@@ -175,7 +182,7 @@ def _clear_pycache(app_root: Path) -> None:
     updated by the patch so that Python regenerates fresh bytecode for the new
     sources on next start.
     """
-    for base in (app_root, app_root / "src", app_root / "pages"):
+    for base in (app_root, app_root / "src"):
         if not base.exists():
             continue
         for pycache_dir in base.rglob("__pycache__"):
@@ -184,7 +191,15 @@ def _clear_pycache(app_root: Path) -> None:
 
 
 def _get_backup_root(app_root: Path) -> Path:
-    """Return the directory that holds timestamped backup snapshots."""
+    """Return the directory that holds timestamped backup snapshots.
+
+    Args:
+        app_root: Application root directory.
+
+    Returns:
+        Path to the backup directory (app_root/backup).
+
+    """
     return app_root / "backup"
 
 
@@ -194,6 +209,13 @@ def _iter_backup_snapshots(app_root: Path) -> list[Path]:
     Snapshots are created by :func:`apply_patch_zip` under
     ``backup/<YYYYMMDD-HHMMSS>/``. This helper filters for directories only and
     sorts them in reverse chronological order based on their folder names.
+
+    Args:
+        app_root: Application root directory.
+
+    Returns:
+        List of snapshot paths, newest first.
+
     """
     backup_root = _get_backup_root(app_root)
     if not backup_root.exists():
@@ -205,7 +227,15 @@ def _iter_backup_snapshots(app_root: Path) -> list[Path]:
 
 
 def _format_snapshot_label(snapshot: Path) -> str:
-    """Return a human-friendly label for a backup snapshot directory."""
+    """Return a human-friendly label for a backup snapshot directory.
+
+    Args:
+        snapshot: Path to a timestamped backup directory.
+
+    Returns:
+        Formatted date string (e.g. YYYY-MM-DD HH:MM:SS), or directory name if not parseable.
+
+    """
     name = snapshot.name
     try:
         dt = datetime.strptime(name, "%Y%m%d-%H%M%S")
@@ -223,6 +253,7 @@ def _restore_backup_snapshot(snapshot: Path, app_root: Path) -> str:
 
     Returns:
         A human-readable status message.
+
     """
     if not snapshot.exists() or not snapshot.is_dir():
         raise FileNotFoundError(f"Backup snapshot not found: {snapshot}")
@@ -249,6 +280,7 @@ def _schedule_shutdown(delay_seconds: float = 2.0) -> None:
 
     Args:
         delay_seconds: Number of seconds to wait before exiting.
+
     """
 
     def _shutdown() -> None:
@@ -260,7 +292,15 @@ def _schedule_shutdown(delay_seconds: float = 2.0) -> None:
 
 
 def _parse_version(version_str: str) -> tuple[int, ...]:
-    """Parse a version string like '2026.2.23' into a comparable tuple of ints."""
+    """Parse a version string like '2026.2.23' into a comparable tuple of ints.
+
+    Args:
+        version_str: Version string (e.g. 2026.2.23).
+
+    Returns:
+        Tuple of integers for lexicographic comparison.
+
+    """
     parts = version_str.strip().split(".")
     result = []
     for p in parts:
@@ -279,6 +319,7 @@ def get_patch_version(file_like: BinaryIO) -> str | None:
 
     Returns:
         The patch target version string, or None if no VERSION file is present.
+
     """
     file_like.seek(0)
     with zipfile.ZipFile(file_like) as zf:
@@ -297,6 +338,7 @@ def render_update_panel(app_version: str) -> None:
 
     Args:
         app_version: Current app version string (e.g. from handoff.version.__version__).
+
     """
     st.markdown("### App updates")
     st.caption(

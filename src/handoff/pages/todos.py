@@ -21,6 +21,7 @@ from handoff.data import (
     query_todos,
     update_todo,
 )
+from handoff.dates import week_bounds
 from handoff.models import TodoStatus
 
 # Deadline filter presets (used by table filters and tests).
@@ -48,6 +49,7 @@ def _deadline_preset_bounds(preset: str) -> tuple[date | None, date | None]:
 
     Returns:
         Tuple of (start_date, end_date); (None, None) for Any or Custom.
+
     """
     today = date.today()
     if preset == DEADLINE_ANY:
@@ -58,9 +60,7 @@ def _deadline_preset_bounds(preset: str) -> tuple[date | None, date | None]:
         tomorrow = today + timedelta(days=1)
         return tomorrow, tomorrow
     if preset == DEADLINE_THIS_WEEK:
-        weekday = today.weekday()
-        monday = today - timedelta(days=weekday)
-        sunday = monday + timedelta(days=6)
+        monday, sunday = week_bounds(today)
         return monday, sunday
     return None, None
 
@@ -73,6 +73,7 @@ def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
 
     Returns:
         Tuple of (datetime or None, error message or None).
+
     """
     if raw_value is None or raw_value == "":
         return None, None
@@ -100,6 +101,7 @@ def _build_todo_dataframe(todos: list) -> pd.DataFrame:
 
     Returns:
         DataFrame with columns id, project, name, status, helper, deadline, notes, created_at.
+
     """
     rows = []
     for todo in todos:
@@ -137,6 +139,7 @@ def _apply_native_filters(
     *,
     key_prefix: str,
     project_names: list[str],
+    helper_options: list[str],
 ) -> tuple[pd.DataFrame, dict]:
     """Apply filters; return (filtered_df, filter_state).
 
@@ -144,9 +147,11 @@ def _apply_native_filters(
         source_df: Full todos DataFrame.
         key_prefix: Streamlit key prefix for filter widgets.
         project_names: List of project names for the project filter.
+        helper_options: List of helper names for the helper filter (avoids repeated DB calls).
 
     Returns:
         Tuple of (filtered DataFrame, filter_state dict with project_filters, etc.).
+
     """
     cols = st.columns([2.2, 1.5, 1.5, 1.5, 1.1])
     with cols[0]:
@@ -171,7 +176,7 @@ def _apply_native_filters(
     with cols[3]:
         helper_filters = st.multiselect(
             "Helper",
-            options=list_helpers(),
+            options=helper_options,
             key=f"{key_prefix}_helper",
         )
     with cols[4]:
@@ -203,7 +208,22 @@ def _apply_native_filters(
         "status_filters": status_filters,
         "helper_filters": helper_filters,
     }
+    filtered_df = _apply_dataframe_filters(
+        source_df, query, status_filters, project_filters, helper_filters, start_date, end_date
+    )
+    return filtered_df, filter_state
 
+
+def _apply_dataframe_filters(
+    source_df: pd.DataFrame,
+    query: str,
+    status_filters: list[str],
+    project_filters: list[str],
+    helper_filters: list[str],
+    start_date: date | None,
+    end_date: date | None,
+) -> pd.DataFrame:
+    """Apply filter criteria to a todos DataFrame; returns filtered copy."""
     filtered_df = source_df.copy()
     if query:
         searchable_cols = ["name", "notes", "helper", "project"]
@@ -234,8 +254,74 @@ def _apply_native_filters(
             & (deadline_series <= end_date)
         )
         filtered_df = filtered_df[mask]
+    return filtered_df
 
-    return filtered_df, filter_state
+
+def _compute_defaults_from_filters(
+    filter_state: dict,
+    project_by_name: dict,
+    projects: list,
+) -> tuple[int | None, str | None, str, str]:
+    """Compute default project, status, and helper from filter state and project list.
+
+    Returns:
+        (default_project_id, default_project_name, default_status, default_helper).
+    """
+    project_filters = filter_state.get("project_filters", [])
+    status_filters = filter_state.get("status_filters", [])
+    helper_filters = filter_state.get("helper_filters", [])
+    default_project_id: int | None = None
+    default_project_name: str | None = None
+    if len(project_filters) == 1 and project_filters[0] in project_by_name:
+        default_project_name = project_filters[0]
+        default_project_id = project_by_name[default_project_name].id
+    if default_project_id is None and projects:
+        default_project_id = projects[0].id
+        default_project_name = projects[0].name
+    default_status = (
+        status_filters[0] if len(status_filters) == 1 else TodoStatus.DELEGATED.value
+    )
+    default_helper = helper_filters[0] if len(helper_filters) == 1 else ""
+    return default_project_id, default_project_name, default_status, default_helper
+
+
+def _sort_and_build_display_df(
+    filtered_df: pd.DataFrame, sort_col: str, sort_asc: bool
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Sort filtered todos DataFrame and build working_df and display_df.
+
+    Returns:
+        (working_df with __todo_id and __created_at, display_df without id/created_at).
+    """
+    if not filtered_df.empty and sort_col in filtered_df.columns:
+        filtered_df = filtered_df.sort_values(
+            by=sort_col,
+            ascending=sort_asc,
+            na_position="last",
+        ).reset_index(drop=True)
+    working_df = filtered_df.reset_index(drop=True).copy()
+    working_df["__todo_id"] = working_df.get("id")
+    working_df["__created_at"] = working_df.get("created_at")
+    display_df = working_df.drop(columns=["id", "created_at"], errors="ignore").reset_index(
+        drop=True
+    )
+    return working_df, display_df
+
+
+def _normalize_str_field(row: dict, key: str) -> str:
+    """Return trimmed string value for a row field, or empty string."""
+    return (row.get(key) or "").strip()
+
+
+def _normalize_deadline_for_compare(val: object) -> date | None:
+    """Normalize deadline value to date for comparison, or None."""
+    if val is None:
+        return None
+    if hasattr(val, "date") and callable(val.date):
+        return val.date()
+    if isinstance(val, str):
+        return datetime.fromisoformat(val[:10]).date()
+    return None
 
 
 def _row_equals(current: dict, prev: dict) -> bool:
@@ -247,42 +333,43 @@ def _row_equals(current: dict, prev: dict) -> bool:
 
     Returns:
         True if all persistable fields match.
+
     """
-    if current.get("project", "").strip() != (prev.get("project") or "").strip():
+    if _normalize_str_field(current, "project") != _normalize_str_field(prev, "project"):
         return False
-    if (current.get("name") or "").strip() != (prev.get("name") or "").strip():
+    if _normalize_str_field(current, "name") != _normalize_str_field(prev, "name"):
         return False
-    if (current.get("status") or "").strip() != (prev.get("status") or "").strip():
+    if _normalize_str_field(current, "status") != _normalize_str_field(prev, "status"):
         return False
-    c_notes = (current.get("notes") or "").strip() or None
-    p_notes = (prev.get("notes") or "").strip() or None
+    c_notes = _normalize_str_field(current, "notes") or None
+    p_notes = _normalize_str_field(prev, "notes") or None
     if c_notes != p_notes:
         return False
-    curr_helper = (current.get("helper") or "").strip() or None
-    prev_helper = (prev.get("helper") or "").strip() or None
-    if curr_helper != prev_helper:
+    if (_normalize_str_field(current, "helper") or None) != (
+        _normalize_str_field(prev, "helper") or None
+    ):
         return False
-    curr_deadline = current.get("deadline")
-    prev_deadline = prev.get("deadline")
-    if curr_deadline is None and prev_deadline is None:
+    curr_d = _normalize_deadline_for_compare(current.get("deadline"))
+    prev_d = _normalize_deadline_for_compare(prev.get("deadline"))
+    return curr_d == prev_d
+
+
+def _parse_previous_snapshot(last_snapshot_json: str | None) -> dict[int, dict]:
+    """Parse previous snapshot JSON into a mapping of todo_id -> row dict."""
+    import json as _json
+
+    prev_by_id: dict[int, dict] = {}
+    if not last_snapshot_json:
+        return prev_by_id
+    try:
+        prev_records = _json.loads(last_snapshot_json)
+        for rec in prev_records if isinstance(prev_records, list) else []:
+            tid = rec.get("__todo_id")
+            if tid is not None and not (isinstance(tid, float) and pd.isna(tid)):
+                prev_by_id[int(tid)] = rec
+    except (TypeError, ValueError):
         pass
-    elif (curr_deadline is None) != (prev_deadline is None):
-        return False
-    else:
-        curr_d = (
-            curr_deadline.date()
-            if hasattr(curr_deadline, "date") and callable(curr_deadline.date)
-            else curr_deadline
-        )
-        if isinstance(prev_deadline, str):
-            prev_d = datetime.fromisoformat(prev_deadline[:10]).date()
-        elif hasattr(prev_deadline, "date") and callable(prev_deadline.date):
-            prev_d = prev_deadline.date()
-        else:
-            prev_d = prev_deadline
-        if curr_d != prev_d:
-            return False
-    return True
+    return prev_by_id
 
 
 def _save_rows(
@@ -304,20 +391,10 @@ def _save_rows(
 
     Returns:
         Summary dict with created, updated, deleted, skipped, errors, created_ids, updated_ids.
-    """
-    import json as _json
 
+    """
     project_by_name = {project.name: project.id for project in projects}
-    prev_by_id: dict[int, dict] = {}
-    if last_snapshot_json:
-        try:
-            prev_records = _json.loads(last_snapshot_json)
-            for rec in prev_records if isinstance(prev_records, list) else []:
-                tid = rec.get("__todo_id")
-                if tid is not None and not (isinstance(tid, float) and pd.isna(tid)):
-                    prev_by_id[int(tid)] = rec
-        except (TypeError, ValueError):
-            pass
+    prev_by_id = _parse_previous_snapshot(last_snapshot_json)
 
     summary: dict[str, object] = {
         "created": 0,
@@ -424,6 +501,7 @@ def _render_editable_table(
     *,
     source_df: pd.DataFrame,
     projects: list,
+    helper_options: list[str],
     key_prefix: str,
     context_label: str,
 ) -> None:
@@ -432,8 +510,10 @@ def _render_editable_table(
     Args:
         source_df: Full todos DataFrame to display and edit.
         projects: Current list of projects (for defaults and name resolution).
+        helper_options: Helper names for filter and column config (avoids repeated DB calls).
         key_prefix: Streamlit key prefix for widgets and session state.
         context_label: Label for logging and status.
+
     """
     project_names = [project.name for project in projects]
     project_by_name = {p.name: p for p in projects}
@@ -441,25 +521,15 @@ def _render_editable_table(
         source_df,
         key_prefix=key_prefix,
         project_names=project_names,
+        helper_options=helper_options,
     )
     if filtered_df.empty:
         st.info("No rows match filters. You can still add rows and save.")
         filtered_df = source_df.head(0).copy()
 
-    project_filters = filter_state.get("project_filters", [])
-    status_filters = filter_state.get("status_filters", [])
-    helper_filters = filter_state.get("helper_filters", [])
-    default_project_id: int | None = None
-    default_project_name: str | None = None
-    if len(project_filters) == 1 and project_filters[0] in project_by_name:
-        default_project_name = project_filters[0]
-        default_project_id = project_by_name[default_project_name].id
-    if default_project_id is None and projects:
-        default_project_id = projects[0].id
-        default_project_name = projects[0].name
-    default_status = status_filters[0] if len(status_filters) == 1 else TodoStatus.DELEGATED.value
-    default_helper = helper_filters[0] if len(helper_filters) == 1 else ""
-
+    default_project_id, default_project_name, default_status, default_helper = (
+        _compute_defaults_from_filters(filter_state, project_by_name, projects)
+    )
     remember_project_key = f"{key_prefix}_last_new_project_id"
     remember_helper_key = f"{key_prefix}_last_new_helper"
     remembered_project_id = st.session_state.get(remember_project_key)
@@ -486,19 +556,7 @@ def _render_editable_table(
     if sort_col not in sortable_cols:
         sort_col = sortable_cols[0] if sortable_cols else "name"
     sort_asc = st.session_state[sort_asc_key]
-    if not filtered_df.empty and sort_col in filtered_df.columns:
-        filtered_df = filtered_df.sort_values(
-            by=sort_col,
-            ascending=sort_asc,
-            na_position="last",
-        ).reset_index(drop=True)
-
-    working_df = filtered_df.reset_index(drop=True).copy()
-    working_df["__todo_id"] = working_df.get("id")
-    working_df["__created_at"] = working_df.get("created_at")
-    display_df = working_df.drop(columns=["id", "created_at"], errors="ignore").reset_index(
-        drop=True
-    )
+    working_df, display_df = _sort_and_build_display_df(filtered_df, sort_col, sort_asc)
 
     with st.container():
         sc1, sc2, _ = st.columns([1, 1, 4])
@@ -561,6 +619,7 @@ def _render_editable_table(
 
         Returns:
             Tuple of (edited DataFrame or None, list of deleted row indices).
+
         """
         if raw is None:
             return None, []
@@ -584,6 +643,7 @@ def _render_editable_table(
             edited_df: Current edited DataFrame from the data_editor.
             display_df_ctx: Display DataFrame used for row-index to todo_id mapping.
             deleted_rows_indices: Indices of rows marked for deletion.
+
         """
         last_snapshot = st.session_state.get(ctx["snapshot_key"])
         st.session_state[ctx["status_key"]] = "saving"
@@ -694,7 +754,7 @@ def _render_editable_table(
             ),
             "helper": st.column_config.SelectboxColumn(
                 "Helper",
-                options=[""] + list_helpers(),
+                options=[""] + helper_options,
                 default=default_helper,
             ),
             "deadline": st.column_config.DateColumn("Deadline"),
@@ -733,9 +793,11 @@ def render_todos_page() -> None:
 
     todos = query_todos()
     df = _build_todo_dataframe(todos)
+    helpers = list_helpers()
     _render_editable_table(
         source_df=df,
         projects=projects,
+        helper_options=helpers,
         key_prefix="main",
         context_label="view=todos_page",
     )
