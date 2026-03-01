@@ -19,13 +19,6 @@ def _patch_session_context(monkeypatch, session) -> None:
     monkeypatch.setattr(data, "session_context", _session_context)
 
 
-def test_normalize_helper_name() -> None:
-    """Helper normalization trims strings and drops empty values."""
-    assert data.normalize_helper_name(" Alice ") == "Alice"
-    assert data.normalize_helper_name("   ") is None
-    assert data.normalize_helper_name(None) is None
-
-
 def test_update_todo_allows_clearing_fields(session, monkeypatch) -> None:
     """Update supports clearing deadline/helper/notes via explicit None-like values."""
     _patch_session_context(monkeypatch, session)

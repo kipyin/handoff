@@ -34,7 +34,7 @@ def test_deadline_preset_bounds_tomorrow() -> None:
 
 
 def test_deadline_preset_bounds_this_week() -> None:
-    """This week preset returns Monday and Sunday of current ISO week."""
+    """The this-week preset returns Monday and Sunday of current ISO week."""
     today = date.today()
     start, end = _deadline_preset_bounds(DEADLINE_THIS_WEEK)
     weekday = today.weekday()
