@@ -112,7 +112,8 @@ def render_projects_page() -> None:
     )
     edited_df = st.data_editor(
         display_df,
-        num_rows="dynamic",
+        num_rows="fixed",
+        height="content",
         key="projects_table",
         hide_index=True,
         column_order=["name", "is_archived", "confirm_delete"],
@@ -121,7 +122,7 @@ def render_projects_page() -> None:
             "name": st.column_config.TextColumn("Project name", required=True),
             "is_archived": st.column_config.CheckboxColumn("Archived", default=False),
             "confirm_delete": st.column_config.CheckboxColumn(
-                "Confirm delete",
+                "Delete",
                 default=False,
                 help="Check to mark this project for deletion. Click Save changes to apply.",
             ),
