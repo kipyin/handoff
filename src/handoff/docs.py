@@ -6,15 +6,15 @@ from .updater import _get_app_root
 
 
 def read_markdown_from_app_root(name: str) -> str:
-    """Return the contents of a markdown file located next to app.py.
+    r"""Return the contents of a markdown file located next to app.py.
 
     Args:
-        name: Filename to load (for example, ``\"README.md\"`` or
-            ``\"RELEASE_NOTES.md\"``).
+        name: Filename to load (for example, README.md or RELEASE_NOTES.md).
 
     Returns:
         File contents as a UTF-8 string, or a short placeholder message if the
         file cannot be found or read.
+
     """
     app_root = _get_app_root()
     path = app_root / name

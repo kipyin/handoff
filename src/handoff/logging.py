@@ -18,7 +18,12 @@ _CONFIGURED = False
 
 
 def _get_logs_dir() -> Path:
-    """Return the directory where log files should be written."""
+    """Return the directory where log files should be written.
+
+    Returns:
+        Path to the logs directory under user data (e.g. APPDATA on Windows).
+
+    """
     data_dir = Path(user_data_dir("handoff", "handoff"))
     logs_dir = data_dir / "logs"
     logs_dir.mkdir(parents=True, exist_ok=True)

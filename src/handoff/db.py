@@ -114,7 +114,7 @@ def init_db() -> None:
 def session_context():
     """Context manager yielding a database session.
 
-    Preferred entrypoint for DB access; used by functions in ``handoff.data`` to ensure
+    Preferred entrypoint for DB access; used by functions in handoff.data to ensure
     sessions are opened and closed consistently.
 
     Yields:

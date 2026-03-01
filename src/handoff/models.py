@@ -34,7 +34,7 @@ class Project(SQLModel, table=True):
 class Todo(SQLModel, table=True):
     """A single todo item belonging to a project.
 
-    The ``helper`` field is the person responsible for the todo; ``handoff`` status
+    The helper field is the person responsible for the todo; handoff status
     typically means the task is outstanding and assigned to that helper.
     """
 

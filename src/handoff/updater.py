@@ -1,7 +1,7 @@
 """In-app update panel and patch application helpers.
 
 Patches for PyArmor-obfuscated distributions must be built with
-``uv run handoff build-obfuscated-patch`` from the obfuscated build output.
+uv run handoff build-patch from the obfuscated build output.
 """
 
 import os
@@ -30,6 +30,7 @@ def _read_patch_members(zf: zipfile.ZipFile) -> tuple[list[str], str | None]:
 
     Returns:
         Tuple of (list of member paths to extract, optional version string from VERSION file).
+
     """
     namelist = zf.namelist()
     target_version = None
@@ -69,7 +70,7 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
     Args:
         file_like: A binary file-like object positioned at the start of the zip.
         app_root: Optional explicit application root. Defaults to the directory
-            returned by :func:`_get_app_root`.
+            returned by _get_app_root().
 
     Returns:
         A human-readable status message.
@@ -116,7 +117,7 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
     Args:
         file_like: A binary file-like object positioned at the start of the zip.
         app_root: Optional explicit application root. Defaults to the directory
-            returned by :func:`_get_app_root`.
+            returned by _get_app_root().
 
     Returns:
         A human-readable status message.
@@ -178,7 +179,7 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
 def _clear_pycache(app_root: Path) -> None:
     """Remove Python bytecode caches under the app root.
 
-    This clears ``__pycache__`` directories for the main code areas that are
+    This clears __pycache__ directories for the main code areas that are
     updated by the patch so that Python regenerates fresh bytecode for the new
     sources on next start.
     """
@@ -206,8 +207,8 @@ def _get_backup_root(app_root: Path) -> Path:
 def _iter_backup_snapshots(app_root: Path) -> list[Path]:
     """Return available backup snapshot directories, newest first.
 
-    Snapshots are created by :func:`apply_patch_zip` under
-    ``backup/<YYYYMMDD-HHMMSS>/``. This helper filters for directories only and
+    Snapshots are created by apply_patch_zip under
+    backup/YYYYMMDD-HHMMSS/. This helper filters for directories only and
     sorts them in reverse chronological order based on their folder names.
 
     Args:
@@ -248,7 +249,7 @@ def _restore_backup_snapshot(snapshot: Path, app_root: Path) -> str:
     """Restore all files from a backup snapshot into the app root.
 
     Args:
-        snapshot: Path to a timestamped backup directory under ``backup/``.
+        snapshot: Path to a timestamped backup directory under backup/.
         app_root: Application root where files should be restored.
 
     Returns:

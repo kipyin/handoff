@@ -522,11 +522,11 @@ def get_projects_with_todo_summary(*, include_archived: bool = False) -> list[di
 
     Each item contains:
 
-    - ``project``: The :class:`Project` instance.
-    - ``total``: Total todos in the project.
-    - ``handoff``: Todos with status ``handoff``.
-    - ``done``: Todos with status ``done``.
-    - ``canceled``: Todos with status ``canceled``.
+    - project: The Project instance.
+    - total: Total todos in the project.
+    - handoff: Count of todos with status handoff.
+    - done: Count of todos with status done.
+    - canceled: Count of todos with status canceled.
 
     Args:
         include_archived: When True, include archived projects.

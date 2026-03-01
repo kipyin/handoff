@@ -1,7 +1,7 @@
 """Public UI entrypoints for the Handoff app.
 
 This module provides a stable, concise import path for the Streamlit UI while
-delegating concrete page implementations to :mod:`handoff.pages`.
+delegating concrete page implementations to handoff.pages.
 """
 
 from __future__ import annotations

@@ -43,6 +43,7 @@ def _apply_project_changes(
 
     Returns:
         Tuple of (success, errors, deleted_count, updated_count).
+
     """
     project_by_id = {p.id: p for p in projects}
     errors: list[str] = []

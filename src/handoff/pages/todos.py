@@ -266,6 +266,7 @@ def _compute_defaults_from_filters(
 
     Returns:
         (default_project_id, default_project_name, default_status, default_helper).
+
     """
     project_filters = filter_state.get("project_filters", [])
     status_filters = filter_state.get("status_filters", [])
@@ -292,6 +293,7 @@ def _sort_and_build_display_df(
 
     Returns:
         (working_df with __todo_id and __created_at, display_df without id/created_at).
+
     """
     if not filtered_df.empty and sort_col in filtered_df.columns:
         filtered_df = filtered_df.sort_values(
@@ -752,11 +754,7 @@ def _render_editable_table(
                 default=default_status,
                 required=True,
             ),
-            "helper": st.column_config.SelectboxColumn(
-                "Helper",
-                options=[""] + helper_options,
-                default=default_helper,
-            ),
+            "helper": st.column_config.TextColumn("Helper", default=default_helper),
             "deadline": st.column_config.DateColumn("Deadline"),
             "notes": st.column_config.TextColumn("Notes"),
         },

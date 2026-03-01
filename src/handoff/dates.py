@@ -15,6 +15,7 @@ def week_bounds(reference: date) -> tuple[date, date]:
 
     Returns:
         Tuple of (monday_date, sunday_date) for that week.
+
     """
     weekday = reference.weekday()
     monday = reference - timedelta(days=weekday)
