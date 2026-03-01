@@ -73,7 +73,7 @@ def main() -> None:
         # st.Page(_analytics_page, title="Analytics", icon="📊"),
         # st.Page(_focus_page, title="Focus", icon="🎯"),
         st.Page(_settings_page, title="Settings", icon="⚙️"),
-        # st.Page(_docs_page, title="Docs", icon="📖"),
+        st.Page(_docs_page, title="Docs", icon="📖"),
     ]
     nav = st.navigation(pages, position="top")
     nav.run()
