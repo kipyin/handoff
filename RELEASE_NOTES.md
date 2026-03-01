@@ -2,6 +2,7 @@
 
 ## 2026.3.1 [Recommended]
 
+- **Docstrings:** Standardized all module and function docstrings to Google style across the codebase. Summary lines, optional extended descriptions, and consistent Args/Returns/Raises (and Yields where relevant) are used in handoff, app, scripts, and tests. Sphinx/reST markup (:mod:, :func:, inline literals) has been removed in favour of plain prose so documentation is tooling-agnostic and readable in source.
 - **Todo table autosave:** Reverted to snapshot-diff after render (no `on_change`): changes are saved when the table state differs from the last saved snapshot at the end of each run, matching pre-2026.2.24 behavior.
 - **Code quality:** Removed unused code (`get_session`, no-op `_init_session_state`), fixed package `__version__` to re-export from `handoff.version`, re-enabled Analytics in the nav, and corrected `_clear_pycache` to only clear `app_root` and `app_root/src` (removed non-existent `pages` path).
 - **Performance:** Todos now load projects in one query via `selectinload(Todo.project)` (fixes N+1). The Todos page calls `list_helpers()` once per run and passes the result to filters and column config. Doc markdown (README, RELEASE_NOTES) is cached in session state to avoid repeated file I/O.
@@ -48,7 +49,7 @@
 
 - **Legacy pages cleanup:** Remove legacy root `pages/` Streamlit shims (`2_Projects.py`, `3_Calendar.py`); navigation is now via `app.py` and Streamlit's `st.navigation` API only.
 - **Type checker config:** Move Pyright configuration into `[tool.pyright]` in `pyproject.toml` and remove the standalone `pyrightconfig.json` file.
-- **Patch tooling simplification:** Remove the legacy `scripts/build_patch.py` helper and associated CLI docs; use `uv run handoff build-obfuscated-patch` (after `build-zip`) for patch builds.
+- **Patch tooling simplification:** Remove the legacy `scripts/build_patch.py` helper and associated CLI docs; use `uv run handoff build-patch` (after `build-zip`) for patch builds.
 
 ## 2026.2.21 [Recommended]
 
@@ -112,7 +113,7 @@ app restart automatically into the restored state.
 ## 2026.2.12 [Recommended]
 
 - **PyArmor obfuscation:** The Windows embedded zip build (`uv run handoff build-zip`) now obfuscates the `src/handoff` package with PyArmor so that distributed code is protected while `app.py` remains readable. The PyArmor runtime is included in the zip; no extra install is required on the target machine.
-- **Obfuscated patches:** For installs that use the obfuscated embedded zip, code-only updates must be built with `uv run handoff build-obfuscated-patch` (after running `build-zip`) so that the patch contains obfuscated code and the PyArmor runtime. The standard `build-patch` command still produces source-only patches for development or non-obfuscated installs.
+- **Obfuscated patches:** For installs that use the obfuscated embedded zip, code-only updates must be built with `uv run handoff build-patch` (after running `build-zip`) so that the patch contains obfuscated code and the PyArmor runtime. The standard `build-patch` command still produces source-only patches for development or non-obfuscated installs.
 - **Build requirements:** Building the embedded zip now requires PyArmor in the dev environment (`uv sync` installs it from the dev dependency group). The trial/non-profit PyArmor build uses default obfuscation; a full license allows extra options (e.g. `--enable-jit`, `--mix-str`) if you edit `scripts/build_zip.py`.
 
 ## 2026.2.11 [Optional]
