@@ -18,7 +18,6 @@ from handoff.data import (
     delete_todo,
     list_helpers,
     list_projects,
-    normalize_helper_name,
     query_todos,
     update_todo,
 )
@@ -41,7 +40,15 @@ DEADLINE_PRESETS = [
 
 
 def _deadline_preset_bounds(preset: str) -> tuple[date | None, date | None]:
-    """Return (start_date, end_date) for a deadline preset, or (None, None) for Any."""
+    """Return (start_date, end_date) for a deadline preset, or (None, None) for Any.
+
+    Args:
+        preset: One of DEADLINE_ANY, DEADLINE_TODAY, DEADLINE_TOMORROW,
+            DEADLINE_THIS_WEEK, or DEADLINE_CUSTOM.
+
+    Returns:
+        Tuple of (start_date, end_date); (None, None) for Any or Custom.
+    """
     today = date.today()
     if preset == DEADLINE_ANY:
         return None, None
@@ -59,7 +66,14 @@ def _deadline_preset_bounds(preset: str) -> tuple[date | None, date | None]:
 
 
 def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
-    """Coerce UI values into a deadline datetime; return (datetime, error_message)."""
+    """Coerce UI values into a deadline datetime; return (datetime, error_message).
+
+    Args:
+        raw_value: User input: datetime, date, ISO string, or None/empty.
+
+    Returns:
+        Tuple of (datetime or None, error message or None).
+    """
     if raw_value is None or raw_value == "":
         return None, None
     if isinstance(raw_value, datetime):
@@ -78,31 +92,36 @@ def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
     return None, "unsupported deadline format"
 
 
-def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame:
-    """Convert todo records to an editable dataframe."""
+def _build_todo_dataframe(todos: list) -> pd.DataFrame:
+    """Convert todo records to an editable dataframe (always includes project column).
+
+    Args:
+        todos: List of todo records with project relationship loaded.
+
+    Returns:
+        DataFrame with columns id, project, name, status, helper, deadline, notes, created_at.
+    """
     rows = []
     for todo in todos:
         status_value = todo.status.value
         deadline_date = todo.deadline.date() if todo.deadline else None
         row = {
             "id": todo.id,
+            "project": todo.project.name if todo.project else "",
             "name": todo.name,
             "status": status_value,
-            "helper": normalize_helper_name(todo.helper) or "",
+            "helper": (todo.helper or "").strip(),
             "deadline": deadline_date,
             "notes": todo.notes or "",
             "created_at": todo.created_at,
         }
-        if include_project:
-            row["project"] = (
-                todo.project.name if todo.project else ""
-            )
         rows.append(row)
     if rows:
         return pd.DataFrame(rows)
 
     cols = [
         "id",
+        "project",
         "name",
         "status",
         "helper",
@@ -110,17 +129,6 @@ def _build_todo_dataframe(todos: list, *, include_project: bool) -> pd.DataFrame
         "notes",
         "created_at",
     ]
-    if include_project:
-        cols = [
-            "id",
-            "project",
-            "name",
-            "status",
-            "helper",
-            "deadline",
-            "notes",
-            "created_at",
-        ]
     return pd.DataFrame(columns=pd.Index(cols))
 
 
@@ -130,7 +138,16 @@ def _apply_native_filters(
     key_prefix: str,
     project_names: list[str],
 ) -> tuple[pd.DataFrame, dict]:
-    """Apply filters; return (filtered_df, filter_state)."""
+    """Apply filters; return (filtered_df, filter_state).
+
+    Args:
+        source_df: Full todos DataFrame.
+        key_prefix: Streamlit key prefix for filter widgets.
+        project_names: List of project names for the project filter.
+
+    Returns:
+        Tuple of (filtered DataFrame, filter_state dict with project_filters, etc.).
+    """
     cols = st.columns([2.2, 1.5, 1.5, 1.5, 1.1])
     with cols[0]:
         query = st.text_input(
@@ -222,7 +239,15 @@ def _apply_native_filters(
 
 
 def _row_equals(current: dict, prev: dict) -> bool:
-    """Return True if current row has same persistable fields as prev."""
+    """Return True if current row has same persistable fields as prev.
+
+    Args:
+        current: Current row dict (project, name, status, helper, deadline, notes).
+        prev: Previous row dict for comparison.
+
+    Returns:
+        True if all persistable fields match.
+    """
     if current.get("project", "").strip() != (prev.get("project") or "").strip():
         return False
     if (current.get("name") or "").strip() != (prev.get("name") or "").strip():
@@ -268,7 +293,18 @@ def _save_rows(
     context_label: str,
     last_snapshot_json: str | None = None,
 ) -> dict[str, object]:
-    """Validate and persist edited rows; return operation summary."""
+    """Validate and persist edited rows; return operation summary.
+
+    Args:
+        edited_df: DataFrame from the data_editor after user edits.
+        projects: Current list of projects (for name-to-id resolution).
+        default_project_id: Default project for new rows.
+        context_label: Label for logging.
+        last_snapshot_json: Optional JSON of previous snapshot for change detection.
+
+    Returns:
+        Summary dict with created, updated, deleted, skipped, errors, created_ids, updated_ids.
+    """
     import json as _json
 
     project_by_name = {project.name: project.id for project in projects}
@@ -354,10 +390,10 @@ def _save_rows(
                 summary["updated"] += 1
                 summary["updated_ids"].append(todo_id)
                 logger.info(
-                    "Save action update context={context} row={row_no} todo_id={todo_id} name={name!r}",
+                    "Save action update context={context} row={row_no} todo_id={tid} name={name!r}",
                     context=context_label,
                     row_no=row_no,
-                    todo_id=todo_id,
+                    tid=todo_id,
                     name=name_val,
                 )
         else:
@@ -391,7 +427,14 @@ def _render_editable_table(
     key_prefix: str,
     context_label: str,
 ) -> None:
-    """Render editable table with filters and persist via data_editor on_change."""
+    """Render editable table with filters; snapshot-diff autosave after each run (no on_change).
+
+    Args:
+        source_df: Full todos DataFrame to display and edit.
+        projects: Current list of projects (for defaults and name resolution).
+        key_prefix: Streamlit key prefix for widgets and session state.
+        context_label: Label for logging and status.
+    """
     project_names = [project.name for project in projects]
     project_by_name = {p.name: p for p in projects}
     filtered_df, filter_state = _apply_native_filters(
@@ -450,17 +493,6 @@ def _render_editable_table(
             na_position="last",
         ).reset_index(drop=True)
 
-    MAX_TODO_ROWS = 30
-    total_filtered = len(filtered_df)
-    if total_filtered > MAX_TODO_ROWS:
-        filtered_df = filtered_df.head(MAX_TODO_ROWS).reset_index(drop=True)
-    table_caption = (
-        f"Showing first {min(total_filtered, MAX_TODO_ROWS)} of {total_filtered} todos. "
-        "Use filters to narrow."
-        if total_filtered > MAX_TODO_ROWS
-        else ""
-    )
-
     working_df = filtered_df.reset_index(drop=True).copy()
     working_df["__todo_id"] = working_df.get("id")
     working_df["__created_at"] = working_df.get("created_at")
@@ -498,7 +530,7 @@ def _render_editable_table(
         "notes",
     ]
     base_caption = "Filter using the controls above. Use row deletion in the table to remove todos."
-    st.caption(f"{base_caption} {table_caption}" if table_caption else base_caption)
+    st.caption(base_caption)
 
     snapshot_key = f"{key_prefix}_last_saved_snapshot"
     status_key = f"{key_prefix}_saving_status"
@@ -508,7 +540,7 @@ def _render_editable_table(
     _SAVE_CTX_KEY = "_todos_save_ctx"
     if _SAVE_CTX_KEY not in st.session_state:
         st.session_state[_SAVE_CTX_KEY] = {}
-    st.session_state[_SAVE_CTX_KEY][key_prefix] = {
+    ctx = {
         "projects": projects,
         "default_project_id": default_project_id,
         "context_label": context_label,
@@ -519,46 +551,77 @@ def _render_editable_table(
         "status_key": status_key,
         "error_key": error_key,
     }
+    st.session_state[_SAVE_CTX_KEY][key_prefix] = ctx
 
-    def _on_table_change() -> None:
-        ctx = st.session_state.get(_SAVE_CTX_KEY, {}).get(key_prefix)
-        edited_df = st.session_state.get(editor_state_key)
-        if ctx is None or edited_df is None or not isinstance(edited_df, pd.DataFrame):
-            return
+    def _normalize_editor_state(raw: object) -> tuple[pd.DataFrame | None, list[int]]:
+        """Return (edited DataFrame, deleted_row_indices) or (None, []).
+
+        Args:
+            raw: Session state value from data_editor (DataFrame, dict, or None).
+
+        Returns:
+            Tuple of (edited DataFrame or None, list of deleted row indices).
+        """
+        if raw is None:
+            return None, []
+        if isinstance(raw, pd.DataFrame):
+            return raw, []
+        if isinstance(raw, dict):
+            df = raw.get("value", raw.get("data"))
+            deleted = raw.get("deleted_rows") or []
+            indices = [int(x) for x in deleted if isinstance(x, (int, float))]
+            return df if isinstance(df, pd.DataFrame) else None, indices
+        return None, []
+
+    def _persist_editor_changes(
+        edited_df: pd.DataFrame,
+        display_df_ctx: pd.DataFrame,
+        deleted_rows_indices: list[int],
+    ) -> None:
+        """Apply deletes, save rows, update snapshot and status. Uses ctx from closure.
+
+        Args:
+            edited_df: Current edited DataFrame from the data_editor.
+            display_df_ctx: Display DataFrame used for row-index to todo_id mapping.
+            deleted_rows_indices: Indices of rows marked for deletion.
+        """
         last_snapshot = st.session_state.get(ctx["snapshot_key"])
         st.session_state[ctx["status_key"]] = "saving"
         st.session_state[ctx["error_key"]] = ""
         logger.info(
-            "Autosave (on_change) for {context} with rows={rows}",
+            "Persist table for {context} rows={rows}",
             context=ctx["context_label"],
             rows=len(edited_df),
         )
         deleted = 0
         skipped_for_delete = 0
         delete_errors: list[str] = []
-        display_df_ctx = ctx["display_df"]
-        editor_state = st.session_state.get(editor_state_key)
-        deleted_rows_indices: list[int] = []
-        if hasattr(editor_state, "get"):
-            deleted_rows_indices = editor_state.get("deleted_rows") or []
-        for raw_idx in deleted_rows_indices:
-            try:
-                idx = int(raw_idx)
-            except (TypeError, ValueError):
-                continue
-            if not 0 <= idx < len(display_df_ctx):
-                continue
-            raw_id = display_df_ctx.iloc[idx].get("__todo_id")
-            if raw_id is None or pd.isna(raw_id):
-                continue
-            todo_id = int(raw_id)
+        todo_ids_to_delete: list[int] = []
+        if deleted_rows_indices:
+            for idx in deleted_rows_indices:
+                if not 0 <= idx < len(display_df_ctx):
+                    continue
+                raw_id = display_df_ctx.iloc[idx].get("__todo_id")
+                if raw_id is None or pd.isna(raw_id):
+                    continue
+                todo_ids_to_delete.append(int(raw_id))
+        else:
+            if "__todo_id" in display_df_ctx.columns and "__todo_id" in edited_df.columns:
+                prev_ids = set()
+                for v in display_df_ctx["__todo_id"]:
+                    if v is not None and not (isinstance(v, float) and pd.isna(v)):
+                        prev_ids.add(int(v))
+                curr_ids = set()
+                for v in edited_df["__todo_id"]:
+                    if v is not None and not (isinstance(v, float) and pd.isna(v)):
+                        curr_ids.add(int(v))
+                todo_ids_to_delete = list(prev_ids - curr_ids)
+        for todo_id in todo_ids_to_delete:
             if delete_todo(todo_id):
                 deleted += 1
             else:
                 skipped_for_delete += 1
-                delete_errors.append(
-                    f"Row {idx + 1}: todo id {todo_id} not found for delete."
-                )
+                delete_errors.append(f"Todo id {todo_id} not found for delete.")
         try:
             summary = _save_rows(
                 edited_df,
@@ -568,11 +631,7 @@ def _render_editable_table(
                 last_snapshot_json=last_snapshot,
             )
         except Exception as exc:  # noqa: BLE001
-            logger.exception(
-                "Autosave failed for {context}: {}",
-                ctx["context_label"],
-                exc,
-            )
+            logger.exception("Persist failed for {context}: {}", ctx["context_label"], exc)
             st.session_state[ctx["status_key"]] = "error"
             st.session_state[ctx["error_key"]] = "Autosave failed. See logs for details."
             return
@@ -581,7 +640,7 @@ def _render_editable_table(
         if delete_errors:
             summary.setdefault("errors", []).extend(delete_errors)
         logger.info(
-            "Autosave result context={context}: created={created}, updated={updated}, "
+            "Persist result {context}: created={created}, updated={updated}, "
             "deleted={deleted}, skipped={skipped}",
             context=ctx["context_label"],
             created=summary["created"],
@@ -589,29 +648,34 @@ def _render_editable_table(
             deleted=summary["deleted"],
             skipped=summary["skipped"],
         )
-        last_created_project_id = summary.get("last_created_project_id")
-        last_created_helper = summary.get("last_created_helper")
-        if last_created_project_id is not None:
-            st.session_state[ctx["remember_project_key"]] = last_created_project_id
-        if last_created_helper is not None:
+        if summary.get("last_created_project_id") is not None:
+            st.session_state[ctx["remember_project_key"]] = summary["last_created_project_id"]
+        if summary.get("last_created_helper") is not None:
+            h = summary["last_created_helper"]
             st.session_state[ctx["remember_helper_key"]] = (
-                last_created_helper
-                if isinstance(last_created_helper, str)
-                else (last_created_helper[0] if last_created_helper else "")
+                h if isinstance(h, str) else (h[0] if h else "")
             )
-        current_snapshot = edited_df.to_json(date_format="iso", orient="records")
-        st.session_state[ctx["snapshot_key"]] = current_snapshot
+        st.session_state[ctx["snapshot_key"]] = edited_df.to_json(
+            date_format="iso", orient="records"
+        )
         st.session_state[ctx["status_key"]] = "saved"
-        st.rerun()
+        st.session_state[ctx["error_key"]] = ""
+
+    # Use session state when present so edits (including deletes) are not overwritten.
+    raw_current = st.session_state.get(editor_state_key)
+    edited_current, _ = _normalize_editor_state(raw_current)
+    if edited_current is not None and "__todo_id" in getattr(edited_current, "columns", []):
+        data_to_show = edited_current
+    else:
+        data_to_show = display_df
 
     edited_df = st.data_editor(
-        display_df,
+        data_to_show,
         num_rows="dynamic",
         height="content",
         key=editor_state_key,
         hide_index=True,
         column_order=column_order,
-        on_change=_on_table_change,
         column_config={
             "__todo_id": None,
             "__created_at": None,
@@ -639,10 +703,15 @@ def _render_editable_table(
     )
 
     current_snapshot = edited_df.to_json(date_format="iso", orient="records")
-    if st.session_state.get(snapshot_key) is None:
+    last_snapshot = st.session_state.get(snapshot_key)
+    if last_snapshot is None:
         st.session_state[snapshot_key] = current_snapshot
         st.session_state[status_key] = "saved"
         st.session_state[error_key] = ""
+    elif current_snapshot != last_snapshot:
+        _, deleted_indices = _normalize_editor_state(st.session_state.get(editor_state_key))
+        _persist_editor_changes(edited_df, display_df, deleted_indices)
+        st.rerun()
 
     status_value = st.session_state.get(status_key, "saved")
     error_message = st.session_state.get(error_key, "")
@@ -663,7 +732,7 @@ def render_todos_page() -> None:
         return
 
     todos = query_todos()
-    df = _build_todo_dataframe(todos, include_project=True)
+    df = _build_todo_dataframe(todos)
     _render_editable_table(
         source_df=df,
         projects=projects,

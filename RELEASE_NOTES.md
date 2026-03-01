@@ -1,5 +1,9 @@
 # Release notes
 
+## 2026.3.1 [Recommended]
+
+- **Todo table autosave:** Reverted to snapshot-diff after render (no `on_change`): changes are saved when the table state differs from the last saved snapshot at the end of each run, matching pre-2026.2.24 behavior.
+
 ## 2026.3.0 [Recommended]
 
 - **Calendar:** Fixed `StreamlitAPIException` when using "Next week" or "Previous week": the date picker session state is now updated before the widget is created, so week navigation no longer triggers "cannot be modified after the widget with key ... is instantiated".
@@ -24,7 +28,6 @@
 
 ## 2026.2.23 [Recommended]
 
-
 - **Rebrand to Handoff:** Rename the app to *Handoff* with the tagline “See who’s on the hook across all your projects.” Update all UI titles, sidebar, About section, and docs. CLI command is now `handoff` (was `todo`). User data directory is now `handoff` (e.g. `%APPDATA%\handoff`); `HANDOFF_DB_PATH` is the preferred env var (still support `TODO_APP_DB_PATH` for backward compatibility).
 - **Deadline column format:** Format deadline columns in the UI as “Tue, Mar 4th” (moment-style `ddd, MMM Do`) via a display formatter; keep the date column editable.
 - **Updater PermissionError fix:** When applying a patch zip, skip files that cannot be overwritten (e.g. PyArmor runtime `.pyd` locked by the running process on Windows) instead of failing; report skipped files in the success message and advise restart + re-apply if needed.
@@ -35,7 +38,6 @@
 - **Todo table height:** The main todos table now uses Streamlit’s `height="content"` so the editor grows with the number of rows instead of a fixed viewport.
 - **Calendar improvements:** Week navigation uses a 7-column layout so “Previous week” aligns with Monday and “Next week” with Sunday; the “View week of” date picker sits in the centre. Deadline and Update controls for delegated todos are more compact (single row, smaller button). The current day is marked with “— *Today*” in the column header.
 - **Focus page:** A short caption has been added under the title explaining the page’s purpose: choose a few delegated items to focus on today, then mark them done or defer in one go.
-
 
 ## 2026.2.22 [Optional]
 
@@ -73,34 +75,34 @@
 ## 2026.2.17 [Optional]
 
 - **Contributor docs:** Add a `CONTRIBUTING.md` guide describing the uv/CLI workflow, type
-  checking with pyright, and the branching/versioning expectations backed by the Cursor
-  rules, plus reference it from the README.
+checking with pyright, and the branching/versioning expectations backed by the Cursor
+rules, plus reference it from the README.
 
 ## 2026.2.16 [Optional]
 
 - **DB tests:** Add tests for file-based DB initialisation and the lightweight `completed_at`
-  migration using a temporary SQLite database, guarding against regressions in init/migrate
-  behaviour.
+migration using a temporary SQLite database, guarding against regressions in init/migrate
+behaviour.
 
 ## 2026.2.15 [Optional]
 
 - **Type checking:** Add a basic `pyright` configuration for `src/` and `scripts/`, wiring it
-  into the dev environment and excluding dynamic ORM/UI modules for now so type checking can
-  run cleanly and be tightened incrementally.
+into the dev environment and excluding dynamic ORM/UI modules for now so type checking can
+run cleanly and be tightened incrementally.
 
 ## 2026.2.14 [Optional]
 
 - **DB robustness:** Wrap database engine creation and schema initialisation in structured
-  error handling, logging failures with loguru and surfacing a friendly error message in
-  the UI when the DB cannot be created or migrated.
+error handling, logging failures with loguru and surfacing a friendly error message in
+the UI when the DB cannot be created or migrated.
 
 ## 2026.2.13 [Recommended]
 
 - **Rollback UI:** Add a **Restore from backup** section to the in-app **Update app** sidebar
-  so you can browse timestamped backup snapshots, restore a selected snapshot, and have the
-  app restart automatically into the restored state.
+so you can browse timestamped backup snapshots, restore a selected snapshot, and have the
+app restart automatically into the restored state.
 - **Updater tests:** Add unit tests for the updater's patch application, backup handling,
-  `__pycache__` cleanup, and the new backup-restore helper.
+`__pycache_`_ cleanup, and the new backup-restore helper.
 
 ## 2026.2.12 [Recommended]
 
@@ -111,26 +113,26 @@
 ## 2026.2.11 [Optional]
 
 - **Updater cache cleanup:** After applying a code-only patch, the app now removes `__pycache__`
-  directories under the application root (including `src/` and `pages/`) so that Python regenerates
-  fresh bytecode for the updated sources on next start.
+directories under the application root (including `src/` and `pages/`) so that Python regenerates
+fresh bytecode for the updated sources on next start.
 - **Internal cleanup:** Modernise models and data access to use `UTC`/`StrEnum` and tidy imports and
-  type hints across scripts and tests; there are no user-facing behaviour changes.
+type hints across scripts and tests; there are no user-facing behaviour changes.
 
 ## 2026.2.10 [Optional]
 
 - **Updater timing:** Fix the in-app **Update app** panel so that its "Apply and Restart" button
-  correctly reflects unsaved changes from the **current** rerun instead of lagging by one rerun.
+correctly reflects unsaved changes from the **current** rerun instead of lagging by one rerun.
 - **Persistent patch upload:** Keep the selected patch zip in memory across reruns (for example
-  after clicking **Save changes** on the main Todos table) so the update button does not disappear
-  until the patch has been applied or the app is restarted.
+after clicking **Save changes** on the main Todos table) so the update button does not disappear
+until the patch has been applied or the app is restarted.
 
 ## 2026.2.9 [Recommended]
 
 - **Updater UX:** The in-app **Update app** panel now blocks applying a patch while there are
-  unsaved changes in the main Todos table and shows a clear warning asking you to save first.
+unsaved changes in the main Todos table and shows a clear warning asking you to save first.
 - **Auto-restart flow:** After successfully applying a code-only patch, the app now exits
-  automatically so that the `run.bat` window closes; reopening `run.bat` starts the updated
-  version without requiring manual process termination.
+automatically so that the `run.bat` window closes; reopening `run.bat` starts the updated
+version without requiring manual process termination.
 
 ## 2026.2.8 [Recommended]
 
@@ -148,7 +150,7 @@
 
 ## 2026.2.6 [Optional]
 
-- **Deadlines:** When you pick a date-only deadline in the todos table, it is now stored at 18:00 local time instead of midnight so that \"today\" does not show up as already in the past in relative views.
+- **Deadlines:** When you pick a date-only deadline in the todos table, it is now stored at 18:00 local time instead of midnight so that today does not show up as already in the past in relative views.
 - **Helpers:** The `Helper` column in the todos table is now a free-text field instead of a dropdown, while the Helper filter above the table still offers a dropdown of all known helpers (updated after new helpers are saved).
 
 ## 2026.2.5 [Recommended]
@@ -168,9 +170,9 @@
 ## 2026.2.3 [Recommended]
 
 - **Column order:** Project, name, status, helper, deadline, notes; Delete column hidden by default (show via table column menu eye icon).
-- **Filters:** Helper is a multiselect like Projects/Statuses (no \"All helpers\"); empty selection shows all. Deadline filter has label above dropdown with presets: Any, Today, Tomorrow, This week, Custom range. Custom range uses a single date-range picker (one calendar).
+- **Filters:** Helper is a multiselect like Projects/Statuses (no All helpers); empty selection shows all. Deadline filter has label above dropdown with presets: Any, Today, Tomorrow, This week, Custom range. Custom range uses a single date-range picker (one calendar).
 - **New row defaults:** When a single project, status, or helper is selected in the filter bar, new rows default to that value.
-- **Deadline column** displays in relative \"distance\" format by default.
+- **Deadline column** displays in relative distance format by default.
 - **Sorting:** Sort by column and order via controls above the table (session state + pre-sort).
 
 ## 2026.2.2 [Recommended]
