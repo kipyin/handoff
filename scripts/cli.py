@@ -6,6 +6,7 @@ import typer
 from rich.console import Console
 
 from . import ROOT
+from . import build_exe as build_exe_module
 from . import build_patch as build_patch_module
 from . import build_zip as build_zip_module
 from . import bump_version as bump_version_module
@@ -85,11 +86,18 @@ def ci() -> None:
     test()
 
 
-@app.command("build-zip")
-def build_zip() -> None:
-    """Build the Windows embedded zip distribution."""
-    console.print("Building Windows embedded zip distribution...", style="bold cyan")
+@app.command("build-full")
+def build_full() -> None:
+    """Build the full Windows embedded zip distribution."""
+    console.print("Building full Windows embedded zip distribution...", style="bold cyan")
     build_zip_module.main()
+
+
+@app.command("build-exe")
+def build_exe() -> None:
+    """Build an experimental handoff.exe launcher with PyInstaller."""
+    console.print("Building experimental handoff.exe (PyInstaller)...", style="bold cyan")
+    build_exe_module.main()
 
 
 @app.command("bump-version")
@@ -109,7 +117,7 @@ def build_patch(
         help="Include the pages/ directory (from source) in the patch zip.",
     ),
 ) -> None:
-    """Build a patch zip from the build output (run after build-zip for PyArmor installs)."""
+    """Build a patch zip from the build output (run after build-full for PyArmor installs)."""
     path = build_patch_module.build_patch(include_pages=include_pages)
     console.print(f"Patch zip created at {path}", style="bold green")
 

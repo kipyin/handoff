@@ -99,7 +99,11 @@ def test_extract_patch_to_staging_writes_to_update_dir(tmp_path: Path) -> None:
 def test_stage_patch_with_backup_creates_backup_and_staging_leaves_app_root_unchanged(
     tmp_path: Path,
 ) -> None:
-    """stage_patch_with_backup creates backup, writes sentinel, extracts to update/; app root unchanged."""
+    """Verify stage_patch_with_backup backup, sentinel, and staging behaviour.
+
+    It should create a backup, write the sentinel, and extract to update/ while
+    leaving the app root unchanged.
+    """
     app_root = tmp_path
     app_file = app_root / "app.py"
     app_file.write_text("old app", encoding="utf-8")
@@ -186,6 +190,7 @@ def test_iter_backup_snapshots_orders_newest_first(tmp_path: Path) -> None:
 def test_format_snapshot_label_supports_legacy_and_versioned_names() -> None:
     """_format_snapshot_label parses legacy and versioned backup folder names."""
     from pathlib import Path
+
     legacy = Path("backup/20260101-120000")
     assert _format_snapshot_label(legacy) == "2026-01-01 12:00:00"
     versioned = Path("backup/20260302-000612-version2026.3.1")
