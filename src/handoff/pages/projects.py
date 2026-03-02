@@ -61,7 +61,7 @@ def _apply_project_changes(
             if delete_project(pid):
                 deleted += 1
             else:
-                errors.append(f"Could not delete project \"{project.name}\".")
+                errors.append(f'Could not delete project "{project.name}".')
             continue
         new_name = (row.get("name") or "").strip()
         if not new_name:
@@ -108,7 +108,7 @@ def render_projects_page() -> None:
     display_df = pd.DataFrame(rows)
 
     st.caption(
-        "Edit names and archive state below. Check \"Confirm delete\" for projects to "
+        'Edit names and archive state below. Check "Confirm delete" for projects to '
         "remove, then click Save changes."
     )
     edited_df = st.data_editor(

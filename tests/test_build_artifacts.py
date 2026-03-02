@@ -110,18 +110,14 @@ def test_build_patch_includes_docs_and_core_files(
 
     def _fake_obfuscate() -> None:
         (build_app_dir / "src" / "handoff").mkdir(parents=True, exist_ok=True)
-        (build_app_dir / "src" / "handoff" / "__init__.py").write_text(
-            "x = 1", encoding="utf-8"
-        )
+        (build_app_dir / "src" / "handoff" / "__init__.py").write_text("x = 1", encoding="utf-8")
 
     def _fake_copy_docs() -> None:
         (build_app_dir / "README.md").write_text("readme", encoding="utf-8")
         (build_app_dir / "RELEASE_NOTES.md").write_text("notes", encoding="utf-8")
 
     monkeypatch.setattr(build_zip_module, "_copy_app_code", _fake_copy_app_code)
-    monkeypatch.setattr(
-        build_zip_module, "_obfuscate_app_code_with_pyarmor", _fake_obfuscate
-    )
+    monkeypatch.setattr(build_zip_module, "_obfuscate_app_code_with_pyarmor", _fake_obfuscate)
     monkeypatch.setattr(build_zip_module, "_copy_docs", _fake_copy_docs)
 
     zip_path = build_patch_module.build_patch(include_pages=False)

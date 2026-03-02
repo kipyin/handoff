@@ -127,9 +127,7 @@ def render_calendar_page() -> None:
         with cols[idx]:
             header = f"**{day.strftime('%a %d %b')}**"
             if day == today:
-                header_html = (
-                    f"<strong>{day.strftime('%a %d %b')}</strong> — <em>Today</em>"
-                )
+                header_html = f"<strong>{day.strftime('%a %d %b')}</strong> — <em>Today</em>"
                 st.markdown(
                     f'<div class="handoff-calendar-today">{header_html}</div>',
                     unsafe_allow_html=True,
