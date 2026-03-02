@@ -8,7 +8,7 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
   - **Todos sorted by created time:** The main todos table now always sorts by each row's creation timestamp (oldest first). The manual sort controls have been removed so the list remains stable and predictable as you edit.
 - **Improvement**
   - **Build command rename:** The Windows embedded zip build command has been renamed from `build-zip` to `build-full` in the `handoff` CLI. Use `uv run handoff build-full` to create the full embedded zip; patch builds still use `uv run handoff build-patch`.
-  - **Windows launcher wording:** Docs and updater messages now treat `handoff.exe` as the primary launcher for embedded builds, while still mentioning `run.bat` / `run.ps1` for older installs.
+  - **Windows launcher wording:** Docs and updater messages clarify that `run.bat` / `run.ps1` are the launchers for embedded builds.
   - **Docs polish:** README and CONTRIBUTING have been refreshed with clearer quickstart, deployment philosophy, macOS planning notes, hyperlinks (including the Gitee repository), and a more explicit release workflow.
   - **macOS planning:** CONTRIBUTING documents the current \"run from source\" story on macOS and outlines a future signed/notarized bundle approach.
   - **Style guidance in one place:** CONTRIBUTING now inlines key code-style expectations (Ruff, Google-style docstrings, pyright) so human contributors do not need to read separate Cursor rule files.
@@ -17,8 +17,6 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
   - **Repo links:** Both README and CONTRIBUTING now link to the project repository at `https://gitee.com/kipyt/handoff` and to each other where relevant.
   - **Docs in app:** References to the in-app Docs page (Docs navigation entry) have been made more explicit so users can find README and release notes from within the app.
   - **macOS section placement:** Mac-specific planning has been moved to CONTRIBUTING so README stays focused on cross-platform user flows.
-- **Internal**
-  - **PyInstaller scaffolding:** Initial scaffolding for building a Windows `handoff.exe` launcher via PyInstaller has been introduced, targeting only the launcher while keeping the embedded-Python architecture for the main app code.
 
 ## 2026.3.2 [Recommended]
 
