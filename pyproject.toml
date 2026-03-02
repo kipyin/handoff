@@ -1,6 +1,6 @@
 [project]
 name = "handoff"
-version = "2026.3.3"
+version = "2026.3.4"
 description = "Handoff — see who's on the hook across all your projects."
 readme = "README.md"
 requires-python = ">=3.13"
@@ -64,6 +64,7 @@ exclude = [
     "src/handoff/data.py",
     "src/handoff/pages/analytics.py",
     "src/handoff/pages/calendar.py",
+    "src/handoff/pages/todos.py",
 ]
 venvPath = "."
 venv = ".venv"

@@ -1,6 +1,26 @@
 # Release notes
 
-Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** where applicable. Version headings keep an impact tag: `[Breaking]`, `[Recommended]`, or `[Optional]`.
+Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal**
+where applicable. Version headings keep an impact tag: `[Breaking]`,
+`[Recommended]`, or `[Optional]`.
+
+## 2026.3.4 [Optional]
+
+- **Improvement**
+  - **Docs polish and contributor workflow:** README and CONTRIBUTING complete the
+    planned 2026.3.3 documentation work with clearer Quickstart and feature
+    descriptions, an explicit "Who is this for?" / limitations section, and
+    refined explanations of where your data lives and how updates/backups work.
+  - **Deployment philosophy and release checklist:** CONTRIBUTING now opens with
+    a short deployment philosophy for the embedded-Python + obfuscated-source
+    model and adds a concise release workflow checklist that covers branching
+    from `main`, bumping the CalVer version with the CLI helper, updating
+    release notes, running checks/tests, and building Windows artefacts.
+  - **Style, testing, and Cursor rules summary:** CONTRIBUTING summarizes Ruff,
+    Google-style docstrings, and pyright expectations in one place, adds a
+    dedicated Testing section with explicit `uv run handoff` commands, and
+    clarifies that `.cursor/rules/` contains optional, deeper guidance for
+    automation. There are no functional behavior changes in this release.
 
 ## 2026.3.3 [Recommended]
 

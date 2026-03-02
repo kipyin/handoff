@@ -169,10 +169,13 @@ def stage_patch_with_backup(
         logger.info("Staged patch for version {} in {}", target_version, staging)
         return (
             f"Update files are ready (target version: {target_version}). "
-            "Close in 2s. Run run.bat or run.ps1 again to complete the update."
+            "Close in 2s. "
+            "Run run.bat or run.ps1 again to complete the update."
         )
     logger.info("Staged patch in {}", staging)
-    return "Update files are ready. Close in 2s. Run run.bat or run.ps1 again to complete the update."
+    return (
+        "Update files are ready. Close in 2s. Run run.bat or run.ps1 again to complete the update."
+    )
 
 
 def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) -> str:
@@ -217,10 +220,14 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
         logger.info("Staged patch for version {} in {}", target_version, staging)
         return (
             f"Update files are ready (target version: {target_version}). "
-            "The app will close in 2 seconds. Please run run.bat or run.ps1 again to complete the update."
+            "The app will close in 2 seconds. "
+            "Please run run.bat or run.ps1 again to complete the update."
         )
     logger.info("Staged patch in {}", staging)
-    return "Update files are ready. The app will close in 2 seconds. Please run run.bat or run.ps1 again to complete the update."
+    return (
+        "Update files are ready. The app will close in 2 seconds. "
+        "Please run run.bat or run.ps1 again to complete the update."
+    )
 
 
 def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
@@ -489,7 +496,9 @@ def stage_restore_from_snapshot(
             logger.warning("Could not stage {} from snapshot: {}", rel, e)
 
     logger.info("Staged {} files to {}: {}", len(staged), staging, staged)
-    logger.info("Everything is in place and ready to restore. Run run.bat or run.ps1 again to apply.")
+    logger.info(
+        "Everything is in place and ready to restore. Run run.bat or run.ps1 again to apply."
+    )
     logger.info("Program about to shut off in 2 seconds.")
 
     return "Backup staged to ./update/. Close in 2s. Run run.bat or run.ps1 again to restore."
@@ -666,8 +675,9 @@ def render_update_panel(app_version: str) -> None:
     st.markdown("### Restore from backup")
     st.caption(
         "Restore code from a timestamped backup created when applying a patch. "
-        "Pick a snapshot and click Restore and Restart; the backup is staged to ./update/ "
-        "and the app will close. Run run.bat or run.ps1 again to apply the restore (same as updating)."
+        "Pick a snapshot and click Restore and Restart; the backup is staged to ./update/. "
+        "The app will close. Run run.bat or run.ps1 again to apply the restore "
+        "(same as updating)."
     )
     snapshots = _iter_backup_snapshots(app_root)
     if not snapshots:
