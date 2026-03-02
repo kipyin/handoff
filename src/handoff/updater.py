@@ -446,8 +446,70 @@ def _format_snapshot_label(snapshot: Path) -> str:
         return name
 
 
+def stage_restore_from_snapshot(
+    snapshot: Path,
+    app_root: Path | None = None,
+) -> str:
+    """Stage a backup snapshot into update/ for the launcher to apply on next start.
+
+    Copies the snapshot contents into app_root/update/ (clearing update/ first).
+    The launcher (run.bat / run.ps1) then copies update/ into the app root and
+    removes update/, so no Python process touches the app root and locked files
+    (e.g. PyArmor .pyd) can be replaced.
+
+    Args:
+        snapshot: Path to a timestamped backup directory under backup/.
+        app_root: Optional explicit application root. Defaults to _get_app_root().
+
+    Returns:
+        A human-readable status message.
+
+    Raises:
+        FileNotFoundError: If the snapshot path does not exist or is not a directory.
+
+    """
+    if app_root is None:
+        app_root = _get_app_root()
+
+    if not snapshot.exists() or not snapshot.is_dir():
+        raise FileNotFoundError(f"Backup snapshot not found: {snapshot}")
+
+    logger.info("Restore from snapshot: {}", snapshot)
+
+    staging = app_root / UPDATE_STAGING_DIR
+    if staging.exists():
+        shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True, exist_ok=True)
+
+    staged: list[str] = []
+    for src in snapshot.rglob("*"):
+        if src.is_dir():
+            continue
+        rel = src.relative_to(snapshot)
+        dest = staging / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(src, dest)
+            staged.append(rel.as_posix())
+        except (PermissionError, OSError) as e:
+            logger.warning("Could not stage {} from snapshot: {}", rel, e)
+
+    logger.info("Staged {} files to {}: {}", len(staged), staging, staged)
+    logger.info("Everything is in place and ready to restore. Run run.bat again to apply.")
+    logger.info("Program about to shut off in 2 seconds.")
+
+    return (
+        "Backup staged to ./update/. "
+        "Close in 2s. Run run.bat or run.ps1 again to restore."
+    )
+
+
 def _restore_backup_snapshot(snapshot: Path, app_root: Path) -> str:
     """Restore all files from a backup snapshot into the app root.
+
+    Used for direct in-process restore (e.g. tests). For the Settings UI restore
+    flow, use stage_restore_from_snapshot() so the launcher applies the restore
+    without starting Python first.
 
     Args:
         snapshot: Path to a timestamped backup directory under backup/.
@@ -617,7 +679,8 @@ def render_update_panel(app_version: str) -> None:
     st.markdown("### Restore from backup")
     st.caption(
         "Restore code from a timestamped backup created when applying a patch. "
-        "Pick a snapshot and click Restore; the app will restart."
+        "Pick a snapshot and click Restore and Restart; the backup is staged to ./update/ "
+        "and the app will close. Run run.bat again to apply the restore (same as updating)."
     )
     snapshots = _iter_backup_snapshots(app_root)
     if not snapshots:
@@ -633,6 +696,6 @@ def render_update_panel(app_version: str) -> None:
         )
         if selected is not None and st.button("Restore and Restart", key="settings_restore_backup"):
             snapshot_path = snapshots[selected]
-            msg = _restore_backup_snapshot(snapshot_path, app_root)
+            msg = stage_restore_from_snapshot(snapshot_path, app_root=app_root)
             st.success(msg)
             _schedule_shutdown()

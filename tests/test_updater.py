@@ -15,6 +15,7 @@ from handoff.updater import (
     apply_staged_update,
     extract_patch_to_staging,
     stage_patch_with_backup,
+    stage_restore_from_snapshot,
 )
 
 
@@ -191,6 +192,33 @@ def test_format_snapshot_label_supports_legacy_and_versioned_names() -> None:
     label = _format_snapshot_label(versioned)
     assert "2026-03-02 00:06:12" in label
     assert "version 2026.3.1" in label
+
+
+def test_stage_restore_from_snapshot_populates_update_and_leaves_app_root_unchanged(
+    tmp_path: Path,
+) -> None:
+    """stage_restore_from_snapshot copies snapshot into update/; app root unchanged."""
+    app_root = tmp_path
+    snapshot = app_root / "backup" / "20260101-120000"
+    snapshot.mkdir(parents=True)
+    (snapshot / "app.py").write_text("from backup", encoding="utf-8")
+    (snapshot / "src").mkdir()
+    (snapshot / "src" / "module.py").write_text("from backup src", encoding="utf-8")
+
+    (app_root / "app.py").write_text("current app", encoding="utf-8")
+    (app_root / "src").mkdir(exist_ok=True)
+    (app_root / "src" / "module.py").write_text("current src", encoding="utf-8")
+
+    message = stage_restore_from_snapshot(snapshot, app_root=app_root)
+
+    assert "run.bat" in message or "run.ps1" in message
+    assert "update" in message.lower()
+    staging = app_root / "update"
+    assert staging.exists()
+    assert (staging / "app.py").read_text(encoding="utf-8") == "from backup"
+    assert (staging / "src" / "module.py").read_text(encoding="utf-8") == "from backup src"
+    assert (app_root / "app.py").read_text(encoding="utf-8") == "current app"
+    assert (app_root / "src" / "module.py").read_text(encoding="utf-8") == "current src"
 
 
 def test_restore_backup_snapshot_copies_files_and_clears_pycache(tmp_path: Path) -> None:
