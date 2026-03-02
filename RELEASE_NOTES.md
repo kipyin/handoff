@@ -1,18 +1,24 @@
 # Release notes
 
+Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** where applicable. Version headings keep an impact tag: `[Breaking]`, `[Recommended]`, or `[Optional]`.
+
 ## 2026.3.1 [Recommended]
 
-- **Update backup and UI:** When you run `run.bat` after staging an update, the app now creates a timestamped backup of overwritten files under `backup/YYYYMMDD-HHMMSS/` before applying the patch (previously no backup was created in the staging flow). The next time you open the **Settings** page, the app shows a one-time message with the backup path; the "Restore from backup" section lists snapshots as before.
-- **Projects page:** Removed the "Show archived projects" checkbox; the page now lists only active (non-archived) projects. Added read-only todo statistics next to each project: handoff, done, and canceled counts.
-- **Patch command rename:** The patch build script and CLI command have been renamed from `build-obfuscated-patch` to `build-patch`. Use `uv run handoff build-patch` (after `build-zip`) for patch builds; the script is now `scripts/build_patch.py`.
-- **Docstrings:** Standardized all module and function docstrings to Google style across the codebase. Summary lines, optional extended descriptions, and consistent Args/Returns/Raises (and Yields where relevant) are used in handoff, app, scripts, and tests. Sphinx/reST markup (:mod:, :func:, inline literals) has been removed in favour of plain prose so documentation is tooling-agnostic and readable in source.
-- **Todo table autosave:** Reverted to snapshot-diff after render (no `on_change`): changes are saved when the table state differs from the last saved snapshot at the end of each run, matching pre-2026.2.24 behavior.
-- **Code quality:** Removed unused code (`get_session`, no-op `_init_session_state`), fixed package `__version__` to re-export from `handoff.version`, re-enabled Analytics in the nav, and corrected `_clear_pycache` to only clear `app_root` and `app_root/src` (removed non-existent `pages` path).
-- **Performance:** Todos now load projects in one query via `selectinload(Todo.project)` (fixes N+1). The Todos page calls `list_helpers()` once per run and passes the result to filters and column config. Doc markdown (README, RELEASE_NOTES) is cached in session state to avoid repeated file I/O.
-- **DRY:** Shared `handoff.dates.week_bounds(reference)` for Monday–Sunday week logic used by todos deadline presets and the calendar. Updater zip parsing (VERSION + member list) extracted into `_read_patch_members(zf)` and reused by `extract_patch_to_staging` and `apply_patch_zip`.
-- **Readability:** Todos page refactors: `_row_equals` uses `_normalize_str_field` and `_normalize_deadline_for_compare`; `_save_rows` uses `_parse_previous_snapshot`; `_apply_native_filters` delegates to `_apply_dataframe_filters`; `_render_editable_table` uses `_compute_defaults_from_filters` and `_sort_and_build_display_df`.
-- **Test:** Calendar smoke test no longer expects a `date_input` widget (date picker is commented out in the UI).
-- **Streamlit config launcher:** The app is started via `python -m handoff` so Streamlit options take effect. The launcher applies env vars from `handoff.config` (showErrorDetails, toolbarMode, showSidebarNavigation, showErrorLinks, gatherUsageStats) before starting Streamlit. Both `uv run handoff run` and the embedded build's `run.bat` use this launcher; there is no user-editable config file, and the package is obfuscated with PyArmor at deploy.
+- **Fix**
+  - **Todo table autosave:** Reverted to snapshot-diff after render (no `on_change`): changes are saved when the table state differs from the last saved snapshot at the end of each run, matching pre-2026.2.24 behavior.
+- **Feature**
+  - **Projects page:** Removed the "Show archived projects" checkbox; the page now lists only active (non-archived) projects. Added read-only todo statistics next to each project: handoff, done, and canceled counts.
+- **Improvement**
+  - **Update backup and UI:** When you run `run.bat` after staging an update, the app now creates a timestamped backup of overwritten files under `backup/YYYYMMDD-HHMMSS/` before applying the patch (previously no backup was created in the staging flow). The next time you open the **Settings** page, the app shows a one-time message with the backup path; the "Restore from backup" section lists snapshots as before.
+  - **Patch command rename:** The patch build script and CLI command have been renamed from `build-obfuscated-patch` to `build-patch`. Use `uv run handoff build-patch` (after `build-zip`) for patch builds; the script is now `scripts/build_patch.py`.
+  - **Performance:** Todos now load projects in one query via `selectinload(Todo.project)` (fixes N+1). The Todos page calls `list_helpers()` once per run and passes the result to filters and column config. Doc markdown (README, RELEASE_NOTES) is cached in session state to avoid repeated file I/O.
+  - **DRY:** Shared `handoff.dates.week_bounds(reference)` for Monday–Sunday week logic used by todos deadline presets and the calendar. Updater zip parsing (VERSION + member list) extracted into `_read_patch_members(zf)` and reused by `extract_patch_to_staging` and `apply_patch_zip`.
+  - **Readability:** Todos page refactors: `_row_equals` uses `_normalize_str_field` and `_normalize_deadline_for_compare`; `_save_rows` uses `_parse_previous_snapshot`; `_apply_native_filters` delegates to `_apply_dataframe_filters`; `_render_editable_table` uses `_compute_defaults_from_filters` and `_sort_and_build_display_df`.
+  - **Streamlit config launcher:** The app is started via `python -m handoff` so Streamlit options take effect. The launcher applies env vars from `handoff.config` (showErrorDetails, toolbarMode, showSidebarNavigation, showErrorLinks, gatherUsageStats) before starting Streamlit. Both `uv run handoff run` and the embedded build's `run.bat` use this launcher; there is no user-editable config file, and the package is obfuscated with PyArmor at deploy.
+- **Internal**
+  - **Docstrings:** Standardized all module and function docstrings to Google style across the codebase. Summary lines, optional extended descriptions, and consistent Args/Returns/Raises (and Yields where relevant) are used in handoff, app, scripts, and tests. Sphinx/reST markup (:mod:, :func:, inline literals) has been removed in favour of plain prose so documentation is tooling-agnostic and readable in source.
+  - **Code quality:** Removed unused code (`get_session`, no-op `_init_session_state`), fixed package `__version__` to re-export from `handoff.version`, re-enabled Analytics in the nav, and corrected `_clear_pycache` to only clear `app_root` and `app_root/src` (removed non-existent `pages` path).
+  - **Test:** Calendar smoke test no longer expects a `date_input` widget (date picker is commented out in the UI).
 
 ## 2026.3.0 [Recommended]
 

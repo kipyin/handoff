@@ -50,12 +50,24 @@ type-checking setup, etc.), follow this flow:
      uv run handoff bump-version 2026.2.XY
      ```
 4. Update documentation:
-   - Add a new section to `RELEASE_NOTES.md` under the new version.
+   - Add a new section to `RELEASE_NOTES.md` under the new version (see **Release notes** below).
    - Choose an impact tag for the release and include it in the heading in square brackets:
      - `[Breaking]` – schema changes, behaviour shifts, or anything that may require backups or manual intervention.
      - `[Recommended]` – new features, UX improvements, or important dependency updates most users should adopt.
      - `[Optional]` – internal-only cleanups or minor fixes that users can safely skip.
    - Update `README.md` if behavior, commands, or UX changed.
+
+### Release notes
+
+When adding a new version block to `RELEASE_NOTES.md`:
+
+- **When:** Add a new `## YYYY.M.MINOR [Tag]` section when you ship user-visible changes or notable internal work (e.g. after merging a feature branch or cutting a release).
+- **Categories:** Group bullets under **Fix**, **Feature**, **Improvement**, and **Internal** so readers can scan by type:
+  - **Fix** – Bug fixes, error handling, compatibility (e.g. WinError 32, backup behaviour).
+  - **Feature** – New user-facing behaviour (e.g. calendar today column, new page).
+  - **Improvement** – UX, docs, performance, refactors that don’t change behaviour.
+  - **Internal** – Tests, tooling, code layout (optional; can be merged into Improvement).
+- **Impact tag:** Keep the version heading tag (`[Breaking]` / `[Recommended]` / `[Optional]`) as above; categories only group the bullets under that version.
 5. Run checks before merging:
    - `uv run handoff check`
    - `uv run handoff typecheck` (or `uv run pyright src scripts`)
