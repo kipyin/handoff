@@ -104,30 +104,23 @@ embedded bundle. For production usage, always use the obfuscated patch flow:
   `dist/handoff-<version>-obfuscated-patch.zip` from the obfuscated build output so that the
   in-app updater can apply it to PyArmor-built installs.
 
-On a client machine:
+### Updating the app (user flow)
 
-1. The user runs the app as usual (for example from the embedded zip via `run.bat`).
-2. In the app's navigation, they open the **Settings** page, use **Update app** to upload the
-   patch zip, and click **Apply and Restart**. The patch is extracted to `./update/` and the
-   app exits after 2 seconds.
-3. The user runs `run.bat` again. The batch file detects files in `./update/`, creates a
-   timestamped backup of any files that will be overwritten, then copies the update into
-   the app directory and removes `./update/`. The app then starts. This avoids replacing
-   files (e.g. PyArmor runtime) while the process is still running.
+1. Get a patch zip (e.g. from a Handoff release or your team).
+2. Run the app as usual (e.g. double‑click `run.bat` or run `run.ps1` in PowerShell).
+3. In the app, open **Settings** → **Update app**, upload the patch zip, and click **Apply and Restart**.
+4. The app creates a backup of files that will be overwritten, extracts the patch to `./update/`, then exits after a few seconds.
+5. Run the launcher again (`run.bat` or `run.ps1`). It copies the update from `./update/` into the app folder (without starting Python first, so locked files can be replaced), removes `./update/`, and starts the app. You are now on the new version.
 
 ### Backups and rollback
 
-When you run `run.bat` after staging an update, the app creates a **timestamped backup**
-of any overwritten files under `backup/<YYYYMMDD-HHMMSS>/` in the app root. The next time
-you open the **Settings** page, the app shows where the backup was saved. You can roll
-back from a bad patch directly from the **Settings** page:
+Backups are created **before** the update is applied (when you click Apply and Restart), under `backup/<YYYYMMDD-HHMMSS>-version<version>/` in the app root. The next time you open **Settings**, the app shows where the backup was saved. To restore from a bad patch:
 
-1. Open the **Settings** page and locate the **Restore from backup** section under **Update app**.
-2. Pick a snapshot (named by timestamp).
-3. Click **Restore selected backup and Restart**.
+1. Open **Settings** → **Restore from backup** (under Update app).
+2. Pick a snapshot (listed by date and version).
+3. Click **Restore and Restart**.
 
-The app copies the backed-up files back into the app directory, clears Python
-bytecode caches, and then exits so you can reopen it in the restored state.
+The app copies the backed-up files back, clears caches, and exits; run the launcher again to use the restored version.
 
 ## For developers
 
