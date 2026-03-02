@@ -1,9 +1,8 @@
 """Build a code-only patch zip from the obfuscated build output.
 
-Use this after build-zip to produce a patch that can be applied by the
-in-app updater on PyArmor-obfuscated distributions. The patch contains
-obfuscated src/handoff, the PyArmor runtime, and optionally app.py
-and pages/ from the last build.
+Regenerates obfuscated code from current source (same steps as build-zip for
+app code and PyArmor), then packages app.py, src/, and docs into the patch zip.
+Use the resulting patch with the in-app updater on PyArmor-obfuscated distributions.
 """
 
 from __future__ import annotations
@@ -20,35 +19,36 @@ DIST_ROOT = ROOT / "dist"
 
 
 def build_patch(*, include_pages: bool = True) -> Path:
-    """Build a patch zip from the obfuscated build tree and return its path.
+    """Build a patch zip from current source by regenerating obfuscated code.
 
-    Requires that build-zip has been run so that build/handoff
-    contains app.py, src/handoff (obfuscated), and
-    src/pyarmor_runtime_*.
+    Copies app code into build/handoff, runs PyArmor to produce obfuscated
+    src/handoff and runtime, copies docs, then zips app.py, src/, and
+    optionally pages/ into the patch. No prior build-zip run is required.
 
     Args:
         include_pages: If True, include the root-level pages/ directory
-            when present in the build (build_zip does not copy pages by default,
-            so this is only relevant if you add pages to the build dir).
+            when present (build_zip does not copy pages by default).
 
     Returns:
         Path to the created patch zip under dist/.
 
     Raises:
-        RuntimeError: If the build directory is missing or lacks obfuscated code.
+        RuntimeError: If PyArmor or source copy fails.
 
     """
-    if not BUILD_APP_DIR.is_dir():
-        raise RuntimeError(
-            f"Obfuscated build not found at {BUILD_APP_DIR}. Run 'uv run handoff build-zip' first."
-        )
+    from . import build_zip
+
+    BUILD_APP_DIR.mkdir(parents=True, exist_ok=True)
+    build_zip._copy_app_code()
+    build_zip._obfuscate_app_code_with_pyarmor()
+    build_zip._copy_docs()
 
     src_dir = BUILD_APP_DIR / "src"
     handoff_dir = src_dir / "handoff"
     if not handoff_dir.is_dir():
         raise RuntimeError(
-            f"Expected obfuscated package at {handoff_dir}. "
-            "Run 'uv run handoff build-zip' to produce an obfuscated build."
+            f"Obfuscation did not produce package at {handoff_dir}. "
+            "Check PyArmor installation and source tree."
         )
 
     DIST_ROOT.mkdir(parents=True, exist_ok=True)

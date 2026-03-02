@@ -13,6 +13,7 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
   - **Calendar:** The today column is visually highlighted with a light background so the current day stands out in the week view.
   - **Analytics ideas:** A short brainstorm of future analytics (throughput by helper/project, cycle time, load, deadline adherence, export) is in `docs/analytics-ideas.md`.
 - **Improvement**
+  - **build-patch regenerates obfuscated code:** `uv run handoff build-patch` now runs the same copy-and-obfuscate steps as build-zip (copy app code, PyArmor obfuscation, copy docs) before creating the patch zip. No prior `build-zip` run is required; the patch always reflects the current source. This ensures patches applied via Settings → Update contain the latest code (e.g. staged restore flow) and avoid stale obfuscated builds.
   - **Release notes:** Entries are organized into Fix / Feature / Improvement / Internal; CONTRIBUTING.md documents when and how to add version blocks and categories.
   - **README vs CONTRIBUTING:** README is user-facing (run, update flow, backups); CONTRIBUTING is developer-facing (CLI, layout, branching, release notes rules). README includes a clear "Updating the app" user flow and updated backup path description.
   - **API docs:** CONTRIBUTING notes that the public API is in docstrings; optional local browse via `pdoc src/handoff` or Sphinx.

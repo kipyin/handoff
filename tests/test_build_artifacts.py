@@ -88,27 +88,41 @@ def test_build_patch_includes_docs_and_core_files(
     """build_patch writes docs, app.py, and core package into the patch zip."""
     root = tmp_path
 
-    # Top-level documentation files.
+    # Top-level documentation files (build_zip._copy_docs reads from ROOT).
     (root / "README.md").write_text("readme", encoding="utf-8")
     (root / "RELEASE_NOTES.md").write_text("notes", encoding="utf-8")
 
     build_app_dir = root / "build" / "handoff"
-    src_dir = build_app_dir / "src"
-    handoff_dir = src_dir / "handoff"
-    handoff_dir.mkdir(parents=True, exist_ok=True)
-
-    # Minimal obfuscated package layout (contents are irrelevant for this test).
-    (handoff_dir / "__init__.py").write_text("x = 1", encoding="utf-8")
-
-    # app.py that should be included when present in the build tree.
     build_app_dir.mkdir(parents=True, exist_ok=True)
-    (build_app_dir / "app.py").write_text("print('hi')", encoding="utf-8")
-
     dist_root = root / "dist"
 
     monkeypatch.setattr(build_patch_module, "ROOT", root)
     monkeypatch.setattr(build_patch_module, "BUILD_APP_DIR", build_app_dir)
     monkeypatch.setattr(build_patch_module, "DIST_ROOT", dist_root)
+
+    # Stub regeneration so we don't run PyArmor or touch the real project.
+    def _fake_copy_app_code() -> None:
+        (build_app_dir / "app.py").write_text("print('hi')", encoding="utf-8")
+        (build_app_dir / "src_plain" / "handoff").mkdir(parents=True, exist_ok=True)
+        (build_app_dir / "src_plain" / "handoff" / "__init__.py").write_text(
+            "x = 1", encoding="utf-8"
+        )
+
+    def _fake_obfuscate() -> None:
+        (build_app_dir / "src" / "handoff").mkdir(parents=True, exist_ok=True)
+        (build_app_dir / "src" / "handoff" / "__init__.py").write_text(
+            "x = 1", encoding="utf-8"
+        )
+
+    def _fake_copy_docs() -> None:
+        (build_app_dir / "README.md").write_text("readme", encoding="utf-8")
+        (build_app_dir / "RELEASE_NOTES.md").write_text("notes", encoding="utf-8")
+
+    monkeypatch.setattr(build_zip_module, "_copy_app_code", _fake_copy_app_code)
+    monkeypatch.setattr(
+        build_zip_module, "_obfuscate_app_code_with_pyarmor", _fake_obfuscate
+    )
+    monkeypatch.setattr(build_zip_module, "_copy_docs", _fake_copy_docs)
 
     zip_path = build_patch_module.build_patch(include_pages=False)
 
