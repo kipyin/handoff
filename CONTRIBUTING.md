@@ -83,6 +83,10 @@ When adding a new version block to `RELEASE_NOTES.md`:
    - `uv run handoff test` (or `uv run handoff ci` to run everything together)
 6. Merge back into `main` once tests pass.
 
+### API documentation
+
+There is no separate API doc build. The public API is documented via **docstrings** (Google style) in the source. For a browsable view locally, you can run `pdoc src/handoff` or use Sphinx if you add a config.
+
 ### Cursor rules and agent guidance
 
 Cursor-specific rules live under `.cursor/rules/`:
