@@ -19,7 +19,6 @@ dev = [
     "rich>=13.7.0",
     "pyarmor>=9.2.0",
     "pyright>=1.1.408",
-    "pyinstaller>=6.0.0",
 ]
 
 [dependency-groups]
@@ -30,7 +29,6 @@ dev = [
     "rich>=13.7.0",
     "pyarmor>=9.2.0",
     "pyright>=1.1.408",
-    "pyinstaller>=6.0.0",
 ]
 
 [build-system]

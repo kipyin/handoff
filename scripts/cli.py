@@ -6,7 +6,6 @@ import typer
 from rich.console import Console
 
 from . import ROOT
-from . import build_exe as build_exe_module
 from . import build_patch as build_patch_module
 from . import build_zip as build_zip_module
 from . import bump_version as bump_version_module
@@ -91,13 +90,6 @@ def build_full() -> None:
     """Build the full Windows embedded zip distribution."""
     console.print("Building full Windows embedded zip distribution...", style="bold cyan")
     build_zip_module.main()
-
-
-@app.command("build-exe")
-def build_exe() -> None:
-    """Build an experimental handoff.exe launcher with PyInstaller."""
-    console.print("Building experimental handoff.exe (PyInstaller)...", style="bold cyan")
-    build_exe_module.main()
 
 
 @app.command("bump-version")
