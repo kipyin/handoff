@@ -2,6 +2,19 @@
 
 Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** where applicable. Version headings keep an impact tag: `[Breaking]`, `[Recommended]`, or `[Optional]`.
 
+## 2026.3.2 [Recommended]
+
+- **Fix**
+  - **Updater WinError 32:** Apply and Restart now creates the backup and extracts the patch to `./update/` in the app, then exits. The launcher (`run.bat` or `run.ps1`) copies from `./update/` into the app root **without** starting Python first, so locked files (e.g. PyArmor runtime `.pyd`) can be replaced. This avoids "The process cannot access the file because it is being used by another process" on Windows.
+  - **Backup folder name:** Timestamped backups use `backup/<YYYYMMDD-HHMMSS>-version<version>/` so folders sort by date and the app version is visible. Restore snapshot labels in Settings show date and version.
+- **Feature**
+  - **Calendar:** The today column is visually highlighted with a light background so the current day stands out in the week view.
+  - **Analytics ideas:** A short brainstorm of future analytics (throughput by helper/project, cycle time, load, deadline adherence, export) is in `docs/analytics-ideas.md`.
+- **Improvement**
+  - **Release notes:** Entries are organized into Fix / Feature / Improvement / Internal; CONTRIBUTING.md documents when and how to add version blocks and categories.
+  - **README vs CONTRIBUTING:** README is user-facing (run, update flow, backups); CONTRIBUTING is developer-facing (CLI, layout, branching, release notes rules). README includes a clear "Updating the app" user flow and updated backup path description.
+  - **API docs:** CONTRIBUTING notes that the public API is in docstrings; optional local browse via `pdoc src/handoff` or Sphinx.
+
 ## 2026.3.1 [Recommended]
 
 - **Fix**
