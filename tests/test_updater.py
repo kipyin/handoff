@@ -13,6 +13,7 @@ from handoff.updater import (
     apply_patch_zip,
     apply_staged_update,
     extract_patch_to_staging,
+    stage_patch_with_backup,
 )
 
 
@@ -90,6 +91,43 @@ def test_extract_patch_to_staging_writes_to_update_dir(tmp_path: Path) -> None:
     assert (staging / "app.py").read_text(encoding="utf-8") == "new app"
     assert (staging / "src" / "module.py").read_text(encoding="utf-8") == "new src"
     # App root is unchanged.
+    assert app_file.read_text(encoding="utf-8") == "old app"
+
+
+def test_stage_patch_with_backup_creates_backup_and_staging_leaves_app_root_unchanged(
+    tmp_path: Path,
+) -> None:
+    """stage_patch_with_backup creates backup, writes sentinel, extracts to update/; app root unchanged."""
+    app_root = tmp_path
+    app_file = app_root / "app.py"
+    app_file.write_text("old app", encoding="utf-8")
+
+    zip_bytes = _build_patch_zip_bytes(
+        {"app.py": b"new app", "src/module.py": b"new src"},
+        version="2026.2.99",
+    )
+    message = stage_patch_with_backup(
+        BytesIO(zip_bytes),
+        app_root=app_root,
+        app_version="2026.3.1",
+    )
+
+    assert "2026.2.99" in message
+    assert "run.bat" in message or "run.ps1" in message
+    # Backup dir exists with version in name and contains previous app.py.
+    backup_root = app_root / "backup"
+    backups = [p for p in backup_root.iterdir() if p.is_dir()]
+    assert len(backups) == 1
+    assert backups[0].name.endswith("-version2026.3.1")
+    assert (backups[0] / "app.py").read_text(encoding="utf-8") == "old app"
+    # Sentinel written.
+    sentinel = app_root / ".last_update_backup"
+    sentinel_text = sentinel.read_text(encoding="utf-8")
+    assert sentinel_text.strip().startswith("backup/")
+    assert "version2026.3.1" in sentinel_text
+    # Staging has new content.
+    assert (app_root / "update" / "app.py").read_text(encoding="utf-8") == "new app"
+    # App root unchanged (launcher will copy later).
     assert app_file.read_text(encoding="utf-8") == "old app"
 
 

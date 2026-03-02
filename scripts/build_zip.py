@@ -248,10 +248,11 @@ def _obfuscate_app_code_with_pyarmor() -> None:
 
 
 def _write_run_bat() -> None:
-    """Write a `run.bat` launcher that starts the Streamlit app.
+    """Write a run.bat launcher that starts the Streamlit app.
 
-    If ./update exists and has files, runs apply_staged_update() (backup, then
-    copy into app root and remove ./update) before starting the app.
+    If ./update exists and has files, copies them into the app root using xcopy
+    (no Python), then removes ./update. This avoids WinError 32 when overwriting
+    PyArmor runtime .pyd files that would be locked if Python were running.
     """
     print("Writing run.bat launcher...")
     content = textwrap.dedent(
@@ -267,8 +268,8 @@ def _write_run_bat() -> None:
 
         if exist "%SCRIPT_DIR%update\*" (
             echo Applying update...
-            "%SCRIPT_DIR%python\python.exe" -c "from handoff.updater import apply_staged_update; apply_staged_update()"
-            if errorlevel 1 echo Update failed. Check Settings for backup/restore.
+            xcopy /E /Y "%SCRIPT_DIR%update\*" "%SCRIPT_DIR%" >nul
+            rmdir /s /q "%SCRIPT_DIR%update" 2>nul
             echo Update applied.
         )
 
@@ -277,6 +278,39 @@ def _write_run_bat() -> None:
         """
     ).lstrip()
     (APP_BUILD_DIR / "run.bat").write_text(content, encoding="utf-8")
+
+
+def _write_run_ps1() -> None:
+    """Write a run.ps1 launcher (PowerShell) that starts the Streamlit app.
+
+    If ./update exists and has files, copies them into the app root using
+    Copy-Item (no Python), then removes ./update. PowerShell-compatible.
+    """
+    print("Writing run.ps1 launcher...")
+    content = textwrap.dedent(
+        r"""
+        $ScriptDir = $PSScriptRoot
+        Set-Location $ScriptDir
+
+        $env:PYTHONHOME = Join-Path $ScriptDir "python"
+        $env:PYTHONPATH = "$ScriptDir;$ScriptDir\src"
+
+        $updateDir = Join-Path $ScriptDir "update"
+        if (Test-Path $updateDir) {
+            $updateFiles = Get-ChildItem -Path $updateDir -Recurse -File -ErrorAction SilentlyContinue
+            if ($updateFiles) {
+                Write-Host "Applying update..."
+                Copy-Item -Path "$updateDir\*" -Destination $ScriptDir -Recurse -Force
+                Remove-Item -Path $updateDir -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Host "Update applied."
+            }
+        }
+
+        $pythonExe = Join-Path $ScriptDir "python\python.exe"
+        & $pythonExe -m handoff
+        """
+    ).lstrip()
+    (APP_BUILD_DIR / "run.ps1").write_text(content, encoding="utf-8")
 
 
 def _make_zip(name: str, version: str) -> Path:
@@ -312,6 +346,7 @@ def main() -> None:
     _copy_docs()
     _obfuscate_app_code_with_pyarmor()
     _write_run_bat()
+    _write_run_ps1()
     out_zip = _make_zip(name, version)
     print()
     print("Build complete.")

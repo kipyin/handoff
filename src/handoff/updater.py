@@ -5,6 +5,7 @@ uv run handoff build-patch from the obfuscated build output.
 """
 
 import os
+import re
 import shutil
 import threading
 import zipfile
@@ -61,11 +62,105 @@ def _get_app_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) -> str:
-    """Extract a patch zip into app_root/update/ for run.bat to apply on next start.
+def _backup_dir_name(app_version: str) -> str:
+    """Return backup directory name: YYYYMMDD-HHMMSS-version<version>.
 
-    Does not overwrite files in the app root. The app should then shut down so
-    that run.bat can copy from ./update into the app root and remove ./update.
+    Ensures backups sort by date and include the app version.
+
+    Args:
+        app_version: Current app version string (e.g. from handoff.version.__version__).
+
+    Returns:
+        Directory name for a backup snapshot.
+
+    """
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return f"{timestamp}-version{app_version}"
+
+
+def stage_patch_with_backup(
+    file_like: BinaryIO,
+    app_root: Path | None = None,
+    app_version: str | None = None,
+) -> str:
+    """Create backup from zip members, write sentinel, then extract patch to update/.
+
+    Used when the user clicks Apply and Restart: backup is created in-app (before
+    any copy from update/ to app root), then the zip is extracted to update/.
+    The launcher (run.bat / run.ps1) later copies update/ into the app root
+    without starting Python, avoiding WinError 32 on locked .pyd files.
+
+    Args:
+        file_like: A binary file-like object positioned at the start of the zip.
+        app_root: Optional explicit application root. Defaults to _get_app_root().
+        app_version: Current app version for backup folder name. Defaults to handoff.version.__version__.
+
+    Returns:
+        A human-readable status message.
+
+    """
+    if app_root is None:
+        app_root = _get_app_root()
+    if app_version is None:
+        from handoff.version import __version__ as v
+        app_version = v
+
+    file_like.seek(0)
+    with zipfile.ZipFile(file_like) as zf:
+        members, target_version = _read_patch_members(zf)
+
+        if not members:
+            return "No applicable files found in patch zip."
+
+        backup_dirname = _backup_dir_name(app_version)
+        backup_root = app_root / "backup" / backup_dirname
+        for name in members:
+            target_path = app_root / name
+            if target_path.exists():
+                backup_path = backup_root / name
+                backup_path.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    shutil.copy2(target_path, backup_path)
+                except (PermissionError, OSError) as e:
+                    logger.warning("Could not backup {}: {}", name, e)
+
+        sentinel = app_root / LAST_UPDATE_BACKUP_FILE
+        try:
+            sentinel.write_text(f"backup/{backup_dirname}", encoding="utf-8")
+        except OSError as e:
+            logger.warning("Could not write {}: {}", sentinel, e)
+
+        staging = app_root / UPDATE_STAGING_DIR
+        staging.mkdir(parents=True, exist_ok=True)
+        for name in members:
+            target_path = staging / name
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                with zf.open(name) as src, target_path.open("wb") as dst:
+                    shutil.copyfileobj(src, dst)
+            except (PermissionError, OSError) as e:
+                logger.warning("Could not extract {} to staging: {}", name, e)
+                return f"Failed to extract to ./{UPDATE_STAGING_DIR}: {e}"
+
+    if target_version:
+        logger.info("Staged patch for version {} in {}", target_version, staging)
+        return (
+            f"Update files are ready (target version: {target_version}). "
+            "Close in 2s. Run run.bat or run.ps1 again to complete the update."
+        )
+    logger.info("Staged patch in {}", staging)
+    return (
+        "Update files are ready. Close in 2s. "
+        "Run run.bat or run.ps1 again to complete the update."
+    )
+
+
+def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) -> str:
+    """Extract a patch zip into app_root/update/ for the launcher to apply on next start.
+
+    Does not overwrite files in the app root. For the in-app "Apply and Restart"
+    flow, use stage_patch_with_backup() instead, which creates a backup first.
+    This function is kept for tests and for callers that do not need a backup.
 
     Args:
         file_like: A binary file-like object positioned at the start of the zip.
@@ -135,8 +230,10 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
 
         skipped: list[str] = []
 
-        # Create a simple timestamped backup of affected files.
-        backup_root = app_root / "backup" / datetime.now().strftime("%Y%m%d-%H%M%S")
+        # Create a timestamped backup with version in the folder name.
+        from handoff.version import __version__ as app_version
+        backup_dirname = _backup_dir_name(app_version)
+        backup_root = app_root / "backup" / backup_dirname
         for name in members:
             target_path = app_root / name
             if target_path.exists():
@@ -223,8 +320,9 @@ def apply_staged_update(app_root: Path | None = None) -> str | None:
     if not members:
         return None
 
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_root = app_root / "backup" / timestamp
+    from handoff.version import __version__ as app_version
+    backup_dirname = _backup_dir_name(app_version)
+    backup_root = app_root / "backup" / backup_dirname
 
     for rel in members:
         name = rel.as_posix()
@@ -250,7 +348,7 @@ def apply_staged_update(app_root: Path | None = None) -> str | None:
     shutil.rmtree(staging, ignore_errors=True)
     _clear_pycache(app_root)
 
-    backup_path_str = f"backup/{timestamp}"
+    backup_path_str = f"backup/{backup_dirname}"
     sentinel = app_root / LAST_UPDATE_BACKUP_FILE
     try:
         sentinel.write_text(backup_path_str, encoding="utf-8")
@@ -300,19 +398,27 @@ def _iter_backup_snapshots(app_root: Path) -> list[Path]:
 def _format_snapshot_label(snapshot: Path) -> str:
     """Return a human-friendly label for a backup snapshot directory.
 
+    Supports both legacy (YYYYMMDD-HHMMSS) and versioned (YYYYMMDD-HHMMSS-versionX.Y.Z) names.
+
     Args:
         snapshot: Path to a timestamped backup directory.
 
     Returns:
-        Formatted date string (e.g. YYYY-MM-DD HH:MM:SS), or directory name if not parseable.
+        Formatted date string, optionally with version (e.g. "2026-03-02 00:06:12  version 2026.3.1").
 
     """
     name = snapshot.name
+    match = re.match(r"^(\d{8}-\d{6})(?:-version(.+))?$", name)
+    if not match:
+        return name
     try:
-        dt = datetime.strptime(name, "%Y%m%d-%H%M%S")
+        dt = datetime.strptime(match.group(1), "%Y%m%d-%H%M%S")
+        label = dt.strftime("%Y-%m-%d %H:%M:%S")
+        if match.group(2):
+            label += f"  version {match.group(2)}"
+        return label
     except ValueError:
         return name
-    return dt.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _restore_backup_snapshot(snapshot: Path, app_root: Path) -> str:
@@ -459,7 +565,9 @@ def render_update_panel(app_version: str) -> None:
             can_apply = True
         if st.button("Apply and Restart", key="settings_apply_patch", disabled=not can_apply):
             patch_file.seek(0)
-            msg = extract_patch_to_staging(patch_file, app_root=app_root)
+            msg = stage_patch_with_backup(
+                patch_file, app_root=app_root, app_version=app_version
+            )
             st.success(msg)
             _schedule_shutdown(2.0)
 
