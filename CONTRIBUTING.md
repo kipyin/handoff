@@ -34,7 +34,6 @@ The Typer CLI under `scripts/cli.py` is exposed as the `handoff` command:
 - `uv run handoff build-full` – build embedded Windows zip (obfuscates with PyArmor)
 - `uv run handoff build-patch` – build patch from obfuscated build (run after build-full)
 - `uv run handoff bump-version 2026.M.P` – bump version in pyproject.toml and handoff.version
- - `uv run handoff build-exe` – experimental handoff.exe build via PyInstaller
 
 Version sync: `src/handoff/version.py` and `pyproject.toml` must match; `tests/test_version_sync.py` enforces this. Use `bump-version` to update both.
 
@@ -43,7 +42,7 @@ Project layout: `app.py` (entrypoint), `src/handoff/` (package), `pages/` (legac
 Type checking (optional but recommended for larger changes):
 
 ```bash
-uv run pyright src scripts
+uv run handoff typecheck
 ```
 
 ### Branching, commits, and releases
@@ -52,21 +51,18 @@ For any **major feature or behavior change** (new UI, new tests for critical cod
 type-checking setup, etc.), follow this flow:
 
 1. Branch from `main`:
-   - `git checkout -b release/YYYY.M.MINOR` (for example `release/2026.3.3`)
+  - `git checkout -b release/YYYY.M.MINOR` (for example `release/2026.3.3`)
 2. Make focused commits:
-   - Keep each commit as small and coherent as practical.
+  - Keep each commit as small and coherent as practical.
 3. Bump the CalVer patch version when shipping user-visible changes:
-   - Use the CLI helper so `pyproject.toml` and `src/handoff/version.py` stay in sync:
-     ```bash
-     uv run handoff bump-version YYYY.M.MINOR
-     ```
+  - Use the CLI helper so `pyproject.toml` and `src/handoff/version.py` stay in sync:
 4. Update documentation:
-   - Add a new section to `RELEASE_NOTES.md` under the new version (see **Release notes** below).
-   - Choose an impact tag for the release and include it in the heading in square brackets:
-     - `[Breaking]` – schema changes, behaviour shifts, or anything that may require backups or manual intervention.
-     - `[Recommended]` – new features, UX improvements, or important dependency updates most users should adopt.
-     - `[Optional]` – internal-only cleanups or minor fixes that users can safely skip.
-   - Update `README.md` if behavior, commands, or UX changed.
+  - Add a new section to `RELEASE_NOTES.md` under the new version (see **Release notes** below).
+  - Choose an impact tag for the release and include it in the heading in square brackets:
+    - `[Breaking]` – schema changes, behaviour shifts, or anything that may require backups or manual intervention.
+    - `[Recommended]` – new features, UX improvements, or important dependency updates most users should adopt.
+    - `[Optional]` – internal-only cleanups or minor fixes that users can safely skip.
+  - Update `README.md` if behavior, commands, or UX changed.
 
 ### Release notes
 
@@ -79,11 +75,12 @@ When adding a new version block to `RELEASE_NOTES.md`:
   - **Improvement** – UX, docs, performance, refactors that don’t change behaviour.
   - **Internal** – Tests, tooling, code layout (optional; can be merged into Improvement).
 - **Impact tag:** Keep the version heading tag (`[Breaking]` / `[Recommended]` / `[Optional]`) as above; categories only group the bullets under that version.
-5. Run checks before merging:
-   - `uv run handoff check`
-   - `uv run handoff typecheck` (or `uv run pyright src scripts`)
-   - `uv run handoff test` (or `uv run handoff ci` to run everything together)
-6. Merge back into `main` once tests pass.
+
+1. Run checks before merging:
+  - `uv run handoff check`
+  - `uv run handoff typecheck` (or `uv run pyright src scripts`)
+  - `uv run handoff test` (or `uv run handoff ci` to run everything together)
+2. Merge back into `main` once tests pass.
 
 ### macOS support (planning)
 
