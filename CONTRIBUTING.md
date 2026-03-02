@@ -1,5 +1,7 @@
 ## Contributing and local workflow
 
+For **user-facing docs** (how to run, update the app, backups), see **README.md**.
+
 This project is a personal app, but the repo is structured so future-you (or an AI
 assistant) can work on it safely and consistently.
 
@@ -28,6 +30,13 @@ The Typer CLI under `scripts/cli.py` is exposed as the `handoff` command:
 - `uv run handoff typecheck` – type checking with pyright over `src/` and `scripts/`
 - `uv run handoff test` – run the pytest suite
 - `uv run handoff ci` – run lint, format, type checking, and tests together
+- `uv run handoff build-zip` – build embedded Windows zip (obfuscates with PyArmor)
+- `uv run handoff build-patch` – build patch from obfuscated build (run after build-zip)
+- `uv run handoff bump-version 2026.M.P` – bump version in pyproject.toml and handoff.version
+
+Version sync: `src/handoff/version.py` and `pyproject.toml` must match; `tests/test_version_sync.py` enforces this. Use `bump-version` to update both.
+
+Project layout: `app.py` (entrypoint), `src/handoff/` (package), `pages/` (legacy), `tests/`.
 
 Type checking (optional but recommended for larger changes):
 

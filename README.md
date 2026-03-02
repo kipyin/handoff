@@ -129,54 +129,7 @@ back from a bad patch directly from the **Settings** page:
 The app copies the backed-up files back into the app directory, clears Python
 bytecode caches, and then exits so you can reopen it in the restored state.
 
-## Development
+## For developers
 
-The Typer CLI under `scripts/cli.py` wraps common development commands:
-
-```bash
-# Run the app
-uv run handoff run
-
-# Install/sync dependencies
-uv run handoff sync
-
-# Lint and format
-uv run handoff check
-
-# Type checking
-uv run handoff typecheck
-
-# Tests
-uv run handoff test
-
-# All checks (lint, format, type checking, tests)
-uv run handoff ci
-
-# Build embedded Windows zip (obfuscates src/handoff with PyArmor)
-uv run handoff build-zip
-
-# Build patch from obfuscated build (for PyArmor-built installs; run after build-zip)
-uv run handoff build-patch
-
-# Bump version in pyproject.toml and handoff.version
-uv run handoff bump-version 2026.2.21
-```
-
-Version sync guard:
-
-- `src/handoff/version.py` contains `__version__`.
-- `pyproject.toml` contains `[project].version`.
-- `tests/test_version_sync.py` enforces they match.
-- `scripts/bump_version.py` (and the `bump-version` CLI command) update both together.
-
-## Project layout
-
-- `app.py` — Thin Streamlit entrypoint + navigation
-- `src/handoff/ui.py` — Public Streamlit UI entrypoints
-- `src/handoff/` — Package: `models.py`, `db.py`, `data.py`
-- `pages/` — Legacy Streamlit entry scripts for Projects/Calendar (primary nav is in `app.py`)
-- `tests/` — Pytest tests
-
-See also `CONTRIBUTING.md` for a more detailed overview of the dev workflow and
-branching/versioning expectations.
+Development commands (lint, test, build-zip, build-patch, bump-version), project layout, and branching/versioning are in **CONTRIBUTING.md**.
 
