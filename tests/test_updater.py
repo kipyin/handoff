@@ -8,6 +8,7 @@ from pathlib import Path
 
 from handoff.updater import (
     _clear_pycache,
+    _format_snapshot_label,
     _iter_backup_snapshots,
     _restore_backup_snapshot,
     apply_patch_zip,
@@ -179,6 +180,17 @@ def test_iter_backup_snapshots_orders_newest_first(tmp_path: Path) -> None:
 
     snapshots = _iter_backup_snapshots(app_root)
     assert snapshots == [newer, older]
+
+
+def test_format_snapshot_label_supports_legacy_and_versioned_names() -> None:
+    """_format_snapshot_label parses legacy and versioned backup folder names."""
+    from pathlib import Path
+    legacy = Path("backup/20260101-120000")
+    assert _format_snapshot_label(legacy) == "2026-01-01 12:00:00"
+    versioned = Path("backup/20260302-000612-version2026.3.1")
+    label = _format_snapshot_label(versioned)
+    assert "2026-03-02 00:06:12" in label
+    assert "version 2026.3.1" in label
 
 
 def test_restore_backup_snapshot_copies_files_and_clears_pycache(tmp_path: Path) -> None:
