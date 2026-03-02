@@ -1,6 +1,7 @@
 ## Contributing and local workflow
 
 For **user-facing docs** (how to run, update the app, backups), see **README.md**.
+For **developer docs** (CLI, layout, deployment and release workflow), stay here.
 
 This project is a personal app, but the repo is structured so future-you (or an AI
 assistant) can work on it safely and consistently.
@@ -30,9 +31,10 @@ The Typer CLI under `scripts/cli.py` is exposed as the `handoff` command:
 - `uv run handoff typecheck` – type checking with pyright over `src/` and `scripts/`
 - `uv run handoff test` – run the pytest suite
 - `uv run handoff ci` – run lint, format, type checking, and tests together
-- `uv run handoff build-zip` – build embedded Windows zip (obfuscates with PyArmor)
-- `uv run handoff build-patch` – build patch from obfuscated build (run after build-zip)
+- `uv run handoff build-full` – build embedded Windows zip (obfuscates with PyArmor)
+- `uv run handoff build-patch` – build patch from obfuscated build (run after build-full)
 - `uv run handoff bump-version 2026.M.P` – bump version in pyproject.toml and handoff.version
+ - `uv run handoff build-exe` – experimental handoff.exe build via PyInstaller
 
 Version sync: `src/handoff/version.py` and `pyproject.toml` must match; `tests/test_version_sync.py` enforces this. Use `bump-version` to update both.
 
@@ -50,13 +52,13 @@ For any **major feature or behavior change** (new UI, new tests for critical cod
 type-checking setup, etc.), follow this flow:
 
 1. Branch from `main`:
-   - `git checkout -b develop/<feature-name>`
+   - `git checkout -b release/YYYY.M.MINOR` (for example `release/2026.3.3`)
 2. Make focused commits:
    - Keep each commit as small and coherent as practical.
 3. Bump the CalVer patch version when shipping user-visible changes:
    - Use the CLI helper so `pyproject.toml` and `src/handoff/version.py` stay in sync:
      ```bash
-     uv run handoff bump-version 2026.2.XY
+     uv run handoff bump-version YYYY.M.MINOR
      ```
 4. Update documentation:
    - Add a new section to `RELEASE_NOTES.md` under the new version (see **Release notes** below).
@@ -82,6 +84,27 @@ When adding a new version block to `RELEASE_NOTES.md`:
    - `uv run handoff typecheck` (or `uv run pyright src scripts`)
    - `uv run handoff test` (or `uv run handoff ci` to run everything together)
 6. Merge back into `main` once tests pass.
+
+### macOS support (planning)
+
+On macOS today, run Handoff from source using the same uv + CLI workflow:
+
+```bash
+uv sync
+uv run handoff
+```
+
+The app runs as a local Streamlit app with a SQLite database stored under your per-user
+data directory (for example via `platformdirs`, typically under `~/Library/Application Support/`).
+There is no signed `.app` bundle yet; updates are applied via code changes or patch zips,
+not via a macOS installer.
+
+Future work may introduce a signed and notarized macOS bundle (or CLI binary) built with
+PyInstaller or a platform-specific packager. When doing macOS distribution work:
+
+- Use a dedicated branch such as `develop/macos-bundle`.
+- Plan for Gatekeeper, codesigning, notarization, and minimum macOS version.
+- Prefer `arm64` builds for Apple Silicon while keeping `x86_64` in mind if useful.
 
 ### API documentation
 

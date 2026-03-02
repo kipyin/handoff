@@ -15,6 +15,19 @@ Unlike an ad-hoc Excel or Sheets tracker, this app is opinionated around
 
 If you find yourself stitching together multiple sheets or constantly re-filtering to answer "what must ship this week across all projects?", this app aims to make that view a single click instead.
 
+## Quickstart
+
+- **Prerequisites**: Python 3.13+ and [uv](https://docs.astral.sh/uv/).
+- **Install and run**:
+
+```bash
+uv sync
+uv run handoff
+```
+
+You get a local, single-user to-do app backed by SQLite, with a unified view across projects
+and helpers, plus a simple weekly calendar, analytics ideas, and an in-app update flow.
+
 ## Database: SQLite
 
 The app uses **SQLite** (single file, no server). It's a good fit for:
@@ -70,7 +83,7 @@ The configuration lives in `src/handoff/logging.py` and is initialised from
 
 - **During development**, run the app from a terminal to see logs live as you interact:
   ```bash
-  uv run streamlit run app.py
+  uv run handoff
   ```
 - **What gets logged** (non-exhaustive):
   - Database initialisation and file location.
@@ -89,7 +102,7 @@ package so that distributed code is protected; `app.py` stays readable. You need
 in your dev environment (`uv sync` installs it):
 
 ```bash
-uv run handoff build-zip
+uv run handoff build-full
 ```
 
 This produces a zip under `dist/` (named like `handoff-<version>-windows-embed.zip`).
@@ -99,9 +112,9 @@ stored in your user data directory, not inside the extracted folder.
 For small logic-only changes you can ship a **code-only patch** zip instead of a full
 embedded bundle. For production usage, always use the obfuscated patch flow:
 
-- Run `uv run handoff build-zip` to produce the embedded app build.
-- Then run `uv run handoff build-patch` to create
-  `dist/handoff-<version>-obfuscated-patch.zip` from the obfuscated build output so that the
+- Run `uv run handoff build-full` to produce the embedded app build.
+- Then run `uv run handoff build-patch` to create  
+  `dist/handoff-<version>-patch.zip` from the obfuscated build output so that the  
   in-app updater can apply it to PyArmor-built installs.
 
 ### Updating the app (user flow)
@@ -124,5 +137,7 @@ The app copies the backed-up files back, clears caches, and exits; run the launc
 
 ## For developers
 
-Development commands (lint, test, build-zip, build-patch, bump-version), project layout, and branching/versioning are in **CONTRIBUTING.md**.
+Development commands (lint, test, build-full, build-patch, bump-version), project layout, and branching/versioning are in **CONTRIBUTING.md**.
 
+The project lives at [`https://gitee.com/kipyt/handoff`](https://gitee.com/kipyt/handoff). See
+`CONTRIBUTING.md` for the full developer workflow, code style, and release checklist.

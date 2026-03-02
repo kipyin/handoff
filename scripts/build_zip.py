@@ -280,39 +280,6 @@ def _write_run_bat() -> None:
     (APP_BUILD_DIR / "run.bat").write_text(content, encoding="utf-8")
 
 
-def _write_run_ps1() -> None:
-    """Write a run.ps1 launcher (PowerShell) that starts the Streamlit app.
-
-    If ./update exists and has files, copies them into the app root using
-    Copy-Item (no Python), then removes ./update. PowerShell-compatible.
-    """
-    print("Writing run.ps1 launcher...")
-    content = textwrap.dedent(
-        r"""
-        $ScriptDir = $PSScriptRoot
-        Set-Location $ScriptDir
-
-        $env:PYTHONHOME = Join-Path $ScriptDir "python"
-        $env:PYTHONPATH = "$ScriptDir;$ScriptDir\src"
-
-        $updateDir = Join-Path $ScriptDir "update"
-        if (Test-Path $updateDir) {
-            $updateFiles = Get-ChildItem -Path $updateDir -Recurse -File -ErrorAction SilentlyContinue
-            if ($updateFiles) {
-                Write-Host "Applying update..."
-                Copy-Item -Path "$updateDir\*" -Destination $ScriptDir -Recurse -Force
-                Remove-Item -Path $updateDir -Recurse -Force -ErrorAction SilentlyContinue
-                Write-Host "Update applied."
-            }
-        }
-
-        $pythonExe = Join-Path $ScriptDir "python\python.exe"
-        & $pythonExe -m handoff
-        """
-    ).lstrip()
-    (APP_BUILD_DIR / "run.ps1").write_text(content, encoding="utf-8")
-
-
 def _make_zip(name: str, version: str) -> Path:
     """Create the final zip archive under `dist/` and return its path.
 
@@ -335,7 +302,7 @@ def _make_zip(name: str, version: str) -> Path:
 
 
 def main() -> None:
-    """Build the Windows embedded zip distribution for the to-do app."""
+    """Build the full Windows embedded zip distribution for the app."""
     name, version = _read_project_metadata()
     print(f"Building {name} {version} (Windows embedded Python zip)...")
     _prepare_dirs()
@@ -346,7 +313,6 @@ def main() -> None:
     _copy_docs()
     _obfuscate_app_code_with_pyarmor()
     _write_run_bat()
-    _write_run_ps1()
     out_zip = _make_zip(name, version)
     print()
     print("Build complete.")

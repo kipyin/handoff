@@ -9,6 +9,7 @@ import re
 import shutil
 import threading
 import zipfile
+from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
 from typing import BinaryIO
@@ -55,7 +56,7 @@ def _read_patch_members(zf: zipfile.ZipFile) -> tuple[list[str], str | None]:
 
 
 def _get_app_root() -> Path:
-    """Return the root directory where app.py lives.
+    """Return the root directory where app.py or the launcher lives.
 
     Returns:
         Path to the application root (parent of src/).
@@ -92,14 +93,14 @@ def stage_patch_with_backup(
     first; the set of paths to backup is derived from the contents of update/
     (paths that will overwrite app_root when the launcher runs). Backup content
     is always copied from app_root (current installed files), not from update/.
-    The launcher (run.bat / run.ps1) later copies update/ into the app root
+    The launcher (handoff.exe, run.bat, or run.ps1) later copies update/ into the app root
     without starting Python, avoiding WinError 32 on locked .pyd files.
 
     Args:
         file_like: A binary file-like object positioned at the start of the zip.
         app_root: Optional explicit application root. Defaults to _get_app_root().
-        app_version: Current app version for backup folder name. Defaults to handoff.version.__version__.
-        upload_name: Optional original patch zip filename (e.g. from an uploader). Used only for logging.
+        app_version: Current app version for backup folder name.
+        upload_name: Optional original patch zip filename (e.g. from an uploader).
 
     Returns:
         A human-readable status message.
@@ -109,6 +110,7 @@ def stage_patch_with_backup(
         app_root = _get_app_root()
     if app_version is None:
         from handoff.version import __version__ as v
+
         app_version = v
 
     logger.info("Patch zip uploaded: {}", upload_name or "(no name)")
@@ -137,11 +139,7 @@ def stage_patch_with_backup(
 
     # Backup after extraction: list paths from update/ (what will be overwritten);
     # copy from app_root only (current installed files).
-    paths_to_backup = [
-        p.relative_to(staging).as_posix()
-        for p in staging.rglob("*")
-        if p.is_file()
-    ]
+    paths_to_backup = [p.relative_to(staging).as_posix() for p in staging.rglob("*") if p.is_file()]
     backup_dirname = _backup_dir_name(app_version)
     backup_root = app_root / BACKUP_DIR / backup_dirname
     backup_root.mkdir(parents=True, exist_ok=True)
@@ -171,12 +169,13 @@ def stage_patch_with_backup(
         logger.info("Staged patch for version {} in {}", target_version, staging)
         return (
             f"Update files are ready (target version: {target_version}). "
-            "Close in 2s. Run run.bat or run.ps1 again to complete the update."
+            "Close in 2s. Run handoff.exe (or run.bat / run.ps1 on older builds) again to complete "
+            "the update."
         )
     logger.info("Staged patch in {}", staging)
     return (
         "Update files are ready. Close in 2s. "
-        "Run run.bat or run.ps1 again to complete the update."
+        "Run handoff.exe (or run.bat / run.ps1 on older builds) again to complete the update."
     )
 
 
@@ -222,12 +221,13 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
         logger.info("Staged patch for version {} in {}", target_version, staging)
         return (
             f"Update files are ready (target version: {target_version}). "
-            "The app will close in 2 seconds. Please run run.bat again to complete the update."
+            "The app will close in 2 seconds. Please run handoff.exe (or run.bat on older builds) "
+            "again to complete the update."
         )
     logger.info("Staged patch in {}", staging)
     return (
         "Update files are ready. The app will close in 2 seconds. "
-        "Please run run.bat again to complete the update."
+        "Please run handoff.exe (or run.bat on older builds) again to complete the update."
     )
 
 
@@ -257,6 +257,7 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
 
         # Create a timestamped backup with version in the folder name.
         from handoff.version import __version__ as app_version
+
         backup_dirname = _backup_dir_name(app_version)
         backup_root = app_root / BACKUP_DIR / backup_dirname
         for name in members:
@@ -346,6 +347,7 @@ def apply_staged_update(app_root: Path | None = None) -> str | None:
         return None
 
     from handoff.version import __version__ as app_version
+
     backup_dirname = _backup_dir_name(app_version)
     backup_root = app_root / BACKUP_DIR / backup_dirname
 
@@ -429,7 +431,8 @@ def _format_snapshot_label(snapshot: Path) -> str:
         snapshot: Path to a timestamped backup directory.
 
     Returns:
-        Formatted date string, optionally with version (e.g. "2026-03-02 00:06:12  version 2026.3.1").
+        Formatted date string, optionally with version
+        (for example "2026-03-02 00:06:12  version 2026.3.1").
 
     """
     name = snapshot.name
@@ -453,7 +456,7 @@ def stage_restore_from_snapshot(
     """Stage a backup snapshot into update/ for the launcher to apply on next start.
 
     Copies the snapshot contents into app_root/update/ (clearing update/ first).
-    The launcher (run.bat / run.ps1) then copies update/ into the app root and
+    The launcher (handoff.exe, run.bat, or run.ps1) then copies update/ into the app root and
     removes update/, so no Python process touches the app root and locked files
     (e.g. PyArmor .pyd) can be replaced.
 
@@ -495,12 +498,15 @@ def stage_restore_from_snapshot(
             logger.warning("Could not stage {} from snapshot: {}", rel, e)
 
     logger.info("Staged {} files to {}: {}", len(staged), staging, staged)
-    logger.info("Everything is in place and ready to restore. Run run.bat again to apply.")
+    logger.info(
+        "Everything is in place and ready to restore. Run handoff.exe (or run.bat / run.ps1 on "
+        "older builds) again to apply."
+    )
     logger.info("Program about to shut off in 2 seconds.")
 
     return (
         "Backup staged to ./update/. "
-        "Close in 2s. Run run.bat or run.ps1 again to restore."
+        "Close in 2s. Run handoff.exe (or run.bat / run.ps1 on older builds) again to restore."
     )
 
 
@@ -539,7 +545,7 @@ def _schedule_shutdown(delay_seconds: float = 2.0) -> None:
     """Schedule a hard process exit after a short delay.
 
     This is used after applying a patch so that the Streamlit process – and any
-    wrapper like `run.bat` – terminate automatically without requiring the user
+    wrapper like the launcher executable or `run.bat` – terminate automatically without requiring
     to manually close the terminal window.
 
     Args:
@@ -607,8 +613,8 @@ def render_update_panel(app_version: str) -> None:
     st.markdown("### App updates")
     st.caption(
         "Upload a code-only patch zip (e.g. from a Handoff release). The patch is extracted to "
-        "./update/ and the app will close in 2 seconds. Run run.bat again to apply the update and "
-        "start the app."
+        "./update/ and the app will close in 2 seconds. Run handoff.exe (or run.bat / run.ps1 on "
+        "older builds) again to apply the update and start the app."
     )
 
     app_root = _get_app_root()
@@ -629,8 +635,8 @@ def render_update_panel(app_version: str) -> None:
                 app_tuple = _parse_version(app_version)
                 if patch_tuple < app_tuple:
                     st.warning(
-                        f"This patch is older ({patch_version}) than the current app ({app_version}). "
-                        "Applying may overwrite newer code."
+                        f"This patch is older ({patch_version}) than the current app "
+                        f"({app_version}). Applying may overwrite newer code."
                     )
                     apply_anyway = st.checkbox(
                         "I understand, apply this older patch anyway",
@@ -664,30 +670,26 @@ def render_update_panel(app_version: str) -> None:
     # One-time message after an update: show where the backup was saved.
     sentinel = app_root / LAST_UPDATE_BACKUP_FILE
     if sentinel.exists():
-        try:
+        with suppress(OSError):
             backup_path = sentinel.read_text(encoding="utf-8").strip()
             st.info(
                 f"Update applied. A backup of the previous files was saved to **{backup_path}**."
             )
-        except OSError:
-            pass
-        try:
+        with suppress(OSError):
             sentinel.unlink()
-        except OSError:
-            pass
 
     st.markdown("### Restore from backup")
     st.caption(
         "Restore code from a timestamped backup created when applying a patch. "
         "Pick a snapshot and click Restore and Restart; the backup is staged to ./update/ "
-        "and the app will close. Run run.bat again to apply the restore (same as updating)."
+        "and the app will close. Run handoff.exe (or run.bat / run.ps1 on older builds) again to "
+        "apply the restore (same as updating)."
     )
     snapshots = _iter_backup_snapshots(app_root)
     if not snapshots:
         st.caption("No backup snapshots found.")
     else:
         labels = [_format_snapshot_label(s) for s in snapshots]
-        snapshot_names = [s.name for s in snapshots]
         selected = st.selectbox(
             "Backup snapshot",
             range(len(snapshots)),

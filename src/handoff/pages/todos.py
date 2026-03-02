@@ -279,26 +279,22 @@ def _compute_defaults_from_filters(
     if default_project_id is None and projects:
         default_project_id = projects[0].id
         default_project_name = projects[0].name
-    default_status = (
-        status_filters[0] if len(status_filters) == 1 else TodoStatus.DELEGATED.value
-    )
+    default_status = status_filters[0] if len(status_filters) == 1 else TodoStatus.DELEGATED.value
     default_helper = helper_filters[0] if len(helper_filters) == 1 else ""
     return default_project_id, default_project_name, default_status, default_helper
 
 
-def _sort_and_build_display_df(
-    filtered_df: pd.DataFrame, sort_col: str, sort_asc: bool
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Sort filtered todos DataFrame and build working_df and display_df.
+def _sort_and_build_display_df(filtered_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Sort todos by created_at and build working_df and display_df.
 
     Returns:
         (working_df with __todo_id and __created_at, display_df without id/created_at).
 
     """
-    if not filtered_df.empty and sort_col in filtered_df.columns:
+    if not filtered_df.empty and "created_at" in filtered_df.columns:
         filtered_df = filtered_df.sort_values(
-            by=sort_col,
-            ascending=sort_asc,
+            by="created_at",
+            ascending=True,
             na_position="last",
         ).reset_index(drop=True)
     working_df = filtered_df.reset_index(drop=True).copy()
@@ -545,41 +541,7 @@ def _render_editable_table(
     if isinstance(remembered_helper, str) and remembered_helper:
         default_helper = remembered_helper
 
-    sort_col_key = f"{key_prefix}_sort_column"
-    sort_asc_key = f"{key_prefix}_sort_asc"
-    if sort_col_key not in st.session_state:
-        st.session_state[sort_col_key] = "deadline"
-    if sort_asc_key not in st.session_state:
-        st.session_state[sort_asc_key] = True
-    sortable_cols = [
-        c for c in ["project", "name", "status", "helper", "deadline"] if c in filtered_df.columns
-    ]
-    sort_col = st.session_state[sort_col_key]
-    if sort_col not in sortable_cols:
-        sort_col = sortable_cols[0] if sortable_cols else "name"
-    sort_asc = st.session_state[sort_asc_key]
-    working_df, display_df = _sort_and_build_display_df(filtered_df, sort_col, sort_asc)
-
-    with st.container():
-        sc1, sc2, _ = st.columns([1, 1, 4])
-        with sc1:
-            new_sort_col = st.selectbox(
-                "Sort by",
-                options=sortable_cols,
-                index=sortable_cols.index(sort_col) if sort_col in sortable_cols else 0,
-                key=f"{key_prefix}_sort_select",
-            )
-        with sc2:
-            new_sort_asc = st.selectbox(
-                "Order",
-                options=["Ascending", "Descending"],
-                index=0 if sort_asc else 1,
-                key=f"{key_prefix}_order_select",
-            )
-        if new_sort_col != sort_col or new_sort_asc != ("Ascending" if sort_asc else "Descending"):
-            st.session_state[sort_col_key] = new_sort_col
-            st.session_state[sort_asc_key] = new_sort_asc == "Ascending"
-            st.rerun()
+    working_df, display_df = _sort_and_build_display_df(filtered_df)
 
     column_order = [
         "project",
