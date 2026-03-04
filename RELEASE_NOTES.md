@@ -8,6 +8,8 @@ where applicable. Version headings keep an impact tag: `[Breaking]`,
 
 - **Feature**
   - **Overdue deadline filter:** Added an "Overdue" option to the Deadline preset filter on the Todos page. This allows quick filtering of all tasks with a deadline prior to today.
+- **Removed**
+  - **Calendar and Analytics:** The Calendar and Analytics pages have been removed in this release to focus on core task management stability.
 - **Internal**
   - **Schema Migration:** This release includes database schema updates. Existing databases will be migrated automatically on first launch.
 
@@ -150,34 +152,34 @@ where applicable. Version headings keep an impact tag: `[Breaking]`,
 ## 2026.2.17 [Optional]
 
 - **Contributor docs:** Add a `CONTRIBUTING.md` guide describing the uv/CLI workflow, type
-checking with pyright, and the branching/versioning expectations backed by the Cursor
-rules, plus reference it from the README.
+ checking with pyright, and the branching/versioning expectations backed by the Cursor
+ rules, plus reference it from the README.
 
 ## 2026.2.16 [Optional]
 
 - **DB tests:** Add tests for file-based DB initialisation and the lightweight `completed_at`
-migration using a temporary SQLite database, guarding against regressions in init/migrate
-behaviour.
+ migration using a temporary SQLite database, guarding against regressions in init/migrate
+ behaviour.
 
 ## 2026.2.15 [Optional]
 
 - **Type checking:** Add a basic `pyright` configuration for `src/` and `scripts/`, wiring it
-into the dev environment and excluding dynamic ORM/UI modules for now so type checking can
-run cleanly and be tightened incrementally.
+ into the dev environment and excluding dynamic ORM/UI modules for now so type checking can
+ run cleanly and be tightened incrementally.
 
 ## 2026.2.14 [Optional]
 
 - **DB robustness:** Wrap database engine creation and schema initialisation in structured
-error handling, logging failures with loguru and surfacing a friendly error message in
-the UI when the DB cannot be created or migrated.
+ error handling, logging failures with loguru and surfacing a friendly error message in
+ the UI when the DB cannot be created or migrated.
 
 ## 2026.2.13 [Recommended]
 
 - **Rollback UI:** Add a **Restore from backup** section to the in-app **Update app** sidebar
-so you can browse timestamped backup snapshots, restore a selected snapshot, and have the
-app restart automatically into the restored state.
+ so you can browse timestamped backup snapshots, restore a selected snapshot, and have the
+ app restart automatically into the restored state.
 - **Updater tests:** Add unit tests for the updater's patch application, backup handling,
-`__pycache_`_ cleanup, and the new backup-restore helper.
+ `__pycache_`_ cleanup, and the new backup-restore helper.
 
 ## 2026.2.12 [Recommended]
 
@@ -188,26 +190,26 @@ app restart automatically into the restored state.
 ## 2026.2.11 [Optional]
 
 - **Updater cache cleanup:** After applying a code-only patch, the app now removes `__pycache__`
-directories under the application root (including `src/` and `pages/`) so that Python regenerates
-fresh bytecode for the updated sources on next start.
+ directories under the application root (including `src/` and `pages/`) so that Python regenerates
+ fresh bytecode for the updated sources on next start.
 - **Internal cleanup:** Modernise models and data access to use `UTC`/`StrEnum` and tidy imports and
-type hints across scripts and tests; there are no user-facing behaviour changes.
+ type hints across scripts and tests; there are no user-facing behaviour changes.
 
 ## 2026.2.10 [Optional]
 
 - **Updater timing:** Fix the in-app **Update app** panel so that its "Apply and Restart" button
-correctly reflects unsaved changes from the **current** rerun instead of lagging by one rerun.
+ correctly reflects unsaved changes from the **current** rerun instead of lagging by one rerun.
 - **Persistent patch upload:** Keep the selected patch zip in memory across reruns (for example
-after clicking **Save changes** on the main Todos table) so the update button does not disappear
-until the patch has been applied or the app is restarted.
+ after clicking **Save changes** on the main Todos table) so the update button does not disappear
+ until the patch has been applied or the app is restarted.
 
 ## 2026.2.9 [Recommended]
 
 - **Updater UX:** The in-app **Update app** panel now blocks applying a patch while there are
-unsaved changes in the main Todos table and shows a clear warning asking you to save first.
+ unsaved changes in the main Todos table and shows a clear warning asking you to save first.
 - **Auto-restart flow:** After successfully applying a code-only patch, the app now exits
-automatically so that the `run.bat` window closes; reopening `run.bat` starts the updated
-version without requiring manual process termination.
+ automatically so that the `run.bat` window closes; reopening `run.bat` starts the updated
+ version without requiring manual process termination.
 
 ## 2026.2.8 [Recommended]
 
