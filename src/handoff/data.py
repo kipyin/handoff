@@ -125,6 +125,14 @@ def create_todo(
         session.add(todo)
         session.commit()
         session.refresh(todo)
+        logger.info(
+            "Created todo {todo_id} in project {project_id}: {name} (status={status}, helper={helper})",
+            todo_id=todo.id,
+            project_id=todo.project_id,
+            name=todo.name,
+            status=todo.status.value,
+            helper=todo.helper,
+        )
         return todo
 
 
@@ -178,11 +186,14 @@ def update_todo(
         session.add(todo)
         session.commit()
         session.refresh(todo)
+
+        completion_msg = " [MARKED DONE]" if previous_status != todo.status and todo.status == TodoStatus.DONE else ""
         logger.info(
-            "Updated todo {todo_id} in project {project_id} "
+            "Updated todo {todo_id} in project {project_id}{completion} "
             "(status={status}, helper={helper}, deadline={deadline})",
             todo_id=todo.id,
             project_id=todo.project_id,
+            completion=completion_msg,
             status=todo.status.value,
             helper=todo.helper,
             deadline=todo.deadline,
@@ -206,9 +217,15 @@ def delete_todo(todo_id: int) -> bool:
             logger.warning("Todo {todo_id} not found for delete", todo_id=todo_id)
             return False
         name = todo.name
+        project_id = todo.project_id
         session.delete(todo)
         session.commit()
-        logger.info("Deleted todo {todo_id} name={name!r}", todo_id=todo_id, name=name)
+        logger.info(
+            "Deleted todo {todo_id} ({name}) from project {project_id}", 
+            todo_id=todo_id, 
+            name=name,
+            project_id=project_id
+        )
         return True
 
 
