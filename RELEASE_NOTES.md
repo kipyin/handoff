@@ -4,6 +4,13 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal**
 where applicable. Version headings keep an impact tag: `[Breaking]`,
 `[Recommended]`, or `[Optional]`.
 
+## 2026.3.5 [Breaking]
+
+- **Feature**
+  - **Overdue deadline filter:** Added an "Overdue" option to the Deadline preset filter on the Todos page. This allows quick filtering of all tasks with a deadline prior to today.
+- **Internal**
+  - **Schema Migration:** This release includes database schema updates. Existing databases will be migrated automatically on first launch.
+
 ## 2026.3.4 [Optional]
 
 - **Improvement**
@@ -262,4 +269,3 @@ version without requiring manual process termination.
 - Switch to CalVer versioning (YYYY.M.MINOR) starting with this release.
 - Move SQLite database to a per-user data directory so updates do not overwrite user data.
 - Add build script for Windows zip distribution with embedded Python (`build_zip.py`).
-
