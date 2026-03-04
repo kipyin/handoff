@@ -26,6 +26,7 @@ from handoff.models import TodoStatus
 
 # Deadline filter presets (used by table filters and tests).
 DEADLINE_ANY = "Any"
+DEADLINE_OVERDUE = "Overdue"
 DEADLINE_TODAY = "Today"
 DEADLINE_TOMORROW = "Tomorrow"
 DEADLINE_THIS_WEEK = "This week"
@@ -33,6 +34,7 @@ DEADLINE_CUSTOM = "Custom range"
 
 DEADLINE_PRESETS = [
     DEADLINE_ANY,
+    DEADLINE_OVERDUE,
     DEADLINE_TODAY,
     DEADLINE_TOMORROW,
     DEADLINE_THIS_WEEK,
@@ -44,7 +46,7 @@ def _deadline_preset_bounds(preset: str) -> tuple[date | None, date | None]:
     """Return (start_date, end_date) for a deadline preset, or (None, None) for Any.
 
     Args:
-        preset: One of DEADLINE_ANY, DEADLINE_TODAY, DEADLINE_TOMORROW,
+        preset: One of DEADLINE_ANY, DEADLINE_OVERDUE, DEADLINE_TODAY, DEADLINE_TOMORROW,
             DEADLINE_THIS_WEEK, or DEADLINE_CUSTOM.
 
     Returns:
@@ -54,6 +56,8 @@ def _deadline_preset_bounds(preset: str) -> tuple[date | None, date | None]:
     today = date.today()
     if preset == DEADLINE_ANY:
         return None, None
+    if preset == DEADLINE_OVERDUE:
+        return date.min, today - timedelta(days=1)
     if preset == DEADLINE_TODAY:
         return today, today
     if preset == DEADLINE_TOMORROW:
