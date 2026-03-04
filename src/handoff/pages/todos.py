@@ -306,193 +306,98 @@ def _sort_and_build_display_df(filtered_df: pd.DataFrame) -> tuple[pd.DataFrame,
     return working_df, display_df
 
 
-def _normalize_str_field(row: dict, key: str) -> str:
-    """Return trimmed string value for a row field, or empty string."""
-    return (row.get(key) or "").strip()
-
-
-def _normalize_deadline_for_compare(val: object) -> date | None:
-    """Normalize deadline value to date for comparison, or None."""
-    if val is None:
-        return None
-    if hasattr(val, "date") and callable(val.date):
-        return val.date()
-    if isinstance(val, str):
-        return datetime.fromisoformat(val[:10]).date()
-    return None
-
-
-def _row_equals(current: dict, prev: dict) -> bool:
-    """Return True if current row has same persistable fields as prev.
-
-    Args:
-        current: Current row dict (project, name, status, helper, deadline, notes).
-        prev: Previous row dict for comparison.
-
-    Returns:
-        True if all persistable fields match.
-
-    """
-    if _normalize_str_field(current, "project") != _normalize_str_field(prev, "project"):
-        return False
-    if _normalize_str_field(current, "name") != _normalize_str_field(prev, "name"):
-        return False
-    if _normalize_str_field(current, "status") != _normalize_str_field(prev, "status"):
-        return False
-    c_notes = _normalize_str_field(current, "notes") or None
-    p_notes = _normalize_str_field(prev, "notes") or None
-    if c_notes != p_notes:
-        return False
-    if (_normalize_str_field(current, "helper") or None) != (
-        _normalize_str_field(prev, "helper") or None
-    ):
-        return False
-    curr_d = _normalize_deadline_for_compare(current.get("deadline"))
-    prev_d = _normalize_deadline_for_compare(prev.get("deadline"))
-    return curr_d == prev_d
-
-
-def _parse_previous_snapshot(last_snapshot_json: str | None) -> dict[int, dict]:
-    """Parse previous snapshot JSON into a mapping of todo_id -> row dict."""
-    import json as _json
-
-    prev_by_id: dict[int, dict] = {}
-    if not last_snapshot_json:
-        return prev_by_id
-    try:
-        prev_records = _json.loads(last_snapshot_json)
-        for rec in prev_records if isinstance(prev_records, list) else []:
-            tid = rec.get("__todo_id")
-            if tid is not None and not (isinstance(tid, float) and pd.isna(tid)):
-                prev_by_id[int(tid)] = rec
-    except (TypeError, ValueError):
-        pass
-    return prev_by_id
-
-
-def _save_rows(
-    edited_df: pd.DataFrame,
-    *,
+def _persist_changes(
+    state: dict,
+    display_df: pd.DataFrame,
     projects: list,
     default_project_id: int | None,
-    context_label: str,
-    last_snapshot_json: str | None = None,
-) -> dict[str, object]:
-    """Validate and persist edited rows; return operation summary.
+    key_prefix: str,
+) -> None:
+    """Apply edits, additions, and deletions from data_editor state to the database.
 
     Args:
-        edited_df: DataFrame from the data_editor after user edits.
-        projects: Current list of projects (for name-to-id resolution).
-        default_project_id: Default project for new rows.
-        context_label: Label for logging.
-        last_snapshot_json: Optional JSON of previous snapshot for change detection.
-
-    Returns:
-        Summary dict with created, updated, deleted, skipped, errors, created_ids, updated_ids.
+        state: The 'edited_rows', 'added_rows', 'deleted_rows' dict from st.data_editor.
+        display_df: The DataFrame that was passed to the editor (for ID lookup).
+        projects: List of project models.
+        default_project_id: Project ID to use for new rows if not specified.
+        key_prefix: Prefix for session state keys.
 
     """
-    project_by_name = {project.name: project.id for project in projects}
-    prev_by_id = _parse_previous_snapshot(last_snapshot_json)
+    project_by_name = {p.name: p.id for p in projects}
+    edited = state.get("edited_rows", {})
+    added = state.get("added_rows", [])
+    deleted = state.get("deleted_rows", [])
 
-    summary: dict[str, object] = {
-        "created": 0,
-        "updated": 0,
-        "deleted": 0,
-        "skipped": 0,
-        "errors": [],
-        "created_ids": [],
-        "updated_ids": [],
-        "last_created_project_id": None,
-        "last_created_helper": None,
-    }
+    # 1. Handle Deletions
+    for row_idx in deleted:
+        if 0 <= row_idx < len(display_df):
+            todo_id = display_df.iloc[row_idx].get("__todo_id")
+            if todo_id is not None and not pd.isna(todo_id):
+                delete_todo(int(todo_id))
+                logger.info("Deleted todo_id={}", todo_id)
 
-    for row_no, row in enumerate(edited_df.to_dict("records"), start=1):
-        todo_id_raw = row.get("__todo_id")
-        is_existing = todo_id_raw is not None and not pd.isna(todo_id_raw)
-        todo_id = int(todo_id_raw) if is_existing else None
-
-        name_val = (row.get("name") or "").strip()
-        if not name_val:
-            summary["skipped"] += 1
-            summary["errors"].append(f"Row {row_no}: name is required.")
+    # 2. Handle Edits
+    for row_idx, changes in edited.items():
+        row_idx = int(row_idx)
+        if not (0 <= row_idx < len(display_df)):
             continue
 
-        if "project" in row:
-            project_name = (row.get("project") or "").strip()
-            project_id = project_by_name.get(project_name) if project_name else None
-        else:
-            project_id = default_project_id
-
-        if project_id is None:
-            summary["skipped"] += 1
-            summary["errors"].append(f"Row {row_no}: valid project is required.")
+        todo_id = display_df.iloc[row_idx].get("__todo_id")
+        if todo_id is None or pd.isna(todo_id):
             continue
 
-        raw_status = (row.get("status") or "").strip() or TodoStatus.DELEGATED.value
-        try:
-            status_val = TodoStatus(raw_status)
-        except ValueError:
-            summary["skipped"] += 1
-            summary["errors"].append(f"Row {row_no}: invalid status '{raw_status}'.")
+        # Fetch current values from the display_df to merge with changes
+        current_row = display_df.iloc[row_idx].to_dict()
+        
+        # Resolve project_id
+        project_name = changes.get("project", current_row.get("project"))
+        project_id = project_by_name.get(project_name)
+
+        # Resolve status
+        status_str = changes.get("status", current_row.get("status"))
+        status_val = TodoStatus(status_str) if status_str else None
+
+        # Resolve deadline
+        deadline_val, _ = _coerce_deadline(changes.get("deadline", current_row.get("deadline")))
+
+        update_todo(
+            int(todo_id),
+            project_id=project_id,
+            name=changes.get("name", current_row.get("name")),
+            status=status_val,
+            deadline=deadline_val,
+            helper=changes.get("helper", current_row.get("helper")),
+            notes=changes.get("notes", current_row.get("notes")),
+        )
+        logger.info("Updated todo_id={}", todo_id)
+
+    # 3. Handle Additions
+    for row in added:
+        name = row.get("name", "").strip()
+        if not name:
             continue
 
-        deadline_val, deadline_error = _coerce_deadline(row.get("deadline"))
-        if deadline_error:
-            summary["skipped"] += 1
-            summary["errors"].append(f"Row {row_no}: {deadline_error}.")
+        project_name = row.get("project")
+        project_id = project_by_name.get(project_name) if project_name else default_project_id
+        if not project_id:
             continue
 
-        helper_val = row.get("helper")
-        notes_val = (row.get("notes") or "").strip() or None
+        status_str = row.get("status") or TodoStatus.DELEGATED.value
+        deadline_val, _ = _coerce_deadline(row.get("deadline"))
+        helper = row.get("helper")
 
-        if is_existing:
-            prev_row = prev_by_id.get(todo_id) if todo_id is not None else None
-            if prev_row is not None and _row_equals(row, prev_row):
-                continue
-            updated = update_todo(
-                todo_id,
-                project_id=project_id,
-                name=name_val,
-                status=status_val,
-                deadline=deadline_val,
-                helper=helper_val,
-                notes=notes_val,
-            )
-            if updated is None:
-                summary["skipped"] += 1
-                summary["errors"].append(f"Row {row_no}: todo id {todo_id} not found for update.")
-            else:
-                summary["updated"] += 1
-                summary["updated_ids"].append(todo_id)
-                logger.info(
-                    "Save action update context={context} row={row_no} todo_id={tid} name={name!r}",
-                    context=context_label,
-                    row_no=row_no,
-                    tid=todo_id,
-                    name=name_val,
-                )
-        else:
-            created = create_todo(
-                project_id=project_id,
-                name=name_val,
-                status=status_val,
-                deadline=deadline_val,
-                helper=helper_val,
-                notes=notes_val,
-            )
-            summary["created"] += 1
-            summary["created_ids"].append(created.id)
-            summary["last_created_project_id"] = project_id
-            summary["last_created_helper"] = helper_val
-            logger.info(
-                "Save action create context={context} row={row_no} todo_id={todo_id} name={name!r}",
-                context=context_label,
-                row_no=row_no,
-                todo_id=created.id,
-                name=name_val,
-            )
-
-    return summary
+        created = create_todo(
+            project_id=project_id,
+            name=name,
+            status=TodoStatus(status_str),
+            deadline=deadline_val,
+            helper=helper,
+            notes=row.get("notes"),
+        )
+        # Remember last used project/helper for the next addition
+        st.session_state[f"{key_prefix}_last_new_project_id"] = project_id
+        st.session_state[f"{key_prefix}_last_new_helper"] = helper
+        logger.info("Created todo_id={}", created.id)
 
 
 def _render_editable_table(
@@ -503,203 +408,47 @@ def _render_editable_table(
     key_prefix: str,
     context_label: str,
 ) -> None:
-    """Render editable table with filters; snapshot-diff autosave after each run (no on_change).
-
-    Args:
-        source_df: Full todos DataFrame to display and edit.
-        projects: Current list of projects (for defaults and name resolution).
-        helper_options: Helper names for filter and column config (avoids repeated DB calls).
-        key_prefix: Streamlit key prefix for widgets and session state.
-        context_label: Label for logging and status.
-
-    """
+    """Render editable table with filters and native Streamlit delta persistence."""
     project_names = [project.name for project in projects]
     project_by_name = {p.name: p for p in projects}
+    
     filtered_df, filter_state = _apply_native_filters(
         source_df,
         key_prefix=key_prefix,
         project_names=project_names,
         helper_options=helper_options,
     )
-    if filtered_df.empty:
-        st.info("No rows match filters. You can still add rows and save.")
-        filtered_df = source_df.head(0).copy()
-
+    
     default_project_id, default_project_name, default_status, default_helper = (
         _compute_defaults_from_filters(filter_state, project_by_name, projects)
     )
-    remember_project_key = f"{key_prefix}_last_new_project_id"
-    remember_helper_key = f"{key_prefix}_last_new_helper"
-    remembered_project_id = st.session_state.get(remember_project_key)
+
+    # Apply remembered defaults from previous additions
+    remembered_project_id = st.session_state.get(f"{key_prefix}_last_new_project_id")
     if isinstance(remembered_project_id, int):
         for name, project in project_by_name.items():
             if project.id == remembered_project_id:
                 default_project_id = project.id
                 default_project_name = name
                 break
-    remembered_helper = st.session_state.get(remember_helper_key)
+    
+    remembered_helper = st.session_state.get(f"{key_prefix}_last_new_helper")
     if isinstance(remembered_helper, str) and remembered_helper:
         default_helper = remembered_helper
 
     working_df, display_df = _sort_and_build_display_df(filtered_df)
 
-    column_order = [
-        "project",
-        "name",
-        "status",
-        "helper",
-        "deadline",
-        "notes",
-    ]
-    base_caption = "Filter using the controls above. Use row deletion in the table to remove todos."
-    st.caption(base_caption)
-
-    snapshot_key = f"{key_prefix}_last_saved_snapshot"
-    status_key = f"{key_prefix}_saving_status"
-    error_key = f"{key_prefix}_saving_error"
-    editor_state_key = f"{key_prefix}_table"
-
-    _SAVE_CTX_KEY = "_todos_save_ctx"
-    if _SAVE_CTX_KEY not in st.session_state:
-        st.session_state[_SAVE_CTX_KEY] = {}
-    ctx = {
-        "projects": projects,
-        "default_project_id": default_project_id,
-        "context_label": context_label,
-        "display_df": display_df,
-        "remember_project_key": remember_project_key,
-        "remember_helper_key": remember_helper_key,
-        "snapshot_key": snapshot_key,
-        "status_key": status_key,
-        "error_key": error_key,
-    }
-    st.session_state[_SAVE_CTX_KEY][key_prefix] = ctx
-
-    def _normalize_editor_state(raw: object) -> tuple[pd.DataFrame | None, list[int]]:
-        """Return (edited DataFrame, deleted_row_indices) or (None, []).
-
-        Args:
-            raw: Session state value from data_editor (DataFrame, dict, or None).
-
-        Returns:
-            Tuple of (edited DataFrame or None, list of deleted row indices).
-
-        """
-        if raw is None:
-            return None, []
-        if isinstance(raw, pd.DataFrame):
-            return raw, []
-        if isinstance(raw, dict):
-            df = raw.get("value", raw.get("data"))
-            deleted = raw.get("deleted_rows") or []
-            indices = [int(x) for x in deleted if isinstance(x, (int, float))]
-            return df if isinstance(df, pd.DataFrame) else None, indices
-        return None, []
-
-    def _persist_editor_changes(
-        edited_df: pd.DataFrame,
-        display_df_ctx: pd.DataFrame,
-        deleted_rows_indices: list[int],
-    ) -> None:
-        """Apply deletes, save rows, update snapshot and status. Uses ctx from closure.
-
-        Args:
-            edited_df: Current edited DataFrame from the data_editor.
-            display_df_ctx: Display DataFrame used for row-index to todo_id mapping.
-            deleted_rows_indices: Indices of rows marked for deletion.
-
-        """
-        last_snapshot = st.session_state.get(ctx["snapshot_key"])
-        st.session_state[ctx["status_key"]] = "saving"
-        st.session_state[ctx["error_key"]] = ""
-        logger.info(
-            "Persist table for {context} rows={rows}",
-            context=ctx["context_label"],
-            rows=len(edited_df),
-        )
-        deleted = 0
-        skipped_for_delete = 0
-        delete_errors: list[str] = []
-        todo_ids_to_delete: list[int] = []
-        if deleted_rows_indices:
-            for idx in deleted_rows_indices:
-                if not 0 <= idx < len(display_df_ctx):
-                    continue
-                raw_id = display_df_ctx.iloc[idx].get("__todo_id")
-                if raw_id is None or pd.isna(raw_id):
-                    continue
-                todo_ids_to_delete.append(int(raw_id))
-        else:
-            if "__todo_id" in display_df_ctx.columns and "__todo_id" in edited_df.columns:
-                prev_ids = set()
-                for v in display_df_ctx["__todo_id"]:
-                    if v is not None and not (isinstance(v, float) and pd.isna(v)):
-                        prev_ids.add(int(v))
-                curr_ids = set()
-                for v in edited_df["__todo_id"]:
-                    if v is not None and not (isinstance(v, float) and pd.isna(v)):
-                        curr_ids.add(int(v))
-                todo_ids_to_delete = list(prev_ids - curr_ids)
-        for todo_id in todo_ids_to_delete:
-            if delete_todo(todo_id):
-                deleted += 1
-            else:
-                skipped_for_delete += 1
-                delete_errors.append(f"Todo id {todo_id} not found for delete.")
-        try:
-            summary = _save_rows(
-                edited_df,
-                projects=ctx["projects"],
-                default_project_id=ctx["default_project_id"],
-                context_label=ctx["context_label"],
-                last_snapshot_json=last_snapshot,
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Persist failed for {context}: {}", ctx["context_label"], exc)
-            st.session_state[ctx["status_key"]] = "error"
-            st.session_state[ctx["error_key"]] = "Autosave failed. See logs for details."
-            return
-        summary["deleted"] = summary.get("deleted", 0) + deleted
-        summary["skipped"] = summary.get("skipped", 0) + skipped_for_delete
-        if delete_errors:
-            summary.setdefault("errors", []).extend(delete_errors)
-        logger.info(
-            "Persist result {context}: created={created}, updated={updated}, "
-            "deleted={deleted}, skipped={skipped}",
-            context=ctx["context_label"],
-            created=summary["created"],
-            updated=summary["updated"],
-            deleted=summary["deleted"],
-            skipped=summary["skipped"],
-        )
-        if summary.get("last_created_project_id") is not None:
-            st.session_state[ctx["remember_project_key"]] = summary["last_created_project_id"]
-        if summary.get("last_created_helper") is not None:
-            h = summary["last_created_helper"]
-            st.session_state[ctx["remember_helper_key"]] = (
-                h if isinstance(h, str) else (h[0] if h else "")
-            )
-        st.session_state[ctx["snapshot_key"]] = edited_df.to_json(
-            date_format="iso", orient="records"
-        )
-        st.session_state[ctx["status_key"]] = "saved"
-        st.session_state[ctx["error_key"]] = ""
-
-    # Use session state when present so edits (including deletes) are not overwritten.
-    raw_current = st.session_state.get(editor_state_key)
-    edited_current, _ = _normalize_editor_state(raw_current)
-    if edited_current is not None and "__todo_id" in getattr(edited_current, "columns", []):
-        data_to_show = edited_current
-    else:
-        data_to_show = display_df
-
+    editor_key = f"{key_prefix}_table_editor"
+    
+    st.caption("Changes are saved automatically as you edit.")
+    
     edited_df = st.data_editor(
-        data_to_show,
+        display_df,
         num_rows="dynamic",
         height="content",
-        key=editor_state_key,
+        key=editor_key,
         hide_index=True,
-        column_order=column_order,
+        column_order=["project", "name", "status", "helper", "deadline", "notes"],
         column_config={
             "__todo_id": None,
             "__created_at": None,
@@ -722,25 +471,17 @@ def _render_editable_table(
         },
     )
 
-    current_snapshot = edited_df.to_json(date_format="iso", orient="records")
-    last_snapshot = st.session_state.get(snapshot_key)
-    if last_snapshot is None:
-        st.session_state[snapshot_key] = current_snapshot
-        st.session_state[status_key] = "saved"
-        st.session_state[error_key] = ""
-    elif current_snapshot != last_snapshot:
-        _, deleted_indices = _normalize_editor_state(st.session_state.get(editor_state_key))
-        _persist_editor_changes(edited_df, display_df, deleted_indices)
+    # Check for changes in the editor state
+    state = st.session_state.get(editor_key)
+    if state and (state.get("edited_rows") or state.get("added_rows") or state.get("deleted_rows")):
+        _persist_changes(
+            state=state,
+            display_df=display_df,
+            projects=projects,
+            default_project_id=default_project_id,
+            key_prefix=key_prefix,
+        )
         st.rerun()
-
-    status_value = st.session_state.get(status_key, "saved")
-    error_message = st.session_state.get(error_key, "")
-    if status_value == "saving":
-        st.caption("Saving changes\u2026")
-    elif status_value == "error":
-        st.error(error_message or "Last save failed. See logs for details.")
-    else:
-        st.caption("All changes saved.")
 
 
 def render_todos_page() -> None:
