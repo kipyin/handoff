@@ -1,8 +1,8 @@
 # migrate_db.py
-import sqlite3
-from pathlib import Path
 import os
 import platform
+import sqlite3
+from pathlib import Path
 
 def get_db_path():
     """Determine the database path based on the OS and app name."""
@@ -25,7 +25,10 @@ else:
     # Truncate the deadline strings to just the date part (first 10 chars)
     # This converts '2026-02-24 00:00:00.000000' to '2026-02-24'
     # This ensures SQLAlchemy's Date type can parse the string correctly.
-    cursor.execute("UPDATE todo SET deadline = SUBSTR(deadline, 1, 10) WHERE deadline IS NOT NULL AND LENGTH(deadline) > 10;")
+    cursor.execute(
+        "UPDATE todo SET deadline = SUBSTR(deadline, 1, 10) "
+        "WHERE deadline IS NOT NULL AND LENGTH(deadline) > 10;"
+    )
     
     rows_affected = cursor.rowcount
     conn.commit()

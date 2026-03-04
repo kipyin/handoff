@@ -126,7 +126,8 @@ def create_todo(
         session.commit()
         session.refresh(todo)
         logger.info(
-            "Created todo {todo_id} in project {project_id}: {name} (status={status}, helper={helper})",
+            "Created todo {todo_id} in project {project_id}: {name} "
+            "(status={status}, helper={helper})",
             todo_id=todo.id,
             project_id=todo.project_id,
             name=todo.name,
@@ -180,14 +181,15 @@ def update_todo(
         if notes is not _UNSET:
             todo.notes = notes
         # Track when a todo is marked as done.
-        if previous_status != todo.status and todo.status == TodoStatus.DONE:
+        is_newly_done = previous_status != todo.status and todo.status == TodoStatus.DONE
+        if is_newly_done:
             todo.completed_at = datetime.now(UTC)
 
         session.add(todo)
         session.commit()
         session.refresh(todo)
 
-        completion_msg = " [MARKED DONE]" if previous_status != todo.status and todo.status == TodoStatus.DONE else ""
+        completion_msg = " [MARKED DONE]" if is_newly_done else ""
         logger.info(
             "Updated todo {todo_id} in project {project_id}{completion} "
             "(status={status}, helper={helper}, deadline={deadline})",
