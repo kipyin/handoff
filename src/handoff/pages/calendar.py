@@ -112,28 +112,11 @@ def render_calendar_page() -> None:
         st.info("No todos with deadlines in this week.")
         return
 
-    # Light highlight for the today column (header + content area).
-    st.markdown(
-        """
-        <style>
-        .handoff-calendar-today { background-color: #e8f4f8; border-radius: 6px; padding: 6px; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
     cols = st.columns(7)
     for idx, day in enumerate(days):
         with cols[idx]:
             header = f"**{day.strftime('%a %d %b')}**"
-            if day == today:
-                header_html = f"<strong>{day.strftime('%a %d %b')}</strong> — <em>Today</em>"
-                st.markdown(
-                    f'<div class="handoff-calendar-today">{header_html}</div>',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.markdown(header)
+            st.markdown(header)
             day_todos = grouped.get(day, [])
             if not day_todos:
                 st.caption("No todos")
