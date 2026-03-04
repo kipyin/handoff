@@ -68,7 +68,7 @@ def _group_todos_by_day(todos: list[Todo]) -> dict[date, list[Todo]]:
     for todo in todos:
         if not todo.deadline:
             continue
-        day = todo.deadline.date()
+        day = todo.deadline
         grouped[day].append(todo)
     return grouped
 
@@ -105,7 +105,7 @@ def render_calendar_page() -> None:
 
     st.subheader(f"Week of {start_dt.date().isoformat()} – {end_dt.date().isoformat()}")
 
-    todos = query_todos(start=start_dt, end=end_dt)
+    todos = query_todos(start=start_dt.date(), end=end_dt.date())
     grouped = _group_todos_by_day(todos)
 
     if not todos:
@@ -133,7 +133,7 @@ def render_calendar_page() -> None:
                     label += f" (done {completed_at.date().isoformat()})"
 
                 urgency = _urgency_for_display(
-                    todo.deadline.date() if todo.deadline else None,
+                    todo.deadline,
                     status_value,
                 )
                 if status_value == TodoStatus.DONE.value:
@@ -151,7 +151,7 @@ def render_calendar_page() -> None:
 
                 # Inline deadline adjustments for handoff todos (compact: one row).
                 if status_value == TodoStatus.DELEGATED.value:
-                    current_deadline_date = todo.deadline.date() if todo.deadline else day
+                    current_deadline_date = todo.deadline if todo.deadline else day
                     todo_id = int(todo.id)
                     date_key = f"calendar_deadline_{todo_id}"
                     update_key = f"calendar_update_{todo_id}"
@@ -165,10 +165,7 @@ def render_calendar_page() -> None:
                         )
                     with adj_c2:
                         if st.button("U", key=update_key):
-                            new_deadline_dt = datetime.combine(
-                                new_date,
-                                time(hour=18, minute=0),
-                            )
-                            update_todo(todo_id, deadline=new_deadline_dt)
+                            # Pass new_date (which is a date object) directly
+                            update_todo(todo_id, deadline=new_date)
                             st.success("Deadline updated.")
                             st.rerun()

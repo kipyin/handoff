@@ -65,34 +65,6 @@ def _deadline_preset_bounds(preset: str) -> tuple[date | None, date | None]:
     return None, None
 
 
-def _coerce_deadline(raw_value: object) -> tuple[datetime | None, str | None]:
-    """Coerce UI values into a deadline datetime; return (datetime, error_message).
-
-    Args:
-        raw_value: User input: datetime, date, ISO string, or None/empty.
-
-    Returns:
-        Tuple of (datetime or None, error message or None).
-
-    """
-    if raw_value is None or raw_value == "":
-        return None, None
-    if isinstance(raw_value, datetime):
-        return raw_value.astimezone().replace(tzinfo=None), None
-    if isinstance(raw_value, date):
-        return datetime.combine(raw_value, time(hour=18, minute=0)), None
-    if isinstance(raw_value, str):
-        candidate = raw_value.strip()
-        if not candidate:
-            return None, None
-        try:
-            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
-            return parsed.astimezone().replace(tzinfo=None), None
-        except ValueError:
-            return None, f"invalid deadline '{candidate}'"
-    return None, "unsupported deadline format"
-
-
 def _build_todo_dataframe(todos: list) -> pd.DataFrame:
     """Convert todo records to an editable dataframe (always includes project column).
 
@@ -106,7 +78,7 @@ def _build_todo_dataframe(todos: list) -> pd.DataFrame:
     rows = []
     for todo in todos:
         status_value = todo.status.value
-        deadline_date = todo.deadline.date() if todo.deadline else None
+        deadline_date = todo.deadline if todo.deadline else None
         row = {
             "id": todo.id,
             "project": todo.project.name if todo.project else "",
@@ -357,8 +329,10 @@ def _persist_changes(
         status_str = changes.get("status", current_row.get("status"))
         status_val = TodoStatus(status_str) if status_str else None
 
-        # Resolve deadline
-        deadline_val, _ = _coerce_deadline(changes.get("deadline", current_row.get("deadline")))
+        # Resolve deadline (Directly use the value from changes or current_row)
+        deadline_val = changes.get("deadline", current_row.get("deadline"))
+        if isinstance(deadline_val, str) and deadline_val:
+            deadline_val = date.fromisoformat(deadline_val)
 
         update_todo(
             int(todo_id),
@@ -383,7 +357,12 @@ def _persist_changes(
             continue
 
         status_str = row.get("status") or TodoStatus.DELEGATED.value
-        deadline_val, _ = _coerce_deadline(row.get("deadline"))
+        
+        # Resolve deadline
+        deadline_val = row.get("deadline")
+        if isinstance(deadline_val, str) and deadline_val:
+            deadline_val = date.fromisoformat(deadline_val)
+            
         helper = row.get("helper")
 
         created = create_todo(
@@ -410,7 +389,7 @@ def _render_editable_table(
 ) -> None:
     """Render editable table with filters and native Streamlit delta persistence."""
     project_names = [project.name for project in projects]
-    project_by_name = {p.name: p for p in projects}
+    project_by_name = {p.name: p}
     
     filtered_df, filter_state = _apply_native_filters(
         source_df,

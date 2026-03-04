@@ -1,6 +1,6 @@
 """Data access helpers for projects/todos and common query workflows."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from loguru import logger
@@ -95,7 +95,7 @@ def create_todo(
     project_id: int,
     name: str,
     status: TodoStatus = TodoStatus.DELEGATED,
-    deadline: datetime | None = None,
+    deadline: date | None = None,
     helper: str | list[str] | None = None,
     notes: str | None = None,
 ) -> Todo:
@@ -134,7 +134,7 @@ def update_todo(
     project_id: int | None | object = _UNSET,
     name: str | None | object = _UNSET,
     status: TodoStatus | None | object = _UNSET,
-    deadline: datetime | None | object = _UNSET,
+    deadline: date | None | object = _UNSET,
     helper: str | list[str] | None | object = _UNSET,
     notes: str | None | object = _UNSET,
 ) -> Todo | None:
@@ -217,8 +217,8 @@ def query_todos(
     project_ids: list[int] | None = None,
     helper_name: str | None = None,
     statuses: list[TodoStatus] | None = None,
-    start: datetime | None = None,
-    end: datetime | None = None,
+    start: date | None = None,
+    end: date | None = None,
     search_text: str | None = None,
     include_archived: bool = False,
 ) -> list[Todo]:

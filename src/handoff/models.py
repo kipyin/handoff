@@ -1,6 +1,6 @@
 """SQLModel models for projects and todos."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from enum import StrEnum
 
 from sqlmodel import Field, Relationship, SQLModel
@@ -45,7 +45,7 @@ class Todo(SQLModel, table=True):
     project_id: int = Field(foreign_key="project.id", index=True)
     name: str
     status: TodoStatus = Field(default=TodoStatus.DELEGATED, index=True)
-    deadline: datetime | None = Field(default=None, index=True)
+    deadline: date | None = Field(default=None, index=True)
     helper: str | None = Field(default=None, index=True)
     notes: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
