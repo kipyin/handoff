@@ -389,7 +389,7 @@ def _render_editable_table(
 ) -> None:
     """Render editable table with filters and native Streamlit delta persistence."""
     project_names = [project.name for project in projects]
-    project_by_name = {p.name: p}
+    project_by_name = {p.name: p for p in projects}
     
     filtered_df, filter_state = _apply_native_filters(
         source_df,
