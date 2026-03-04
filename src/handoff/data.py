@@ -223,10 +223,10 @@ def delete_todo(todo_id: int) -> bool:
         session.delete(todo)
         session.commit()
         logger.info(
-            "Deleted todo {todo_id} ({name}) from project {project_id}", 
-            todo_id=todo_id, 
+            "Deleted todo {todo_id} ({name}) from project {project_id}",
+            todo_id=todo_id,
             name=name,
-            project_id=project_id
+            project_id=project_id,
         )
         return True
 

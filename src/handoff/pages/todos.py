@@ -324,7 +324,7 @@ def _persist_changes(
 
         # Fetch current values from the display_df to merge with changes
         current_row = display_df.iloc[row_idx].to_dict()
-        
+
         # Resolve project_id
         project_name = changes.get("project", current_row.get("project"))
         project_id = project_by_name.get(project_name)
@@ -361,12 +361,12 @@ def _persist_changes(
             continue
 
         status_str = row.get("status") or TodoStatus.DELEGATED.value
-        
+
         # Resolve deadline
         deadline_val = row.get("deadline")
         if isinstance(deadline_val, str) and deadline_val:
             deadline_val = date.fromisoformat(deadline_val)
-            
+
         helper = row.get("helper")
 
         created = create_todo(
@@ -394,14 +394,14 @@ def _render_editable_table(
     """Render editable table with filters and native Streamlit delta persistence."""
     project_names = [project.name for project in projects]
     project_by_name = {p.name: p for p in projects}
-    
+
     filtered_df, filter_state = _apply_native_filters(
         source_df,
         key_prefix=key_prefix,
         project_names=project_names,
         helper_options=helper_options,
     )
-    
+
     default_project_id, default_project_name, default_status, default_helper = (
         _compute_defaults_from_filters(filter_state, project_by_name, projects)
     )
@@ -414,7 +414,7 @@ def _render_editable_table(
                 default_project_id = project.id
                 default_project_name = name
                 break
-    
+
     remembered_helper = st.session_state.get(f"{key_prefix}_last_new_helper")
     if isinstance(remembered_helper, str) and remembered_helper:
         default_helper = remembered_helper
@@ -422,9 +422,9 @@ def _render_editable_table(
     working_df, display_df = _sort_and_build_display_df(filtered_df)
 
     editor_key = f"{key_prefix}_table_editor"
-    
+
     st.caption("Changes are saved automatically as you edit.")
-    
+
     st.data_editor(
         display_df,
         num_rows="dynamic",
