@@ -442,7 +442,7 @@ def _render_editable_table(
     
     st.caption("Changes are saved automatically as you edit.")
     
-    edited_df = st.data_editor(
+    st.data_editor(
         display_df,
         num_rows="dynamic",
         height="content",
