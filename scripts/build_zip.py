@@ -293,11 +293,12 @@ def _make_zip(name: str, version: str) -> Path:
     if dist_path.exists():
         dist_path.unlink()
     print(f"Creating zip at {dist_path}...")
+    zip_root = f"{name}-{version}"
     with zipfile.ZipFile(dist_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         for path in APP_BUILD_DIR.rglob("*"):
             if path.is_file() and "__pycache__" not in path.parts:
-                rel_path = path.relative_to(BUILD_ROOT)
-                zf.write(path, rel_path)
+                rel_path = path.relative_to(APP_BUILD_DIR)
+                zf.write(path, Path(zip_root) / rel_path)
     return dist_path
 
 
