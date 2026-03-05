@@ -85,33 +85,35 @@ def ci() -> None:
     test()
 
 
-@app.command("build-full")
-def build_full() -> None:
-    """Build the full Windows embedded zip distribution."""
-    console.print("Building full Windows embedded zip distribution...", style="bold cyan")
-    build_zip_module.main()
+@app.command("build")
+def build(
+    full: bool = typer.Option(False, "--full", help="Build the full Windows embedded zip distribution."),
+    patch: bool = typer.Option(False, "--patch", help="Build a patch zip from the build output."),
+    include_pages: bool = typer.Option(
+        True,
+        "--include-pages/--skip-pages",
+        help="Include the pages/ directory (from source) in the patch zip (only for --patch).",
+    ),
+) -> None:
+    """Build the application (full distribution or patch)."""
+    if full:
+        console.print("Building full Windows embedded zip distribution...", style="bold cyan")
+        build_zip_module.main()
+    elif patch:
+        path = build_patch_module.build_patch(include_pages=include_pages)
+        console.print(f"Patch zip created at {path}", style="bold green")
+    else:
+        console.print("Please specify either --full or --patch.", style="bold red")
+        raise typer.Exit(code=1)
 
 
-@app.command("bump-version")
-def bump_version(
+@app.command("bump")
+def bump(
     version: str = typer.Argument(..., help="New version string (for example: 2026.3.0)"),
 ) -> None:
     """Bump project and app version together."""
     bump_version_module.bump_version(version)
     console.print(f"Bumped version to {version}", style="bold green")
-
-
-@app.command("build-patch")
-def build_patch(
-    include_pages: bool = typer.Option(
-        True,
-        "--include-pages/--skip-pages",
-        help="Include the pages/ directory (from source) in the patch zip.",
-    ),
-) -> None:
-    """Build a patch zip from the build output (run after build-full for PyArmor installs)."""
-    path = build_patch_module.build_patch(include_pages=include_pages)
-    console.print(f"Patch zip created at {path}", style="bold green")
 
 
 def main() -> None:
