@@ -14,6 +14,7 @@ from .subprocess_utils import run_cmd
 app = typer.Typer(help="Handoff development and build commands.")
 console = Console()
 
+
 def _format_and_lint(extra_args: list[str] | None = None) -> None:
     """Run lint and format with optional extra args passed to underlying tools."""
     extra_args = list(extra_args) if extra_args else []
@@ -58,7 +59,9 @@ def sync(extra_args: list[str] = typer.Argument(None)) -> None:
 def lint(extra_args: list[str] = typer.Argument(None)) -> None:
     """Run Ruff lint checks."""
     extra_args = list(extra_args) if extra_args else ["."]
-    run_cmd(["uv", "run", "ruff", "check", *extra_args], cwd=ROOT, description="Running Ruff lint...")
+    run_cmd(
+        ["uv", "run", "ruff", "check", *extra_args], cwd=ROOT, description="Running Ruff lint..."
+    )
 
 
 @app.command()
@@ -73,7 +76,7 @@ def format(extra_args: list[str] = typer.Argument(None)) -> None:
 
 
 @app.command("check")
-def check_command(extra_args: list[str] = typer.Argument(None) -> None:
+def check_command(extra_args: list[str] = typer.Argument(None)) -> None:
     """Run lint and format in sequence."""
     format(extra_args)
     lint(extra_args)
@@ -83,7 +86,9 @@ def check_command(extra_args: list[str] = typer.Argument(None) -> None:
 def test(extra_args: list[str] = typer.Argument(None)) -> None:
     """Run the pytest test suite."""
     extra_args = list(extra_args) if extra_args else []
-    run_cmd(["uv", "run", "pytest", *extra_args], cwd=ROOT, description="Running tests with pytest...")
+    run_cmd(
+        ["uv", "run", "pytest", *extra_args], cwd=ROOT, description="Running tests with pytest..."
+    )
 
 
 @app.command("typecheck")
