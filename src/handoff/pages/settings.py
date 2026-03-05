@@ -58,9 +58,15 @@ def _render_about_section() -> None:
     st.caption(f"Version: {APP_VERSION}")
 
     st.write(
-        "Handoff — see who's on the hook across all your projects. A local, SQLite-backed "
-        "to-do app for juggling work across multiple engagements. Single unified table of todos, "
-        "helper-centric filters, and short-horizon planning views like calendar and focus."
+        "Handoff helps you see who is on the hook across all your projects. It is a local "
+        "to-do app for juggling tasks across different engagements (projects). The app is "
+        "designed for personal use and runs locally with SQLite."
+    )
+
+    st.write(
+        "You get a local, single-user to-do app backed by SQLite, with a unified view across "
+        "projects and helpers, plus a simple weekly calendar, analytics ideas, and an in-app "
+        "update flow."
     )
 
     st.write(
