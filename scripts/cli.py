@@ -57,8 +57,8 @@ def format() -> None:
 @app.command("check")
 def check_command() -> None:
     """Run lint and format in sequence."""
-    lint()
     format()
+    lint()
 
 
 @app.command()
@@ -87,7 +87,9 @@ def ci() -> None:
 
 @app.command("build")
 def build(
-    full: bool = typer.Option(False, "--full", help="Build the full Windows embedded zip distribution."),
+    full: bool = typer.Option(
+        False, "--full", help="Build the full Windows embedded zip distribution."
+    ),
     patch: bool = typer.Option(False, "--patch", help="Build a patch zip from the build output."),
     include_pages: bool = typer.Option(
         True,
