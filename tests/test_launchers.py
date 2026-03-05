@@ -17,20 +17,29 @@ class TestLaunchers:
         # Monkeypatch the global APP_BUILD_DIR in build_zip module
         monkeypatch.setattr(build_zip, "APP_BUILD_DIR", app_dir)
         
-        # Create dummy python environment
+        # Create dummy python directory
         python_dir = app_dir / "python"
         python_dir.mkdir()
         
-        # Copy current python executable and its DLLs to act as the embedded one.
-        # This is needed so the launchers can successfully execute "%SCRIPT_DIR%python\python.exe"
-        py_exe = Path(sys.executable)
-        shutil.copy(py_exe, python_dir / "python.exe")
-        for dll in py_exe.parent.glob("*.dll"):
-            shutil.copy(dll, python_dir)
-        
-        # Create a dummy handoff module so -m handoff works.
-        # The launchers add the app root to PYTHONPATH.
-        (app_dir / "handoff.py").write_text("print('MOCK_APP_STARTED')", encoding="utf-8")
+        # Create a tiny mock python.exe using PowerShell/C#.
+        # This avoids "failed to locate pyvenv.cfg" and other Python startup issues
+        # while verifying that the launcher correctly sets env vars and calls the exe.
+        exe_path = python_dir / "python.exe"
+        c_code = (
+            'using System; '
+            'class P { '
+            '  static void Main() { '
+            '    Console.WriteLine("MOCK_APP_STARTED"); '
+            '    Console.WriteLine("ENV_PYTHONPATH=" + Environment.GetEnvironmentVariable("PYTHONPATH")); '
+            '    Console.WriteLine("ENV_PYTHONHOME=" + Environment.GetEnvironmentVariable("PYTHONHOME")); '
+            '  } '
+            '}'
+        )
+        # Compile the C# code into a real EXE using built-in Windows tools
+        subprocess.run([
+            "powershell", "-Command",
+            f"Add-Type -TypeDefinition '{c_code}' -OutputAssembly '{exe_path}' -OutputType ConsoleApplication"
+        ], check=True)
         
         # Create src dir (expected by PYTHONPATH in the scripts)
         (app_dir / "src").mkdir()
@@ -66,13 +75,20 @@ class TestLaunchers:
         assert "Update applied." in result.stdout
         assert "MOCK_APP_STARTED" in result.stdout
         
+        # Verify environment variables were set correctly by the launcher
+        assert "ENV_PYTHONPATH=" in result.stdout
+        assert str(mock_app_env) in result.stdout
+        assert str(mock_app_env / "src") in result.stdout
+        assert "ENV_PYTHONHOME=" in result.stdout
+        assert str(mock_app_env / "python") in result.stdout
+        
         # Verify file was moved
         moved_file = mock_app_env / "patch_test.txt"
         assert moved_file.exists()
         assert moved_file.read_text(encoding="utf-8") == "patched content"
         
         # Verify update dir was removed
-        assert not update_dir.exists()
+        assert not (mock_app_env / "update").exists()
 
     def test_handoff_ps1_logic(self, mock_app_env):
         """Verify handoff.ps1 applies updates and launches the app."""
@@ -102,10 +118,17 @@ class TestLaunchers:
         assert "Update applied." in result.stdout
         assert "MOCK_APP_STARTED" in result.stdout
         
+        # Verify environment variables were set correctly by the launcher
+        assert "ENV_PYTHONPATH=" in result.stdout
+        assert str(mock_app_env) in result.stdout
+        assert str(mock_app_env / "src") in result.stdout
+        assert "ENV_PYTHONHOME=" in result.stdout
+        assert str(mock_app_env / "python") in result.stdout
+        
         # Verify file was moved
         moved_file = mock_app_env / "patch_test.txt"
         assert moved_file.exists()
         assert moved_file.read_text(encoding="utf-8") == "patched content"
         
         # Verify update dir was removed
-        assert not update_dir.exists()
+        assert not (mock_app_env / "update").exists()
