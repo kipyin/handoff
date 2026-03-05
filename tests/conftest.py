@@ -19,4 +19,5 @@ def session():
 def pytest_sessionfinish(session, exitstatus):
     """Dispose of the global app engine after all tests finish."""
     from handoff.db import dispose_db
+
     dispose_db()
