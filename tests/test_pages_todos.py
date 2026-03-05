@@ -1,16 +1,17 @@
-import pandas as pd
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
+import pandas as pd
+
 from handoff.models import TodoStatus
 from handoff.pages.todos import (
-    _build_todo_dataframe,
-    _apply_dataframe_filters,
-    _sort_and_build_display_df,
-    _persist_changes,
-    _deadline_preset_bounds,
-    _compute_defaults_from_filters,
     DEADLINE_TODAY,
+    _apply_dataframe_filters,
+    _build_todo_dataframe,
+    _compute_defaults_from_filters,
+    _deadline_preset_bounds,
+    _persist_changes,
+    _sort_and_build_display_df,
 )
 
 
