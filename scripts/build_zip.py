@@ -247,14 +247,14 @@ def _obfuscate_app_code_with_pyarmor() -> None:
     shutil.rmtree(SRC_PLAIN_DIR, ignore_errors=True)
 
 
-def _write_run_bat() -> None:
-    """Write a run.bat launcher that starts the Streamlit app.
+def _write_handoff_bat() -> None:
+    """Write a handoff.bat launcher that starts the Streamlit app.
 
     If ./update exists and has files, copies them into the app root using xcopy
     (no Python), then removes ./update. This avoids WinError 32 when overwriting
     PyArmor runtime .pyd files that would be locked if Python were running.
     """
-    print("Writing run.bat launcher...")
+    print("Writing handoff.bat launcher...")
     content = textwrap.dedent(
         r"""
         @echo off
@@ -277,7 +277,34 @@ def _write_run_bat() -> None:
         endlocal
         """
     ).lstrip()
-    (APP_BUILD_DIR / "run.bat").write_text(content, encoding="utf-8")
+    (APP_BUILD_DIR / "handoff.bat").write_text(content, encoding="utf-8")
+
+
+def _write_handoff_ps1() -> None:
+    """Write a handoff.ps1 launcher that starts the Streamlit app.
+
+    Mirrors the logic in handoff.bat for PowerShell users.
+    """
+    print("Writing handoff.ps1 launcher...")
+    content = textwrap.dedent(
+        r"""
+        Set-Location $PSScriptRoot
+
+        $env:PYTHONHOME = Join-Path $PSScriptRoot "python"
+        $env:PYTHONPATH = "$PSScriptRoot;$PSScriptRoot\src"
+
+        $updateDir = Join-Path $PSScriptRoot "update"
+        if (Test-Path "$updateDir\*") {
+            Write-Host "Applying update..."
+            Copy-Item -Path "$updateDir\*" -Destination $PSScriptRoot -Recurse -Force
+            Remove-Item -Path $updateDir -Recurse -Force
+            Write-Host "Update applied."
+        }
+
+        & (Join-Path $PSScriptRoot "python\python.exe") -m handoff
+        """
+    ).lstrip()
+    (APP_BUILD_DIR / "handoff.ps1").write_text(content, encoding="utf-8")
 
 
 def _make_zip(name: str, version: str) -> Path:
@@ -304,6 +331,13 @@ def _make_zip(name: str, version: str) -> Path:
 def main() -> None:
     """Build the full Windows embedded zip distribution for the app."""
     name, version = _read_project_metadata()
+
+    # Update build directory to include version
+    global APP_BUILD_DIR, SRC_PLAIN_DIR, PYTHON_DIR
+    APP_BUILD_DIR = BUILD_ROOT / f"{name}-{version}"
+    SRC_PLAIN_DIR = APP_BUILD_DIR / "src_plain"
+    PYTHON_DIR = APP_BUILD_DIR / "python"
+
     print(f"Building {name} {version} (Windows embedded Python zip)...")
     _prepare_dirs()
     _download_embedded_python()
@@ -312,7 +346,8 @@ def main() -> None:
     _copy_app_code()
     _copy_docs()
     _obfuscate_app_code_with_pyarmor()
-    _write_run_bat()
+    _write_handoff_bat()
+    _write_handoff_ps1()
     out_zip = _make_zip(name, version)
     print()
     print("Build complete.")
@@ -320,7 +355,7 @@ def main() -> None:
     print("To run:")
     print("  1. Extract the zip.")
     print("  2. Open the extracted folder.")
-    print("  3. Double-click run.bat.")
+    print("  3. Double-click handoff.bat or run handoff.ps1 in PowerShell.")
     print(
         "Your SQLite database will be stored in your user data directory "
         "(e.g. %APPDATA%\\handoff\\todo.db)."
