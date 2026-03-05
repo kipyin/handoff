@@ -73,12 +73,12 @@ def test_make_zip_includes_docs_and_core_files(
     with zipfile.ZipFile(zip_path, "r") as zf:
         names = set(zf.namelist())
 
-    # Paths are relative to BUILD_ROOT, so they are prefixed with "handoff/".
-    assert "handoff/README.md" in names
-    assert "handoff/RELEASE_NOTES.md" in names
-    assert "handoff/app.py" in names
-    assert "handoff/src/handoff/__init__.py" in names
-    assert "handoff/pages/2_Projects.py" in names
+    # Paths are rooted under the versioned folder inside the zip.
+    assert "handoff-1.0.0/README.md" in names
+    assert "handoff-1.0.0/RELEASE_NOTES.md" in names
+    assert "handoff-1.0.0/app.py" in names
+    assert "handoff-1.0.0/src/handoff/__init__.py" in names
+    assert "handoff-1.0.0/pages/2_Projects.py" in names
 
 
 def test_build_patch_includes_docs_and_core_files(
