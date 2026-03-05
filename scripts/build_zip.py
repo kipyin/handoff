@@ -280,33 +280,6 @@ def _write_handoff_bat() -> None:
     (APP_BUILD_DIR / "handoff.bat").write_text(content, encoding="utf-8")
 
 
-def _write_handoff_ps1() -> None:
-    """Write a handoff.ps1 launcher that starts the Streamlit app.
-
-    Mirrors the logic in handoff.bat for PowerShell users.
-    """
-    print("Writing handoff.ps1 launcher...")
-    content = textwrap.dedent(
-        r"""
-        Set-Location $PSScriptRoot
-
-        $env:PYTHONHOME = Join-Path $PSScriptRoot "python"
-        $env:PYTHONPATH = "$PSScriptRoot;$PSScriptRoot\src"
-
-        $updateDir = Join-Path $PSScriptRoot "update"
-        if (Test-Path "$updateDir\*") {
-            Write-Host "Applying update..."
-            Copy-Item -Path "$updateDir\*" -Destination $PSScriptRoot -Recurse -Force
-            Remove-Item -Path $updateDir -Recurse -Force
-            Write-Host "Update applied."
-        }
-
-        & (Join-Path $PSScriptRoot "python\python.exe") -m handoff
-        """
-    ).lstrip()
-    (APP_BUILD_DIR / "handoff.ps1").write_text(content, encoding="utf-8")
-
-
 def _make_zip(name: str, version: str) -> Path:
     """Create the final zip archive under `dist/` and return its path.
 
@@ -347,7 +320,6 @@ def main() -> None:
     _copy_docs()
     _obfuscate_app_code_with_pyarmor()
     _write_handoff_bat()
-    _write_handoff_ps1()
     out_zip = _make_zip(name, version)
     print()
     print("Build complete.")
@@ -355,7 +327,7 @@ def main() -> None:
     print("To run:")
     print("  1. Extract the zip.")
     print("  2. Open the extracted folder.")
-    print("  3. Double-click handoff.bat or run handoff.ps1 in PowerShell.")
+    print("  3. Double-click handoff.bat.")
     print(
         "Your SQLite database will be stored in your user data directory "
         "(e.g. %APPDATA%\\handoff\\todo.db)."

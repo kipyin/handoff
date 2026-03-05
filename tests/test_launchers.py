@@ -1,7 +1,5 @@
 import os
 import subprocess
-import sys
-import shutil
 from pathlib import Path
 import pytest
 from scripts import build_zip
@@ -67,49 +65,6 @@ class TestLaunchers:
             capture_output=True,
             text=True,
             shell=True,
-            check=True
-        )
-        
-        # 4. Assertions
-        assert "Applying update..." in result.stdout
-        assert "Update applied." in result.stdout
-        assert "MOCK_APP_STARTED" in result.stdout
-        
-        # Verify environment variables were set correctly by the launcher
-        assert "ENV_PYTHONPATH=" in result.stdout
-        assert str(mock_app_env) in result.stdout
-        assert str(mock_app_env / "src") in result.stdout
-        assert "ENV_PYTHONHOME=" in result.stdout
-        assert str(mock_app_env / "python") in result.stdout
-        
-        # Verify file was moved
-        moved_file = mock_app_env / "patch_test.txt"
-        assert moved_file.exists()
-        assert moved_file.read_text(encoding="utf-8") == "patched content"
-        
-        # Verify update dir was removed
-        assert not (mock_app_env / "update").exists()
-
-    def test_handoff_ps1_logic(self, mock_app_env):
-        """Verify handoff.ps1 applies updates and launches the app."""
-        # 1. Generate the launcher
-        build_zip._write_handoff_ps1()
-        ps1_path = mock_app_env / "handoff.ps1"
-        assert ps1_path.exists()
-        
-        # 2. Setup update folder with a file
-        update_dir = mock_app_env / "update"
-        update_dir.mkdir()
-        patch_file = update_dir / "patch_test.txt"
-        patch_file.write_text("patched content", encoding="utf-8")
-        
-        # 3. Run the PowerShell script
-        # We call powershell.exe explicitly
-        result = subprocess.run(
-            ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(ps1_path)],
-            cwd=mock_app_env,
-            capture_output=True,
-            text=True,
             check=True
         )
         
