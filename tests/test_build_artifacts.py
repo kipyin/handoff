@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -144,7 +143,9 @@ def test_build_patch_includes_docs_and_core_files(
         build_patch_module.build_patch(include_pages=False)
 
         # Verify VERSION was written via writestr
-        written_via_writestr = {str(call.args[0]).replace("\\", "/") for call in zip_instance.writestr.call_args_list}
+        written_via_writestr = {
+            str(call.args[0]).replace("\\", "/") for call in zip_instance.writestr.call_args_list
+        }
         assert "VERSION" in written_via_writestr
 
         # Verify other files were written via write
