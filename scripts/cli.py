@@ -30,7 +30,7 @@ def _ci_run(extra_args: list[str] | None = None) -> None:
 
 
 @app.command()
-def run(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
+def run(extra_args: list[str] = typer.Argument(None)) -> None:
     """Run the Streamlit app (applies Streamlit options from handoff.config)."""
     extra_args = list(extra_args) if extra_args else []
     run_cmd(
@@ -48,21 +48,21 @@ def main_callback(ctx: typer.Context) -> None:
 
 
 @app.command()
-def sync(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
+def sync(extra_args: list[str] = typer.Argument(None)) -> None:
     """Install or update project dependencies using uv."""
     extra_args = list(extra_args) if extra_args else []
     run_cmd(["uv", "sync", *extra_args], cwd=ROOT, description="Syncing dependencies with uv...")
 
 
 @app.command()
-def lint(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
+def lint(extra_args: list[str] = typer.Argument(None)) -> None:
     """Run Ruff lint checks."""
     extra_args = list(extra_args) if extra_args else ["."]
     run_cmd(["uv", "run", "ruff", "check", *extra_args], cwd=ROOT, description="Running Ruff lint...")
 
 
 @app.command()
-def format(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
+def format(extra_args: list[str] = typer.Argument(None)) -> None:
     """Run Ruff formatter."""
     extra_args = list(extra_args) if extra_args else ["."]
     run_cmd(
@@ -80,14 +80,14 @@ def check_command() -> None:
 
 
 @app.command()
-def test(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
+def test(extra_args: list[str] = typer.Argument(None)) -> None:
     """Run the pytest test suite."""
     extra_args = list(extra_args) if extra_args else []
     run_cmd(["uv", "run", "pytest", *extra_args], cwd=ROOT, description="Running tests with pytest...")
 
 
 @app.command("typecheck")
-def typecheck(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
+def typecheck(extra_args: list[str] = typer.Argument(None)) -> None:
     """Run pyright type checking over src/ and scripts/."""
     extra_args = list(extra_args) if extra_args else ["src", "scripts"]
     run_cmd(
@@ -98,7 +98,7 @@ def typecheck(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
 
 
 @app.command("ci")
-def ci(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
+def ci(extra_args: list[str] = typer.Argument(None)) -> None:
     """Run lint, format, type checking, and tests."""
     extra_args = list(extra_args) if extra_args else []
     _ci_run(extra_args=extra_args)
