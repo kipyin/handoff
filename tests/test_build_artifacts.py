@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import zipfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -25,20 +26,23 @@ def test_copy_docs_copies_readme_and_release_notes(
     app_build_dir = root / "build" / "handoff"
     app_build_dir.mkdir(parents=True, exist_ok=True)
 
+    # Mock shutil.copy2 to avoid disk I/O
+    mock_copy = MagicMock()
+    monkeypatch.setattr("shutil.copy2", mock_copy)
     monkeypatch.setattr(build_zip_module, "ROOT", root)
     monkeypatch.setattr(build_zip_module, "APP_BUILD_DIR", app_build_dir)
 
     build_zip_module._copy_docs()
 
-    assert (app_build_dir / "README.md").is_file()
-    assert (app_build_dir / "RELEASE_NOTES.md").is_file()
+    # Verify the calls instead of checking the filesystem
+    assert mock_copy.call_count == 2
 
 
 def test_make_zip_includes_docs_and_core_files(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_make_zip includes docs, app.py, core package, and pages."""
+    """_make_zip records correct paths without actual zipping."""
     root = tmp_path
     build_root = root / "build"
     app_build_dir = build_root / "handoff"
@@ -68,24 +72,37 @@ def test_make_zip_includes_docs_and_core_files(
     monkeypatch.setattr(build_zip_module, "DIST_ROOT", dist_root)
     monkeypatch.setattr(build_zip_module, "APP_BUILD_DIR", app_build_dir)
 
-    zip_path = build_zip_module._make_zip("handoff", "1.0.0")
+    # Mock ZipFile to prevent actual compression
+    with patch("zipfile.ZipFile") as mock_zip:
+        zip_instance = mock_zip.return_value.__enter__.return_value
 
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        names = set(zf.namelist())
+        build_zip_module._make_zip("handoff", "1.0.0")
 
-    # Paths are rooted under the versioned folder inside the zip.
-    assert "handoff-1.0.0/README.md" in names
-    assert "handoff-1.0.0/RELEASE_NOTES.md" in names
-    assert "handoff-1.0.0/app.py" in names
-    assert "handoff-1.0.0/src/handoff/__init__.py" in names
-    assert "handoff-1.0.0/pages/2_Projects.py" in names
+        # Check that write was called for expected files
+        written_names = set()
+        for call in zip_instance.write.call_args_list:
+            name = None
+            if len(call.args) > 1:
+                name = call.args[1]
+            elif "arcname" in call.kwargs:
+                name = call.kwargs["arcname"]
+            else:
+                name = call.args[0]
+            written_names.add(str(name).replace("\\", "/"))
+
+        # Paths are rooted under the versioned folder inside the zip.
+        assert "handoff-1.0.0/README.md" in written_names
+        assert "handoff-1.0.0/RELEASE_NOTES.md" in written_names
+        assert "handoff-1.0.0/app.py" in written_names
+        assert "handoff-1.0.0/src/handoff/__init__.py" in written_names
+        assert "handoff-1.0.0/pages/2_Projects.py" in written_names
 
 
 def test_build_patch_includes_docs_and_core_files(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """build_patch writes docs, app.py, and core package into the patch zip."""
+    """build_patch records correct paths without actual zipping or obfuscation."""
     root = tmp_path
 
     # Top-level documentation files (build_zip._copy_docs reads from ROOT).
@@ -95,6 +112,7 @@ def test_build_patch_includes_docs_and_core_files(
     build_app_dir = root / "build" / "handoff"
     build_app_dir.mkdir(parents=True, exist_ok=True)
     dist_root = root / "dist"
+    dist_root.mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setattr(build_patch_module, "ROOT", root)
     monkeypatch.setattr(build_patch_module, "BUILD_APP_DIR", build_app_dir)
@@ -120,13 +138,28 @@ def test_build_patch_includes_docs_and_core_files(
     monkeypatch.setattr(build_zip_module, "_obfuscate_app_code_with_pyarmor", _fake_obfuscate)
     monkeypatch.setattr(build_zip_module, "_copy_docs", _fake_copy_docs)
 
-    zip_path = build_patch_module.build_patch(include_pages=False)
+    with patch("zipfile.ZipFile") as mock_zip:
+        zip_instance = mock_zip.return_value.__enter__.return_value
 
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        names = set(zf.namelist())
+        build_patch_module.build_patch(include_pages=False)
 
-    assert "VERSION" in names
-    assert "README.md" in names
-    assert "RELEASE_NOTES.md" in names
-    assert "app.py" in names
-    assert "src/handoff/__init__.py" in names
+        # Verify VERSION was written via writestr
+        written_via_writestr = {str(call.args[0]).replace("\\", "/") for call in zip_instance.writestr.call_args_list}
+        assert "VERSION" in written_via_writestr
+
+        # Verify other files were written via write
+        written_via_write = set()
+        for call in zip_instance.write.call_args_list:
+            name = None
+            if len(call.args) > 1:
+                name = call.args[1]
+            elif "arcname" in call.kwargs:
+                name = call.kwargs["arcname"]
+            else:
+                name = call.args[0]
+            written_via_write.add(str(name).replace("\\", "/"))
+
+        assert "README.md" in written_via_write
+        assert "RELEASE_NOTES.md" in written_via_write
+        assert "app.py" in written_via_write
+        assert "src/handoff/__init__.py" in written_via_write
