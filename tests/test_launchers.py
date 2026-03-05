@@ -47,16 +47,15 @@ class TestLaunchers:
         content = bat_path.read_text()
 
         # Verify the batch file contains the expected logic strings
-        assert "if exist update" in content
-        assert "move /y update\\*" in content
-        assert "python\\python.exe" in content
+        assert 'if exist "%SCRIPT_DIR%update"' in content
+        assert 'move /y "%SCRIPT_DIR%update\\*"' in content
+        assert '"%SCRIPT_DIR%python\\python.exe"' in content
         assert "PYTHONPATH" in content
         assert "PYTHONHOME" in content
 
         # Verify environment variables are set to the correct paths in the batch file
-        assert str(mock_app_env) in content
-        assert str(mock_app_env / "src") in content
-        assert str(mock_app_env / "python") in content
+        assert "set PYTHONHOME=%SCRIPT_DIR%python" in content
+        assert "set PYTHONPATH=%SCRIPT_DIR%src" in content
 
         # 2. Manually verify the "Update" logic that the .bat is supposed to do
         # (This ensures our understanding of the command we wrote into the .bat is correct)

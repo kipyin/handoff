@@ -123,3 +123,8 @@ def session_context():
     """
     with Session(engine) as session:
         yield session
+
+
+def dispose_db() -> None:
+    """Dispose of the global database engine."""
+    engine.dispose()
