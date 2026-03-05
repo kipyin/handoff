@@ -30,8 +30,10 @@ class TestLaunchers:
             "class P { "
             "  static void Main() { "
             '    Console.WriteLine("MOCK_APP_STARTED"); '
-            '    Console.WriteLine("ENV_PYTHONPATH=" + Environment.GetEnvironmentVariable("PYTHONPATH")); '
-            '    Console.WriteLine("ENV_PYTHONHOME=" + Environment.GetEnvironmentVariable("PYTHONHOME")); '
+            '    Console.WriteLine("ENV_PYTHONPATH=" + '
+            'Environment.GetEnvironmentVariable("PYTHONPATH")); '
+            '    Console.WriteLine("ENV_PYTHONHOME=" + '
+            'Environment.GetEnvironmentVariable("PYTHONHOME")); '
             "  } "
             "}"
         )
