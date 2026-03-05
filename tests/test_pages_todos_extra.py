@@ -1,17 +1,17 @@
+from datetime import UTC, date, datetime
+
 import pandas as pd
-from datetime import date, datetime, UTC
-from handoff.models import TodoStatus, Project, Todo
+
+from handoff.models import Project, Todo, TodoStatus
 from handoff.pages.todos import (
-    _build_todo_dataframe,
     _apply_dataframe_filters,
+    _build_todo_dataframe,
     _compute_defaults_from_filters,
-    _deadline_preset_bounds,
-    _sort_and_build_display_df,
     _persist_changes,
 )
 
+
 def test_compute_defaults_from_filters():
-    from handoff.pages.todos import _compute_defaults_from_filters
 
     p1 = Project(id=1, name="Work")
     p2 = Project(id=2, name="Home")
@@ -20,24 +20,30 @@ def test_compute_defaults_from_filters():
 
     # Case 1: Single project filter should set default project
     filter_state = {"project_filters": ["Home"], "status_filters": ["done"]}
-    pid, pname, status, helper = _compute_defaults_from_filters(filter_state, project_by_name, projects)
+    pid, pname, status, helper = _compute_defaults_from_filters(
+        filter_state, project_by_name, projects
+    )
     assert pid == 2
     assert pname == "Home"
     assert status == "done"
 
     # Case 2: Multiple filters or no filters should fallback to first project and DELEGATED
     filter_state = {"project_filters": ["Work", "Home"], "status_filters": []}
-    pid, pname, status, helper = _compute_defaults_from_filters(filter_state, project_by_name, projects)
+    pid, pname, status, helper = _compute_defaults_from_filters(
+        filter_state, project_by_name, projects
+    )
     assert pid == 1
     assert status == TodoStatus.DELEGATED.value
 
 
 def test_apply_dataframe_filters_multi_select():
-    df = pd.DataFrame([
-        {"name": "T1", "status": "handoff", "project": "P1", "helper": "Alice", "notes": ""},
-        {"name": "T2", "status": "done", "project": "P2", "helper": "Bob", "notes": ""},
-        {"name": "T3", "status": "handoff", "project": "P2", "helper": " ", "notes": ""},
-    ])
+    df = pd.DataFrame(
+        [
+            {"name": "T1", "status": "handoff", "project": "P1", "helper": "Alice", "notes": ""},
+            {"name": "T2", "status": "done", "project": "P2", "helper": "Bob", "notes": ""},
+            {"name": "T3", "status": "handoff", "project": "P2", "helper": " ", "notes": ""},
+        ]
+    )
 
     # Filter by multiple statuses
     filtered = _apply_dataframe_filters(df, "", ["done"], [], [], None, None)
@@ -65,27 +71,25 @@ def test_persist_changes_updates(monkeypatch):
     monkeypatch.setattr("handoff.pages.todos.update_todo", mock_update)
 
     # Setup a display DF with internal IDs
-    display_df = pd.DataFrame([
-        {
-            "__todo_id": 100,
-            "name": "Old Name",
-            "status": "handoff",
-            "project": "Work",
-            "deadline": None,
-            "helper": "Alice",
-            "notes": ""
-        },
-    ])
+    display_df = pd.DataFrame(
+        [
+            {
+                "__todo_id": 100,
+                "name": "Old Name",
+                "status": "handoff",
+                "project": "Work",
+                "deadline": None,
+                "helper": "Alice",
+                "notes": "",
+            },
+        ]
+    )
 
     p1 = Project(id=1, name="Work")
     p2 = Project(id=2, name="Personal")
 
     # Simulate changing name and project in row 0
-    state = {
-        "edited_rows": {
-            "0": {"name": "New Name", "project": "Personal"}
-        }
-    }
+    state = {"edited_rows": {"0": {"name": "New Name", "project": "Personal"}}}
 
     _persist_changes(
         state=state,
@@ -111,7 +115,7 @@ def test_build_todo_dataframe_populated():
         status=TodoStatus.DONE,
         project=proj,
         deadline=date(2024, 1, 1),
-        created_at=datetime(2024, 1, 1, tzinfo=UTC)
+        created_at=datetime(2024, 1, 1, tzinfo=UTC),
     )
 
     df = _build_todo_dataframe([todo])
