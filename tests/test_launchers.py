@@ -48,9 +48,14 @@ class TestLaunchers:
 
         # Verify the batch file contains the expected logic strings
         # We check for the presence of the update check and the move command
-        assert 'if exist "%SCRIPT_DIR%update"' in content or 'if exist %SCRIPT_DIR%update' in content
-        assert 'move /y "%SCRIPT_DIR%update\\*"' in content or 'move /y %SCRIPT_DIR%update\\*' in content
-        assert 'python\\python.exe' in content
+        assert (
+            'if exist "%SCRIPT_DIR%update"' in content or "if exist %SCRIPT_DIR%update" in content
+        )
+        assert (
+            'move /y "%SCRIPT_DIR%update\\*"' in content
+            or "move /y %SCRIPT_DIR%update\\*" in content
+        )
+        assert "python\\python.exe" in content
         assert "PYTHONPATH" in content
         assert "PYTHONHOME" in content
 
