@@ -15,7 +15,16 @@ from handoff.pages.todos import (
 
 def test_build_todo_dataframe_empty():
     df = _build_todo_dataframe([])
-    assert list(df.columns) == ["id", "project", "name", "status", "helper", "deadline", "notes", "created_at"]
+    assert list(df.columns) == [
+        "id",
+        "project",
+        "name",
+        "status",
+        "helper",
+        "deadline",
+        "notes",
+        "created_at",
+    ]
     assert len(df) == 0
 
 
@@ -25,10 +34,26 @@ def test_deadline_preset_bounds_today():
 
 
 def test_apply_dataframe_filters_search():
-    df = pd.DataFrame([
-        {"name": "Buy milk", "notes": "Low fat", "helper": "Alice", "project": "Home", "status": "Delegated", "deadline": None},
-        {"name": "Fix sink", "notes": "", "helper": "Bob", "project": "Home", "status": "Delegated", "deadline": None},
-    ])
+    df = pd.DataFrame(
+        [
+            {
+                "name": "Buy milk",
+                "notes": "Low fat",
+                "helper": "Alice",
+                "project": "Home",
+                "status": "Delegated",
+                "deadline": None,
+            },
+            {
+                "name": "Fix sink",
+                "notes": "",
+                "helper": "Bob",
+                "project": "Home",
+                "status": "Delegated",
+                "deadline": None,
+            },
+        ]
+    )
     # Search by name
     filtered = _apply_dataframe_filters(df, "milk", [], [], [], None, None)
     assert len(filtered) == 1
@@ -40,10 +65,26 @@ def test_apply_dataframe_filters_search():
     assert filtered.iloc[0]["name"] == "Fix sink"
 
     # Date range filtering (include today)
-    df_with_dates = pd.DataFrame([
-        {"name": "Task A", "deadline": date.today(), "project": "P", "notes": "", "helper": "", "status": "Delegated"},
-        {"name": "Task B", "deadline": date.today() + timedelta(days=1), "project": "P", "notes": "", "helper": "", "status": "Delegated"},
-    ])
+    df_with_dates = pd.DataFrame(
+        [
+            {
+                "name": "Task A",
+                "deadline": date.today(),
+                "project": "P",
+                "notes": "",
+                "helper": "",
+                "status": "Delegated",
+            },
+            {
+                "name": "Task B",
+                "deadline": date.today() + timedelta(days=1),
+                "project": "P",
+                "notes": "",
+                "helper": "",
+                "status": "Delegated",
+            },
+        ]
+    )
     filtered = _apply_dataframe_filters(
         df_with_dates,
         "",
@@ -58,10 +99,12 @@ def test_apply_dataframe_filters_search():
 
 
 def test_sort_and_build_display_df():
-    df = pd.DataFrame([
-        {"id": 1, "name": "B", "created_at": date(2023, 1, 2)},
-        {"id": 2, "name": "A", "created_at": date(2023, 1, 1)},
-    ])
+    df = pd.DataFrame(
+        [
+            {"id": 1, "name": "B", "created_at": date(2023, 1, 2)},
+            {"id": 2, "name": "A", "created_at": date(2023, 1, 1)},
+        ]
+    )
     working, display = _sort_and_build_display_df(df)
     # Should be sorted by created_at
     assert working.iloc[0]["id"] == 2
@@ -78,10 +121,12 @@ def test_persist_changes_deletions(monkeypatch):
 
     monkeypatch.setattr("handoff.pages.todos.delete_todo", mock_delete)
 
-    display_df = pd.DataFrame([
-        {"__todo_id": 10, "name": "Task 1"},
-        {"__todo_id": 20, "name": "Task 2"},
-    ])
+    display_df = pd.DataFrame(
+        [
+            {"__todo_id": 10, "name": "Task 1"},
+            {"__todo_id": 20, "name": "Task 2"},
+        ]
+    )
     state = {"deleted_rows": [0]}  # Delete Task 1
 
     _persist_changes(
@@ -101,6 +146,7 @@ def test_persist_changes_additions(monkeypatch):
         created_rows.append(kwargs)
         # Return an object with an id to simulate created todo
         from types import SimpleNamespace
+
         return SimpleNamespace(id=999, **kwargs)
 
     monkeypatch.setattr("handoff.pages.todos.create_todo", mock_create)
