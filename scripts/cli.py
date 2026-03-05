@@ -14,12 +14,27 @@ from .subprocess_utils import run_cmd
 app = typer.Typer(help="Handoff development and build commands.")
 console = Console()
 
+def _format_and_lint(extra_args: list[str] | None = None) -> None:
+    """Run lint and format with optional extra args passed to underlying tools."""
+    extra_args = list(extra_args) if extra_args else []
+    format(extra_args=extra_args)
+    lint(extra_args=extra_args)
+
+
+def _ci_run(extra_args: list[str] | None = None) -> None:
+    """Run lint/format/typecheck/tests in a CI-like sequence with optional extra args."""
+    extra_args = list(extra_args) if extra_args else []
+    _format_and_lint(extra_args=extra_args)
+    typecheck(extra_args=extra_args)
+    test(extra_args=extra_args)
+
 
 @app.command()
-def run() -> None:
+def run(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
     """Run the Streamlit app (applies Streamlit options from handoff.config)."""
+    extra_args = list(extra_args) if extra_args else []
     run_cmd(
-        ["uv", "run", "python", "-m", "handoff"],
+        ["uv", "run", "python", "-m", "handoff", *extra_args],
         cwd=ROOT,
         description="Starting Streamlit app...",
     )
@@ -33,22 +48,25 @@ def main_callback(ctx: typer.Context) -> None:
 
 
 @app.command()
-def sync() -> None:
+def sync(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
     """Install or update project dependencies using uv."""
-    run_cmd(["uv", "sync"], cwd=ROOT, description="Syncing dependencies with uv...")
+    extra_args = list(extra_args) if extra_args else []
+    run_cmd(["uv", "sync", *extra_args], cwd=ROOT, description="Syncing dependencies with uv...")
 
 
 @app.command()
-def lint() -> None:
+def lint(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
     """Run Ruff lint checks."""
-    run_cmd(["uv", "run", "ruff", "check", "."], cwd=ROOT, description="Running Ruff lint...")
+    extra_args = list(extra_args) if extra_args else []
+    run_cmd(["uv", "run", "ruff", "check", ".", *extra_args], cwd=ROOT, description="Running Ruff lint...")
 
 
 @app.command()
-def format() -> None:
+def format(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
     """Run Ruff formatter."""
+    extra_args = list(extra_args) if extra_args else []
     run_cmd(
-        ["uv", "run", "ruff", "format", "."],
+        ["uv", "run", "ruff", "format", ".", *extra_args],
         cwd=ROOT,
         description="Running Ruff formatter...",
     )
@@ -62,9 +80,10 @@ def check_command() -> None:
 
 
 @app.command()
-def test() -> None:
+def test(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
     """Run the pytest test suite."""
-    run_cmd(["uv", "run", "pytest"], cwd=ROOT, description="Running tests with pytest...")
+    extra_args = list(extra_args) if extra_args else []
+    run_cmd(["uv", "run", "pytest", *extra_args], cwd=ROOT, description="Running tests with pytest...")
 
 
 @app.command("typecheck")
@@ -78,11 +97,10 @@ def typecheck() -> None:
 
 
 @app.command("ci")
-def ci() -> None:
+def ci(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
     """Run lint, format, type checking, and tests."""
-    check_command()
-    typecheck()
-    test()
+    extra_args = list(extra_args) if extra_args else []
+    _ci_run(extra_args=extra_args)
 
 
 @app.command("build")
