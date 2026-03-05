@@ -73,10 +73,10 @@ def format(extra_args: list[str] = typer.Argument(None)) -> None:
 
 
 @app.command("check")
-def check_command() -> None:
+def check_command(extra_args: list[str] = typer.Argument(None) -> None:
     """Run lint and format in sequence."""
-    format()
-    lint()
+    format(extra_args)
+    lint(extra_args)
 
 
 @app.command()
