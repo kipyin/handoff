@@ -47,7 +47,7 @@ def run(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
 def main_callback(ctx: typer.Context) -> None:
     """Default entrypoint so `uv run handoff` behaves like `uv run handoff run`."""
     if ctx.invoked_subcommand is None:
-        run()
+        run(extra_args=list(ctx.args))
 
 
 @app.command()
