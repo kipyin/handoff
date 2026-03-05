@@ -57,16 +57,16 @@ def sync(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
 @app.command()
 def lint(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
     """Run Ruff lint checks."""
-    extra_args = list(extra_args) if extra_args else []
-    run_cmd(["uv", "run", "ruff", "check", ".", *extra_args], cwd=ROOT, description="Running Ruff lint...")
+    extra_args = list(extra_args) if extra_args else ["."]
+    run_cmd(["uv", "run", "ruff", "check", *extra_args], cwd=ROOT, description="Running Ruff lint...")
 
 
 @app.command()
 def format(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
     """Run Ruff formatter."""
-    extra_args = list(extra_args) if extra_args else []
+    extra_args = list(extra_args) if extra_args else ["."]
     run_cmd(
-        ["uv", "run", "ruff", "format", ".", *extra_args],
+        ["uv", "run", "ruff", "format", *extra_args],
         cwd=ROOT,
         description="Running Ruff formatter...",
     )
@@ -87,10 +87,11 @@ def test(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
 
 
 @app.command("typecheck")
-def typecheck() -> None:
+def typecheck(extra_args: list[str] = typer.Argument(None, nargs=-1)) -> None:
     """Run pyright type checking over src/ and scripts/."""
+    extra_args = list(extra_args) if extra_args else ["src", "scripts"]
     run_cmd(
-        ["uv", "run", "pyright", "src", "scripts"],
+        ["uv", "run", "pyright", *extra_args],
         cwd=ROOT,
         description="Running pyright type checking...",
     )
