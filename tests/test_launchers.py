@@ -42,7 +42,11 @@ class TestLaunchers:
             [
                 "powershell",
                 "-Command",
-                f"Add-Type -TypeDefinition '{c_code}' -OutputAssembly '{exe_path}' -OutputType ConsoleApplication",
+                (
+                    f"Add-Type -TypeDefinition '{c_code}' "
+                    f"-OutputAssembly '{exe_path}' "
+                    "-OutputType ConsoleApplication"
+                ),
             ],
             check=True,
         )
