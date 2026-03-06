@@ -17,6 +17,7 @@ def _reload_db_module(db_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("TODO_APP_DB_PATH", str(db_path))
     import handoff.db as db  # type: ignore[import-not-found]
 
+    db.dispose_db()  # close any existing engine before reload
     return importlib.reload(db)
 
 
@@ -121,12 +122,15 @@ def test_init_db_raises_when_migration_fails(
     """When migrations raise inside connect(), DatabaseInitializationError is raised."""
     db_path = tmp_path / "todo.db"
     db = _reload_db_module(db_path, monkeypatch)
-    mock_conn = MagicMock()
-    mock_conn.exec_driver_sql.side_effect = Exception("Migration failed")
-    mock_conn.__enter__ = lambda self: self
-    mock_conn.__exit__ = lambda *a: None
-    with patch.object(db.engine, "connect", return_value=mock_conn):
-        with pytest.raises((DatabaseInitializationError, Exception)) as exc_info:
-            db.init_db()
-        assert type(exc_info.value).__name__ == "DatabaseInitializationError"
-        assert "failed" in exc_info.value.args[0].lower()
+    try:
+        mock_conn = MagicMock()
+        mock_conn.exec_driver_sql.side_effect = Exception("Migration failed")
+        mock_conn.__enter__ = lambda self: self
+        mock_conn.__exit__ = lambda *a: None
+        with patch.object(db.engine, "connect", return_value=mock_conn):
+            with pytest.raises((DatabaseInitializationError, Exception)) as exc_info:
+                db.init_db()
+            assert type(exc_info.value).__name__ == "DatabaseInitializationError"
+            assert "failed" in exc_info.value.args[0].lower()
+    finally:
+        db.dispose_db()
