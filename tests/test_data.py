@@ -1,7 +1,7 @@
 """Tests for data access helpers."""
 
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import datetime
 
 from sqlmodel import select
 
@@ -253,12 +253,8 @@ def test_query_todos_helper_name_filter(session, monkeypatch) -> None:
     p = Project(name="P")
     session.add(p)
     session.commit()
-    session.add(
-        Todo(project_id=p.id, name="A", status=TodoStatus.DELEGATED, helper="Alice")
-    )
-    session.add(
-        Todo(project_id=p.id, name="B", status=TodoStatus.DELEGATED, helper="Bob")
-    )
+    session.add(Todo(project_id=p.id, name="A", status=TodoStatus.DELEGATED, helper="Alice"))
+    session.add(Todo(project_id=p.id, name="B", status=TodoStatus.DELEGATED, helper="Bob"))
     session.commit()
 
     results = data.query_todos(helper_name="lic")

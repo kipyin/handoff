@@ -355,6 +355,9 @@ def test_can_apply_patch_older_returns_false_unless_apply_anyway() -> None:
 
 
 def test_can_apply_patch_invalid_version_parses_to_zeros() -> None:
-    """_can_apply_patch: non-numeric version parses to zeros, so patch is 'older' (False unless apply_anyway)."""
+    """_can_apply_patch treats non-numeric version as older.
+
+    apply_anyway=True overrides the version check.
+    """
     assert _can_apply_patch("not-a-version", "2026.3.6", False) is False
     assert _can_apply_patch("not-a-version", "2026.3.6", True) is True

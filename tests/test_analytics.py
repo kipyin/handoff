@@ -87,6 +87,7 @@ def test_compute_cycle_time_stats_returns_mean_p50_p90() -> None:
 
 def test_compute_helper_load_aggregates_and_sorts() -> None:
     """_compute_helper_load returns helper counts sorted by handoff descending."""
+
     class Todo:
         def __init__(self, id: int, helper: str | None):
             self.id = id
@@ -129,6 +130,7 @@ def test_build_done_dataframe_empty_when_no_todos(monkeypatch: pytest.MonkeyPatc
 
 def test_build_done_dataframe_with_todos(monkeypatch: pytest.MonkeyPatch) -> None:
     """_build_done_dataframe returns rows from query_todos with correct columns."""
+
     class Project:
         name = "Proj"
 

@@ -24,6 +24,7 @@ def test_read_markdown_from_app_root_os_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """read_markdown_from_app_root returns a message when read raises OSError."""
+
     def _read_text_raise(*args: object, **kwargs: object) -> str:
         raise OSError("Permission denied")
 
@@ -34,7 +35,7 @@ def test_read_markdown_from_app_root_os_error(
 
 
 def test_cached_markdown_caches_and_calls_read_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    """pages.docs._cached_markdown caches result and calls read_markdown_from_app_root once per name."""
+    """pages.docs._cached_markdown caches result and reads each name once."""
     from unittest.mock import MagicMock
 
     session_state = {}

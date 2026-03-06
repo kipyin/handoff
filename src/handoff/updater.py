@@ -614,10 +614,7 @@ def _can_apply_patch(
     if patch_version is None:
         return True
     try:
-        return (
-            apply_anyway
-            or _parse_version(patch_version) >= _parse_version(app_version)
-        )
+        return apply_anyway or _parse_version(patch_version) >= _parse_version(app_version)
     except (ValueError, TypeError):
         return True
 

@@ -44,9 +44,7 @@ def _compute_weekly_counts(df_done: pd.DataFrame) -> pd.DataFrame:
     """
     iso = pd.to_datetime(df_done["completed_at"]).dt.isocalendar()
     df_done = df_done.copy()
-    df_done["week_label"] = (
-        iso["year"].astype(str) + "-W" + iso["week"].astype(str).str.zfill(2)
-    )
+    df_done["week_label"] = iso["year"].astype(str) + "-W" + iso["week"].astype(str).str.zfill(2)
     weekly = df_done.groupby("week_label")["id"].count().reset_index(name="completed")
     return weekly.sort_values("week_label")
 
