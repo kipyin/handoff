@@ -30,25 +30,33 @@ def _render_create_project_form() -> None:
             st.success("Project created.")
             st.rerun()
 
+# New pure-logic helpers for testability
+from dataclasses import dataclass
+from typing import Any, Dict, List
 
-def _apply_project_changes(
-    edited_df: pd.DataFrame,
-    projects: list,
-) -> tuple[bool, list[str], int, int]:
-    """Apply table edits: renames, archive toggles, and deletions.
+def _get_projects_to_delete(edited_df: pd.DataFrame, projects: list) -> list[tuple[int, str]]:
+    """Helper to identify projects marked for deletion in the UI."""
+    project_by_id = {p.id: p for p in projects}
+    to_delete: list[tuple[int, str]] = []
+    for _, row in edited_df.iterrows():
+        pid = row.get("__project_id")
+        if pid is None or pd.isna(pid):
+            continue
+        pid = int(pid)
+        project = project_by_id.get(pid)
+        if project and row.get("confirm_delete"):
+            to_delete.append((pid, getattr(project, "name", "")))
+    return to_delete
 
-    Args:
-        edited_df: The edited dataframe from the data_editor.
-        projects: Current list of projects (same order/scope as when table was built).
+def _get_pending_changes(edited_df: pd.DataFrame, projects: list) -> tuple[bool, list[str], list[dict]]:
+    """Compare UI-edited DataFrame to current projects and produce a list of changes.
 
-    Returns:
-        Tuple of (success, errors, deleted_count, updated_count).
-
+    Returns (valid, errors, changes). Changes are dicts with a 'type' key: 'rename', 'archive', 'unarchive', 'delete'.
     """
     project_by_id = {p.id: p for p in projects}
     errors: list[str] = []
-    deleted = 0
-    updated = 0
+    changes: list[dict] = []
+
     for _, row in edited_df.iterrows():
         pid = row.get("__project_id")
         if pid is None or pd.isna(pid):
@@ -58,26 +66,73 @@ def _apply_project_changes(
         if not project:
             continue
         if row.get("confirm_delete"):
-            if delete_project(pid):
-                deleted += 1
-            else:
-                errors.append(f'Could not delete project "{project.name}".')
+            changes.append({"type": "delete", "id": pid, "name": getattr(project, "name", "")})
             continue
         new_name = (row.get("name") or "").strip()
         if not new_name:
             errors.append(f"Project name cannot be empty (id {pid}).")
             continue
         if new_name != project.name:
-            rename_project(pid, new_name)
-            updated += 1
+            changes.append({"type": "rename", "id": pid, "new_name": new_name})
         new_archived = bool(row.get("is_archived"))
         if new_archived != getattr(project, "is_archived", False):
-            if new_archived:
-                archive_project(pid)
-            else:
-                unarchive_project(pid)
-            updated += 1
-    return (len(errors) == 0, errors, deleted, updated)
+            changes.append({"type": "archive", "id": pid, "archive": new_archived})
+
+    valid = len(errors) == 0
+    return valid, errors, changes
+
+def _execute_changes(changes: list[dict]) -> tuple[int, int, list[str]]:
+    """Execute a list of UI-derived changes. Returns (deleted, updated, errors)."""
+    deleted = 0
+    updated = 0
+    errors: list[str] = []
+    for ch in changes:
+        t = ch.get("type")
+        if t == "rename":
+            pid = int(ch["id"])
+            new_name = ch["new_name"]
+            try:
+                rename_project(pid, new_name)
+                updated += 1
+            except Exception as e:
+                errors.append(f"Could not rename project {pid}: {e}")
+        elif t == "archive":
+            pid = int(ch["id"])
+            try:
+                if ch["archive"]:
+                    archive_project(pid)
+                else:
+                    unarchive_project(pid)
+                updated += 1
+            except Exception as e:
+                errors.append(f"Could not update archive for project {pid}: {e}")
+        elif t == "delete":
+            pid = int(ch["id"])
+            try:
+                if delete_project(pid):
+                    deleted += 1
+                else:
+                    errors.append(f'Could not delete project "{ch.get("name")}".')
+            except Exception as e:
+                errors.append(f"Could not delete project {pid}: {e}")
+    return deleted, updated, errors
+
+
+def _apply_project_changes(
+    edited_df: pd.DataFrame,
+    projects: list,
+) -> tuple[bool, list[str], int, int]:
+    """Apply table edits: renames, archive toggles, and deletions using pure logic helpers."""
+    valid, errors, changes = _get_pending_changes(edited_df, projects)
+    if not valid:
+        return (False, errors, 0, 0)
+    if not changes:
+        return (True, [], 0, 0)
+    deleted, updated, exec_errors = _execute_changes(changes)
+    success = len(exec_errors) == 0
+    if not success:
+        return (False, exec_errors, deleted, updated)
+    return (True, [], deleted, updated)
 
 
 def render_projects_page() -> None:
@@ -134,15 +189,7 @@ def render_projects_page() -> None:
     )
 
     # Count rows marked for deletion for confirmation.
-    to_delete = []
-    for _, row in edited_df.iterrows():
-        pid = row.get("__project_id")
-        if pid is None or pd.isna(pid):
-            continue
-        if row.get("confirm_delete"):
-            project = next((p for p in projects if p.id == int(pid)), None)
-            if project:
-                to_delete.append((int(pid), project.name))
+    to_delete = _get_projects_to_delete(edited_df, projects)
 
     # Show confirmation UI when user previously clicked Save with deletions pending.
     pending = st.session_state.get("projects_pending_deletion")
