@@ -129,6 +129,36 @@ def test_execute_changes_handles_exceptions(monkeypatch):
     assert "Could not rename project 1: DB Error" in errors[0]
 
 
+def test_execute_changes_handles_archive_exception(monkeypatch):
+    """Archive failures are reported as user-facing errors."""
+
+    def mock_archive(pid):
+        raise RuntimeError("permission denied")
+
+    monkeypatch.setattr("handoff.pages.projects.archive_project", mock_archive)
+
+    deleted, updated, errors = _execute_changes([{"type": "archive", "id": 2, "archive": True}])
+
+    assert deleted == 0
+    assert updated == 0
+    assert errors == ["Could not update archive for project 2: permission denied"]
+
+
+def test_execute_changes_records_error_when_delete_returns_false(monkeypatch):
+    """Delete returning False should surface a project-specific error message."""
+
+    def mock_delete(pid):
+        return False
+
+    monkeypatch.setattr("handoff.pages.projects.delete_project", mock_delete)
+
+    deleted, updated, errors = _execute_changes([{"type": "delete", "id": 7, "name": "Infra"}])
+
+    assert deleted == 0
+    assert updated == 0
+    assert errors == ['Could not delete project "Infra".']
+
+
 def test_get_pending_changes_unarchive(mock_projects):
     """Verify that changing is_archived from True to False is detected."""
     # Project 3 in mock_projects starts as is_archived=True
@@ -192,6 +222,50 @@ def test_apply_project_changes_validation_failure(mock_projects):
 
     assert success is False
     assert "Project name cannot be empty" in errors[0]
+    assert updated == 0
+
+
+def test_apply_project_changes_no_changes_returns_zero_counts(mock_projects):
+    """When edited values match current values, no operations are executed."""
+    df = pd.DataFrame(
+        [
+            {"__project_id": 1, "name": "Work", "is_archived": False, "confirm_delete": False},
+        ]
+    )
+
+    success, errors, deleted, updated = _apply_project_changes(df, mock_projects)
+
+    assert success is True
+    assert errors == []
+    assert deleted == 0
+    assert updated == 0
+
+
+def test_apply_project_changes_returns_deleted_count_on_partial_failure(mock_projects, monkeypatch):
+    """Execution errors still return operation counters for successful prior changes."""
+
+    def mock_rename(pid, name):
+        raise RuntimeError("rename failed")
+
+    def mock_delete(pid):
+        return True
+
+    monkeypatch.setattr("handoff.pages.projects.rename_project", mock_rename)
+    monkeypatch.setattr("handoff.pages.projects.delete_project", mock_delete)
+
+    df = pd.DataFrame(
+        [
+            {"__project_id": 2, "name": "Home", "is_archived": False, "confirm_delete": True},
+            {"__project_id": 1, "name": "Renamed Work", "is_archived": False, "confirm_delete": False},
+        ]
+    )
+
+    success, errors, deleted, updated = _apply_project_changes(df, mock_projects)
+
+    assert success is False
+    assert len(errors) == 1
+    assert "Could not rename project 1: rename failed" in errors[0]
+    assert deleted == 1
     assert updated == 0
 
 
