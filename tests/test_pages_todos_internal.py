@@ -4,8 +4,10 @@ This file adds tests for:
 - _apply_native_filters: unit-style test by stubbing out Streamlit widgets.
 - _render_editable_table: integration-style test by stubbing out dependencies and simulating a persisted edit.
 """
+
 import pandas as pd
-from handoff.pages.todos import _apply_native_filters, _render_editable_table, DEADLINE_ANY
+
+from handoff.pages.todos import DEADLINE_ANY, _apply_native_filters, _render_editable_table
 
 
 def test_apply_native_filters_unit(monkeypatch):
@@ -61,7 +63,9 @@ def test_apply_native_filters_unit(monkeypatch):
 
     monkeypatch.setattr("handoff.pages.todos.st.multiselect", fake_multiselect)
 
-    monkeypatch.setattr("handoff.pages.todos.st.selectbox", lambda label, options=None, key=None: DEADLINE_ANY)
+    monkeypatch.setattr(
+        "handoff.pages.todos.st.selectbox", lambda label, options=None, key=None: DEADLINE_ANY
+    )
     monkeypatch.setattr("handoff.pages.todos.st.date_input", lambda *args, **kwargs: None)
 
     filtered_df, filter_state = _apply_native_filters(
@@ -79,15 +83,29 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
     # Prepare a tiny filtered dataframe and mock the downstream helpers
     df_filtered = pd.DataFrame(
         [
-            {"__todo_id": 0, "id": 1, "name": "N", "project": "Work", "status": "handoff", "deadline": None, "notes": ""},
+            {
+                "__todo_id": 0,
+                "id": 1,
+                "name": "N",
+                "project": "Work",
+                "status": "handoff",
+                "deadline": None,
+                "notes": "",
+            },
         ]
     )
 
     monkeypatch.setattr(
         "handoff.pages.todos._apply_native_filters",
-        lambda source_df, key_prefix, project_names, helper_options: (df_filtered, {"project_filters": ["Work"], "status_filters": ["handoff"], "helper_filters": []}),
+        lambda source_df, key_prefix, project_names, helper_options: (
+            df_filtered,
+            {"project_filters": ["Work"], "status_filters": ["handoff"], "helper_filters": []},
+        ),
     )
-    monkeypatch.setattr("handoff.pages.todos._sort_and_build_display_df", lambda df: (df, df.copy()))
+    monkeypatch.setattr(
+        "handoff.pages.todos._sort_and_build_display_df", lambda df: (df, df.copy())
+    )
+
     # Patch UI rendering and persistence hooks
     class FakeCol:
         def __enter__(self):
@@ -103,11 +121,16 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
     monkeypatch.setattr("handoff.pages.todos.st.data_editor", lambda *args, **kwargs: None)
 
     # Simulate an edit in the editor state
-    monkeypatch.setattr("streamlit.session_state", {"test_table_editor": {"edited_rows": {"0": {"name": "New Name"}}}})
+    monkeypatch.setattr(
+        "streamlit.session_state",
+        {"test_table_editor": {"edited_rows": {"0": {"name": "New Name"}}}},
+    )
 
     persisted = {}
 
-    def fake_persist_changes(state, display_df=None, projects=None, default_project_id=None, key_prefix=None):
+    def fake_persist_changes(
+        state, display_df=None, projects=None, default_project_id=None, key_prefix=None
+    ):
         persisted["state"] = state
         persisted["display_df"] = display_df
         persisted["projects"] = projects
@@ -122,7 +145,19 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
     # Minimal project to satisfy _render_editable_table
     p1 = type("P", (), {"id": 1, "name": "Work"})()
 
-    _source_df = pd.DataFrame([{"__todo_id": 0, "id": 1, "name": "N", "project": "Work", "status": "handoff", "deadline": None, "notes": ""}])
+    _source_df = pd.DataFrame(
+        [
+            {
+                "__todo_id": 0,
+                "id": 1,
+                "name": "N",
+                "project": "Work",
+                "status": "handoff",
+                "deadline": None,
+                "notes": "",
+            }
+        ]
+    )
 
     _render_editable_table(
         source_df=_source_df,
