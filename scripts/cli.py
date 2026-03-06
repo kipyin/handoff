@@ -62,7 +62,9 @@ def lint(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     """Run Ruff lint checks."""
     extra_args = list(extra_args) if extra_args else ["."]
     run_cmd(
-        ["uv", "run", "ruff", "check", *extra_args], cwd=ROOT, description="Running Ruff lint..."
+        ["uv", "run", "ruff", "check", "--fix", *extra_args],
+        cwd=ROOT,
+        description="Running Ruff lint...",
     )
 
 
@@ -84,12 +86,25 @@ def check_command(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     lint(extra_args)
 
 
-@app.command()
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def test(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     """Run the pytest test suite."""
     extra_args = list(extra_args) if extra_args else []
     run_cmd(
-        ["uv", "run", "pytest", *extra_args], cwd=ROOT, description="Running tests with pytest..."
+        [
+            "uv",
+            "run",
+            "pytest",
+            "--cov",
+            "-qx",
+            "--ff",
+            "--no-cov-on-fail",
+            "--cov-report",
+            "term:skip-covered",
+            *extra_args,
+        ],
+        cwd=ROOT,
+        description="Running tests with pytest...",
     )
 
 

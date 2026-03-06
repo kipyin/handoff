@@ -29,6 +29,7 @@ dev = [
     "rich>=13.7.0",
     "pyarmor>=9.2.0",
     "pyright>=1.1.408",
+    "pytest-cov>=7.0.0",
 ]
 
 [build-system]

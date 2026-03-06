@@ -48,15 +48,15 @@ class TestLaunchers:
 
         # Verify the batch file contains the expected logic strings
         # We check for the core parts of the update and execution logic
-        assert 'if exist "%SCRIPT_DIR%update"' in content
-        assert 'move /y "%SCRIPT_DIR%update\\*"' in content
+        assert 'if exist "%SCRIPT_DIR%update\\*"' in content
+        assert 'xcopy /E /Y "%SCRIPT_DIR%update\\*" "%SCRIPT_DIR%"' in content
         assert "python\\python.exe" in content
         assert "PYTHONPATH" in content
         assert "PYTHONHOME" in content
 
         # Verify environment variables are set to the correct paths
         assert "set PYTHONHOME=%SCRIPT_DIR%python" in content
-        assert "set PYTHONPATH=%SCRIPT_DIR%src" in content
+        assert "set PYTHONPATH=%SCRIPT_DIR%;%SCRIPT_DIR%src" in content
 
         # 2. Manually verify the "Update" logic that the .bat is supposed to do
         # (This ensures our understanding of the command we wrote into the .bat is correct)
