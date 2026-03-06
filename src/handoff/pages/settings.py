@@ -1,19 +1,24 @@
 """Settings page implementation for Handoff.
 
-This page centralises app updates, code backup restore, data export, and a
-compact About section so that operational controls live in one place.
+This page centralises app updates, code backup restore, data export, log
+download, and a compact About section so that operational controls live in
+one place.
 """
 
 from __future__ import annotations
 
+import io
 import json
 import platform
+import zipfile
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 
 from handoff.data import get_export_payload
+from handoff.logging import _get_logs_dir
 from handoff.updater import render_update_panel
 from handoff.version import __version__ as APP_VERSION
 
@@ -49,6 +54,38 @@ def _render_data_export_section() -> None:
         file_name="todo_todos.csv",
         mime="text/csv",
         key="settings_download_csv_backup",
+    )
+
+
+def _render_send_log_section() -> None:
+    """Render a download button that zips all log files for easy sharing."""
+    st.markdown("### Send log")
+    st.caption(
+        "Download a zip of all log files. Attach this when reporting an issue — "
+        "you don't need to find the log folder yourself."
+    )
+
+    logs_dir = _get_logs_dir()
+    log_files = sorted(logs_dir.iterdir()) if logs_dir.exists() else []
+    log_files = [f for f in log_files if f.is_file()]
+
+    if not log_files:
+        st.caption("No log files found.")
+        return
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for log_file in log_files:
+            zf.write(log_file, arcname=log_file.name)
+    buf.seek(0)
+
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    st.download_button(
+        "Download log zip",
+        data=buf.getvalue(),
+        file_name=f"handoff-logs-{timestamp}.zip",
+        mime="application/zip",
+        key="settings_download_logs",
     )
 
 
@@ -98,6 +135,9 @@ def render_settings_page() -> None:
 
     st.divider()
     _render_data_export_section()
+
+    st.divider()
+    _render_send_log_section()
 
     st.divider()
     _render_about_section()

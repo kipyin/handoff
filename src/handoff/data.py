@@ -1,5 +1,6 @@
 """Data access helpers for projects/todos and common query workflows."""
 
+import enum
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -10,7 +11,14 @@ from sqlmodel import or_, select
 from handoff.db import session_context
 from handoff.models import Project, Todo, TodoStatus
 
-_UNSET = object()
+
+class _Unset(enum.Enum):
+    """Sentinel distinguishing 'not provided' from None in update functions."""
+
+    UNSET = "UNSET"
+
+
+_UNSET = _Unset.UNSET
 
 
 def _helper_to_db(helper: str | list[str] | None) -> str | None:
@@ -140,12 +148,12 @@ def create_todo(
 def update_todo(
     todo_id: int,
     *,
-    project_id: int | None | object = _UNSET,
-    name: str | None | object = _UNSET,
-    status: TodoStatus | None | object = _UNSET,
-    deadline: date | None | object = _UNSET,
-    helper: str | list[str] | None | object = _UNSET,
-    notes: str | None | object = _UNSET,
+    project_id: int | None | _Unset = _UNSET,
+    name: str | None | _Unset = _UNSET,
+    status: TodoStatus | None | _Unset = _UNSET,
+    deadline: date | None | _Unset = _UNSET,
+    helper: str | list[str] | None | _Unset = _UNSET,
+    notes: str | None | _Unset = _UNSET,
 ) -> Todo | None:
     """Update a todo by id. Only provided fields are updated.
 
