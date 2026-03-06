@@ -7,7 +7,7 @@ from rich.console import Console
 
 from . import ROOT
 from . import build_patch as build_patch_module
-from . import build_zip as build_zip_module
+from . import build_full as build_full_module
 from . import bump_version as bump_version_module
 from .subprocess_utils import run_cmd
 
@@ -130,7 +130,7 @@ def build(
     """Build the application (full distribution or patch)."""
     if full:
         console.print("Building full Windows embedded zip distribution...", style="bold cyan")
-        build_zip_module.main()
+        build_full_module.main()
     elif patch:
         path = build_patch_module.build_patch()
         console.print(f"Patch zip created at {path}", style="bold green")
