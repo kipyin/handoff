@@ -6,8 +6,8 @@ import typer
 from rich.console import Console
 
 from . import ROOT
-from . import build_patch as build_patch_module
 from . import build_full as build_full_module
+from . import build_patch as build_patch_module
 from . import bump_version as bump_version_module
 from .subprocess_utils import run_cmd
 
@@ -89,7 +89,7 @@ def check_command(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def test(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     """Run the pytest test suite."""
-    extra_args = list(extra_args) if extra_args else []
+    extra_args = list(extra_args) if extra_args else ["."]
     run_cmd(
         [
             "uv",

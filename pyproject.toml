@@ -52,6 +52,8 @@ quote-style = "double"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+addopts = "--quiet -x --ff --cov --no-cov-on-fail --cov-report=term:skip-covered"
+
 
 [tool.uv]
 link-mode = "copy"
