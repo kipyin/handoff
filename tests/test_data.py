@@ -1,7 +1,7 @@
 """Tests for data access helpers."""
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlmodel import select
 
@@ -170,3 +170,97 @@ def test_create_todo_with_list_helper(session, monkeypatch) -> None:
     # UI often passes lists from multiselects; we take the first non-empty
     todo = data.create_todo(p.id, "Task", helper=["", "  Charlie  ", "Dave"])
     assert todo.helper == "Charlie"
+
+
+def test_create_todo_helper_none_and_empty_list(session, monkeypatch) -> None:
+    """create_todo with helper=None or helper=[] stores None (covers _helper_to_db branches)."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    t1 = data.create_todo(p.id, "No helper", helper=None)
+    assert t1.helper is None
+    t2 = data.create_todo(p.id, "Empty list", helper=[])
+    assert t2.helper is None
+    t3 = data.create_todo(p.id, "Whitespace only list", helper=["  ", ""])
+    assert t3.helper is None
+
+
+def test_get_project_returns_none_for_missing_id(session, monkeypatch) -> None:
+    """get_project returns None when project_id does not exist."""
+    _patch_session_context(monkeypatch, session)
+    assert data.get_project(99999) is None
+
+
+def test_delete_todo_returns_false_for_missing_id(session, monkeypatch) -> None:
+    """delete_todo returns False when todo_id does not exist."""
+    _patch_session_context(monkeypatch, session)
+    assert data.delete_todo(99999) is False
+
+
+def test_update_todo_returns_none_for_missing_id(session, monkeypatch) -> None:
+    """update_todo returns None when todo_id does not exist."""
+    _patch_session_context(monkeypatch, session)
+    assert data.update_todo(99999, name="No-op") is None
+
+
+def test_query_todos_date_range_and_include_archived(session, monkeypatch) -> None:
+    """query_todos respects start/end deadline and include_archived."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    start_dt = datetime(2026, 1, 5)
+    end_dt = datetime(2026, 1, 15)
+    t_in = Todo(
+        project_id=p.id,
+        name="In range",
+        status=TodoStatus.DELEGATED,
+        deadline=datetime(2026, 1, 10),
+    )
+    t_out = Todo(
+        project_id=p.id,
+        name="Out of range",
+        status=TodoStatus.DELEGATED,
+        deadline=datetime(2026, 1, 20),
+    )
+    session.add_all([t_in, t_out])
+    session.commit()
+
+    results = data.query_todos(start=start_dt.date(), end=end_dt.date())
+    assert len(results) == 1
+    assert results[0].name == "In range"
+
+    # include_archived: add an archived todo and ensure it's included when True
+    t_archived = Todo(
+        project_id=p.id,
+        name="Archived",
+        status=TodoStatus.DELEGATED,
+        is_archived=True,
+    )
+    session.add(t_archived)
+    session.commit()
+    without = data.query_todos(include_archived=False)
+    with_archived = data.query_todos(include_archived=True)
+    assert len(with_archived) == len(without) + 1
+
+
+def test_query_todos_helper_name_filter(session, monkeypatch) -> None:
+    """query_todos filters by helper_name substring."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.add(
+        Todo(project_id=p.id, name="A", status=TodoStatus.DELEGATED, helper="Alice")
+    )
+    session.add(
+        Todo(project_id=p.id, name="B", status=TodoStatus.DELEGATED, helper="Bob")
+    )
+    session.commit()
+
+    results = data.query_todos(helper_name="lic")
+    assert len(results) == 1
+    assert results[0].helper == "Alice"
