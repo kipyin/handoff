@@ -103,11 +103,14 @@ def test_init_db_adds_completed_at_to_existing_schema(
     assert "is_archived" in project_columns
 
 
-def test_init_db_raises_when_engine_creation_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_init_db_raises_when_engine_creation_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """When create_engine raises at module load, DatabaseInitializationError is raised."""
-    monkeypatch.setenv("TODO_APP_DB_PATH", str(Path("/nonexistent/dir/todo.db")))
+    monkeypatch.setenv("TODO_APP_DB_PATH", str(tmp_path / "todo.db"))
     import handoff.db as db  # noqa: F401
 
+    db.dispose_db()
     with patch("sqlmodel.create_engine", side_effect=Exception("Engine failed")):
         with pytest.raises((DatabaseInitializationError, Exception)) as exc_info:
             importlib.reload(db)
