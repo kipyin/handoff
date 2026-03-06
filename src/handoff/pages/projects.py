@@ -54,7 +54,8 @@ def _get_pending_changes(
 ) -> tuple[bool, list[str], list[dict]]:
     """Compare UI-edited DataFrame to current projects and produce a list of changes.
 
-    Returns (valid, errors, changes). Changes are dicts with a 'type' key: 'rename', 'archive', 'unarchive', 'delete'.
+    Returns (valid, errors, changes). Changes are dicts with a 'type' key: 'rename', 'archive',
+    'unarchive', 'delete'.
     """
     project_by_id = {p.id: p for p in projects}
     errors: list[str] = []
