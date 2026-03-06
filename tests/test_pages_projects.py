@@ -3,6 +3,7 @@ import pytest
 
 from handoff.models import Project
 from handoff.pages.projects import (
+    _apply_project_changes,
     _execute_changes,
     _get_pending_changes,
     _get_projects_to_delete,
@@ -125,3 +126,69 @@ def test_execute_changes_handles_exceptions(monkeypatch):
     assert updated == 0
     assert len(errors) == 1
     assert "Could not rename project 1: DB Error" in errors[0]
+
+
+def test_get_pending_changes_unarchive(mock_projects):
+    """Verify that changing is_archived from True to False is detected."""
+    # Project 3 in mock_projects starts as is_archived=True
+    df = pd.DataFrame(
+        [
+            {
+                "__project_id": 3,
+                "name": "Old Project",
+                "is_archived": False,
+                "confirm_delete": False,
+            },
+        ]
+    )
+    valid, errors, changes = _get_pending_changes(df, mock_projects)
+
+    assert valid is True
+    assert len(changes) == 1
+    assert changes[0] == {"type": "archive", "id": 3, "archive": False}
+
+
+def test_execute_changes_unarchive(monkeypatch):
+    """Verify that archive=False calls unarchive_project."""
+    calls = []
+
+    def mock_unarchive(pid):
+        calls.append(pid)
+
+    monkeypatch.setattr("handoff.pages.projects.unarchive_project", mock_unarchive)
+
+    changes = [{"type": "archive", "id": 3, "archive": False}]
+    deleted, updated, errors = _execute_changes(changes)
+
+    assert updated == 1
+    assert 3 in calls
+
+
+def test_apply_project_changes_orchestration(mock_projects, monkeypatch):
+    """Verify the full flow from DataFrame to success result."""
+    monkeypatch.setattr("handoff.pages.projects.rename_project", lambda pid, name: None)
+
+    df = pd.DataFrame(
+        [
+            {"__project_id": 1, "name": "Renamed", "is_archived": False, "confirm_delete": False},
+        ]
+    )
+    success, errors, deleted, updated = _apply_project_changes(df, mock_projects)
+
+    assert success is True
+    assert updated == 1
+    assert len(errors) == 0
+
+
+def test_apply_project_changes_validation_failure(mock_projects):
+    """Verify that validation errors prevent execution."""
+    df = pd.DataFrame(
+        [
+            {"__project_id": 1, "name": "", "is_archived": False, "confirm_delete": False},
+        ]
+    )
+    success, errors, deleted, updated = _apply_project_changes(df, mock_projects)
+
+    assert success is False
+    assert "Project name cannot be empty" in errors[0]
+    assert updated == 0

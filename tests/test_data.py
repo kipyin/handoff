@@ -110,3 +110,63 @@ def test_get_export_payload_includes_projects_and_todos(session, monkeypatch) ->
     assert len(payload["projects"]) == 1
     assert len(payload["todos"]) == 1
     assert payload["todos"][0]["status"] == TodoStatus.DONE.value
+
+
+def test_list_helpers_canonicalization(session, monkeypatch) -> None:
+    """Verify that list_helpers handles case-insensitivity and trimming."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    # Add todos with variations of the same name
+    session.add(Todo(project_id=p.id, name="t1", helper="  Alice  "))
+    session.add(Todo(project_id=p.id, name="t2", helper="alice"))
+    session.add(Todo(project_id=p.id, name="t3", helper="BOB"))
+    session.add(Todo(project_id=p.id, name="t4", helper=None))
+    session.commit()
+
+    helpers = data.list_helpers()
+    # Should be sorted, trimmed, and unique by case (keeping first encountered casing)
+    assert helpers == ["Alice", "BOB"]
+
+
+def test_query_todos_filters(session, monkeypatch) -> None:
+    """Verify query_todos with multiple filter combinations."""
+    _patch_session_context(monkeypatch, session)
+    p1 = Project(name="P1")
+    p2 = Project(name="P2")
+    session.add_all([p1, p2])
+    session.commit()
+
+    t1 = Todo(project_id=p1.id, name="Apple", status=TodoStatus.DONE, helper="Alice")
+    t2 = Todo(project_id=p2.id, name="Banana", status=TodoStatus.DELEGATED, helper="Bob")
+    session.add_all([t1, t2])
+    session.commit()
+
+    # Filter by status
+    results = data.query_todos(statuses=[TodoStatus.DONE])
+    assert len(results) == 1
+    assert results[0].name == "Apple"
+
+    # Filter by search text (case-insensitive)
+    results = data.query_todos(search_text="nan")
+    assert len(results) == 1
+    assert results[0].name == "Banana"
+
+    # Filter by project
+    results = data.query_todos(project_ids=[p1.id])
+    assert len(results) == 1
+    assert results[0].name == "Apple"
+
+
+def test_create_todo_with_list_helper(session, monkeypatch) -> None:
+    """Verify _helper_to_db logic when a list is passed (from UI multiselects)."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    # UI often passes lists from multiselects; we take the first non-empty
+    todo = data.create_todo(p.id, "Task", helper=["", "  Charlie  ", "Dave"])
+    assert todo.helper == "Charlie"
