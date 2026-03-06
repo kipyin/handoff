@@ -309,9 +309,9 @@ def query_todos(
             if statuses:
                 parts.append(f"statuses={[s.value for s in statuses]}")
             if start is not None:
-                parts.append(f"start={start.date()!s}")
+                parts.append(f"start={start!s}")
             if end is not None:
-                parts.append(f"end={end.date()!s}")
+                parts.append(f"end={end!s}")
             if normalized_search:
                 parts.append(f"search={normalized_search!r}")
             logger.info(
