@@ -1,103 +1,143 @@
-"""Tests for analytics page helpers."""
+"""Tests for dashboard/analytics page helpers."""
 
 from __future__ import annotations
 
 from datetime import date, datetime
-
-import pandas as pd
-import pytest
+from types import SimpleNamespace
 
 from handoff.pages.analytics import (
-    _build_done_dataframe,
     _compute_cycle_time_stats,
     _compute_helper_load,
+    _compute_overdue_rate,
     _compute_weekly_counts,
-    _parse_date_range,
+    _week_bounds,
 )
 
 
-def test_parse_date_range_two_element_tuple() -> None:
-    """_parse_date_range returns (start, end) for a 2-element tuple."""
-    start, end = date(2026, 1, 1), date(2026, 1, 31)
-    assert _parse_date_range((start, end)) == (start, end)
-
-
-def test_parse_date_range_two_element_list() -> None:
-    """_parse_date_range returns (start, end) for a 2-element list."""
-    start, end = date(2026, 2, 1), date(2026, 2, 28)
-    assert _parse_date_range([start, end]) == (start, end)
-
-
-def test_parse_date_range_single_date_returns_none() -> None:
-    """_parse_date_range returns (None, None) for a single date."""
-    assert _parse_date_range(date(2026, 3, 1)) == (None, None)
-
-
-def test_parse_date_range_empty_or_wrong_length_returns_none() -> None:
-    """_parse_date_range returns (None, None) for wrong-length sequences."""
-    assert _parse_date_range([]) == (None, None)
-    assert _parse_date_range([date(2026, 1, 1)]) == (None, None)
-    assert _parse_date_range((date(2026, 1, 1), date(2026, 1, 2), date(2026, 1, 3))) == (
-        None,
-        None,
+def _make_todo(
+    id: int = 1,
+    helper: str | None = None,
+    deadline: date | None = None,
+    created_at: datetime | None = None,
+    completed_at: datetime | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=id,
+        helper=helper,
+        deadline=deadline,
+        created_at=created_at or datetime(2026, 1, 1),
+        completed_at=completed_at,
     )
 
 
-def test_compute_weekly_counts_aggregates_by_week() -> None:
-    """_compute_weekly_counts returns weekly completed counts sorted by week."""
-    df = pd.DataFrame(
-        {
-            "id": [1, 2, 3],
-            "completed_at": [
-                datetime(2026, 1, 6),
-                datetime(2026, 1, 7),
-                datetime(2026, 1, 14),
-            ],
-        }
-    )
-    result = _compute_weekly_counts(df)
+# --- _week_bounds ---
+
+
+def test_week_bounds_returns_monday_to_sunday() -> None:
+    """_week_bounds returns the ISO week for the given date."""
+    mon, sun = _week_bounds(date(2026, 2, 27))  # Friday
+    assert mon == date(2026, 2, 23)  # Monday
+    assert sun == date(2026, 3, 1)  # Sunday
+
+
+def test_week_bounds_on_monday() -> None:
+    mon, sun = _week_bounds(date(2026, 3, 2))  # Monday
+    assert mon == date(2026, 3, 2)
+    assert sun == date(2026, 3, 8)
+
+
+def test_week_bounds_on_sunday() -> None:
+    mon, sun = _week_bounds(date(2026, 3, 8))  # Sunday
+    assert mon == date(2026, 3, 2)
+    assert sun == date(2026, 3, 8)
+
+
+# --- _compute_cycle_time_stats ---
+
+
+def test_cycle_time_stats_returns_mean_median_p90() -> None:
+    todos = [
+        _make_todo(created_at=datetime(2026, 1, 8), completed_at=datetime(2026, 1, 10)),
+        _make_todo(created_at=datetime(2026, 1, 9), completed_at=datetime(2026, 1, 10)),
+        _make_todo(created_at=datetime(2026, 1, 7), completed_at=datetime(2026, 1, 10)),
+        _make_todo(created_at=datetime(2026, 1, 5), completed_at=datetime(2026, 1, 10)),
+    ]
+    result = _compute_cycle_time_stats(todos)
+    assert result is not None
+    avg, p50, p90 = result
+    assert avg == 2.75
+    assert p50 == 2.5
+    assert 3.0 <= p90 <= 5.0
+
+
+def test_cycle_time_stats_returns_none_when_empty() -> None:
+    assert _compute_cycle_time_stats([]) is None
+
+
+def test_cycle_time_stats_skips_missing_completed_at() -> None:
+    todos = [_make_todo(completed_at=None)]
+    assert _compute_cycle_time_stats(todos) is None
+
+
+# --- _compute_overdue_rate ---
+
+
+def test_overdue_rate_all_on_time() -> None:
+    todos = [
+        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 9)),
+        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 10)),
+    ]
+    assert _compute_overdue_rate(todos) == 0.0
+
+
+def test_overdue_rate_half_overdue() -> None:
+    todos = [
+        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 10)),
+        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 12)),
+    ]
+    assert _compute_overdue_rate(todos) == 0.5
+
+
+def test_overdue_rate_none_when_no_deadlines() -> None:
+    todos = [_make_todo(completed_at=datetime(2026, 1, 10))]
+    assert _compute_overdue_rate(todos) is None
+
+
+def test_overdue_rate_none_when_empty() -> None:
+    assert _compute_overdue_rate([]) is None
+
+
+# --- _compute_weekly_counts ---
+
+
+def test_weekly_counts_aggregates_by_week() -> None:
+    todos = [
+        _make_todo(id=1, completed_at=datetime(2026, 1, 6)),
+        _make_todo(id=2, completed_at=datetime(2026, 1, 7)),
+        _make_todo(id=3, completed_at=datetime(2026, 1, 14)),
+    ]
+    result = _compute_weekly_counts(todos)
     assert "week_label" in result.columns
     assert "completed" in result.columns
     assert len(result) == 2
-    # Two todos in one week, one in another; order by week_label ascending
     assert list(result["completed"]) == [2, 1]
     assert result["week_label"].is_monotonic_increasing
 
 
-def test_compute_cycle_time_stats_returns_mean_p50_p90() -> None:
-    """_compute_cycle_time_stats returns (df_with_cycle_days, mean, p50, p90)."""
-    df = pd.DataFrame(
-        {
-            "completed_at": [datetime(2026, 1, 10)] * 4,
-            "created_at": [
-                datetime(2026, 1, 8),
-                datetime(2026, 1, 9),
-                datetime(2026, 1, 7),
-                datetime(2026, 1, 5),
-            ],
-        }
-    )
-    df_out, avg, p50, p90 = _compute_cycle_time_stats(df)
-    assert "cycle_days" in df_out.columns
-    # cycle_days: 2, 1, 3, 5 -> mean 2.75, median 2.5, p90 interpolated
-    assert avg == 2.75
-    assert p50 == 2.5
-    assert p90 >= 3.0 and p90 <= 5.0
+def test_weekly_counts_empty_input() -> None:
+    result = _compute_weekly_counts([])
+    assert result.empty
 
 
-def test_compute_helper_load_aggregates_and_sorts() -> None:
-    """_compute_helper_load returns helper counts sorted by handoff descending."""
+# --- _compute_helper_load ---
 
-    class Todo:
-        def __init__(self, id: int, helper: str | None):
-            self.id = id
-            self.helper = helper
 
+def test_helper_load_aggregates_and_sorts() -> None:
     todos = [
-        Todo(1, "Alice"),
-        Todo(2, "Alice"),
-        Todo(3, "Bob"),
-        Todo(4, None),
+        _make_todo(id=1, helper="Alice"),
+        _make_todo(id=2, helper="Alice"),
+        _make_todo(id=3, helper="Bob"),
+        _make_todo(id=4, helper=None),
     ]
     result = _compute_helper_load(todos)
     assert set(result["helper"]) == {"Alice", "Bob", "(unassigned)"}
@@ -105,49 +145,13 @@ def test_compute_helper_load_aggregates_and_sorts() -> None:
     assert counts["Alice"] == 2
     assert counts["Bob"] == 1
     assert counts["(unassigned)"] == 1
-    # First row should be the one with highest count (Alice)
     assert result.iloc[0]["helper"] == "Alice"
-    assert result.iloc[0]["handoff"] == 2
 
 
-def test_build_done_dataframe_empty_when_no_todos(monkeypatch: pytest.MonkeyPatch) -> None:
-    """_build_done_dataframe returns empty DataFrame with expected columns when query returns []."""
-    monkeypatch.setattr(
-        "handoff.pages.analytics.query_todos",
-        lambda **kwargs: [],
-    )
-    result = _build_done_dataframe(None, None)
+def test_helper_load_empty_input() -> None:
+    result = _compute_helper_load([])
     assert result.empty
-    assert list(result.columns) == [
-        "id",
-        "name",
-        "helper",
-        "project",
-        "created_at",
-        "completed_at",
-    ]
 
 
-def test_build_done_dataframe_with_todos(monkeypatch: pytest.MonkeyPatch) -> None:
-    """_build_done_dataframe returns rows from query_todos with correct columns."""
-
-    class Project:
-        name = "Proj"
-
-    class Todo:
-        id = 1
-        name = "Done task"
-        helper = "Alice"
-        project = Project()
-        created_at = datetime(2026, 1, 1)
-        completed_at = datetime(2026, 1, 5)
-
-    monkeypatch.setattr(
-        "handoff.pages.analytics.query_todos",
-        lambda **kwargs: [Todo()],
-    )
-    result = _build_done_dataframe(date(2026, 1, 1), date(2026, 1, 31))
-    assert len(result) == 1
-    assert result.iloc[0]["name"] == "Done task"
-    assert result.iloc[0]["helper"] == "Alice"
-    assert result.iloc[0]["project"] == "Proj"
+# --- _count_open_handoffs and _completed_in_range are thin wrappers
+# around query_todos; covered by the AppTest integration test.

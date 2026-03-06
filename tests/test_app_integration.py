@@ -62,8 +62,8 @@ def _settings_page_entry() -> None:
     render_settings_page()
 
 
-def _analytics_page_entry() -> None:
-    """Single-page entrypoint for Analytics: setup + render."""
+def _dashboard_page_entry() -> None:
+    """Single-page entrypoint for Dashboard: setup + render."""
     import handoff.ui as ui
     from handoff.pages.analytics import render_analytics_page
 
@@ -105,12 +105,12 @@ def test_settings_page_renders_with_app_test(app_test_db: Path) -> None:
     assert len(at.get("markdown")) >= 1
 
 
-def test_analytics_page_renders_with_app_test(app_test_db: Path) -> None:
-    """Analytics page renders (smoke test)."""
-    at = AppTest.from_function(_analytics_page_entry)
+def test_dashboard_page_renders_with_app_test(app_test_db: Path) -> None:
+    """Dashboard page renders metrics (smoke test)."""
+    at = AppTest.from_function(_dashboard_page_entry)
     at.run(timeout=5)
     assert len(at.get("subheader")) >= 1
-    assert len(at.get("date_input")) >= 1 or len(at.get("info")) >= 1
+    assert len(at.get("metric")) >= 4
 
 
 def test_docs_page_renders_with_app_test(app_test_db: Path) -> None:

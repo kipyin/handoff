@@ -82,8 +82,9 @@ To keep the app simple and robust, some things are intentionally out of scope:
      From/To dates).
    Sort by clicking column headers. Edit inline and click **Save changes** to
    create, update, or delete todos.
-4. **Analytics ideas** — A lightweight Analytics page surfaces ideas like
-   throughput by helper or project, cycle time, and helper load.
+4. **Dashboard** — At-a-glance metrics: open handoffs, completed this week vs
+   last, median cycle time, and on-time rate. Plus a weekly throughput chart
+   and current helper load.
 5. **Updates and backups** — An in-app Settings page lets you apply code-only
    patch zips and restore from backups created before each update.
 
