@@ -2,7 +2,8 @@
 
 This file adds tests for:
 - _apply_native_filters: unit-style test by stubbing out Streamlit widgets.
-- _render_editable_table: integration-style test by stubbing out dependencies and simulating a persisted edit.
+- _render_editable_table: integration-style test by stubbing out dependencies and simulating a 
+persisted edit.
 """
 
 import pandas as pd
