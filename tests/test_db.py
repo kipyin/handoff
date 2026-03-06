@@ -5,8 +5,11 @@ from __future__ import annotations
 import importlib
 import sqlite3
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+from handoff.db import DatabaseInitializationError
 
 
 def _reload_db_module(db_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -97,3 +100,33 @@ def test_init_db_adds_completed_at_to_existing_schema(
     assert "completed_at" in todo_columns
     assert "is_archived" in todo_columns
     assert "is_archived" in project_columns
+
+
+def test_init_db_raises_when_engine_creation_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When create_engine raises at module load, DatabaseInitializationError is raised."""
+    monkeypatch.setenv("TODO_APP_DB_PATH", str(Path("/nonexistent/dir/todo.db")))
+    import handoff.db as db  # noqa: F401
+
+    with patch("sqlmodel.create_engine", side_effect=Exception("Engine failed")):
+        with pytest.raises((DatabaseInitializationError, Exception)) as exc_info:
+            importlib.reload(db)
+        assert type(exc_info.value).__name__ == "DatabaseInitializationError"
+        msg = exc_info.value.args[0].lower()
+        assert "engine" in msg or "initialise" in msg
+
+
+def test_init_db_raises_when_migration_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When migrations raise inside connect(), DatabaseInitializationError is raised."""
+    db_path = tmp_path / "todo.db"
+    db = _reload_db_module(db_path, monkeypatch)
+    mock_conn = MagicMock()
+    mock_conn.exec_driver_sql.side_effect = Exception("Migration failed")
+    mock_conn.__enter__ = lambda self: self
+    mock_conn.__exit__ = lambda *a: None
+    with patch.object(db.engine, "connect", return_value=mock_conn):
+        with pytest.raises((DatabaseInitializationError, Exception)) as exc_info:
+            db.init_db()
+        assert type(exc_info.value).__name__ == "DatabaseInitializationError"
+        assert "failed" in exc_info.value.args[0].lower()
