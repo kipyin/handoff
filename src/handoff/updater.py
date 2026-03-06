@@ -55,6 +55,48 @@ def _read_patch_members(zf: zipfile.ZipFile) -> tuple[list[str], str | None]:
     return members, target_version
 
 
+def _extract_zip_to_dir(zf: zipfile.ZipFile, members: list[str], target_dir: Path) -> str | None:
+    """Extract named zip members into *target_dir*, preserving sub-paths.
+
+    Returns:
+        An error message string on the first extraction failure, or None on success.
+
+    """
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for name in members:
+        dest = target_dir / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with zf.open(name) as src, dest.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+        except (PermissionError, OSError) as e:
+            logger.warning("Could not extract {} to {}: {}", name, target_dir, e)
+            return f"Failed to extract to {target_dir}: {e}"
+    return None
+
+
+def _backup_existing_files(paths: list[str], app_root: Path, backup_root: Path) -> list[str]:
+    """Copy files from *app_root* into *backup_root* for each path that exists.
+
+    Returns:
+        List of paths that were successfully backed up.
+
+    """
+    backed_up: list[str] = []
+    for name in paths:
+        source = app_root / name
+        if not source.exists():
+            continue
+        dest = backup_root / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(source, dest)
+            backed_up.append(name)
+        except (PermissionError, OSError) as e:
+            logger.warning("Could not backup {}: {}", name, e)
+    return backed_up
+
+
 def _get_app_root() -> Path:
     """Return the root directory where app.py or the launcher lives.
 
@@ -122,38 +164,18 @@ def stage_patch_with_backup(
         if not members:
             return "No applicable files found in patch zip."
 
-        # Extract first: zip -> update/ (staging). Launcher will copy update/ -> app_root later.
         staging = app_root / UPDATE_STAGING_DIR
-        staging.mkdir(parents=True, exist_ok=True)
-        for name in members:
-            target_path = staging / name
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                with zf.open(name) as src, target_path.open("wb") as dst:
-                    shutil.copyfileobj(src, dst)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not extract {} to staging: {}", name, e)
-                return f"Failed to extract to ./{UPDATE_STAGING_DIR}: {e}"
+        err = _extract_zip_to_dir(zf, members, staging)
+        if err:
+            return err
 
     logger.info("Patch unzipped to {} containing: {}", staging, members)
 
-    # Backup after extraction: list paths from update/ (what will be overwritten);
-    # copy from app_root only (current installed files).
     paths_to_backup = [p.relative_to(staging).as_posix() for p in staging.rglob("*") if p.is_file()]
     backup_dirname = _backup_dir_name(app_version)
     backup_root = app_root / BACKUP_DIR / backup_dirname
     backup_root.mkdir(parents=True, exist_ok=True)
-    backed_up: list[str] = []
-    for name in paths_to_backup:
-        target_path = app_root / name
-        if target_path.exists():
-            backup_path = backup_root / name
-            backup_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                shutil.copy2(target_path, backup_path)
-                backed_up.append(name)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not backup {}: {}", name, e)
+    backed_up = _backup_existing_files(paths_to_backup, app_root, backup_root)
     logger.info("Backup of {} created at {}", backed_up, backup_root)
 
     sentinel = app_root / LAST_UPDATE_BACKUP_FILE
@@ -173,9 +195,7 @@ def stage_patch_with_backup(
             "Run handoff.bat again to complete the update."
         )
     logger.info("Staged patch in {}", staging)
-    return (
-        "Update files are ready. Close in 2s. Run handoff.bat again to complete the update."
-    )
+    return "Update files are ready. Close in 2s. Run handoff.bat again to complete the update."
 
 
 def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) -> str:
@@ -205,16 +225,9 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
             return "No applicable files found in patch zip."
 
         staging = app_root / UPDATE_STAGING_DIR
-        staging.mkdir(parents=True, exist_ok=True)
-        for name in members:
-            target_path = staging / name
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                with zf.open(name) as src, target_path.open("wb") as dst:
-                    shutil.copyfileobj(src, dst)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not extract {} to staging: {}", name, e)
-                return f"Failed to extract to ./{UPDATE_STAGING_DIR}: {e}"
+        err = _extract_zip_to_dir(zf, members, staging)
+        if err:
+            return err
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)
@@ -252,36 +265,18 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
         if not members:
             return "No applicable files found in patch zip."
 
-        skipped: list[str] = []
-
-        # Create a timestamped backup with version in the folder name.
         from handoff.version import __version__ as app_version
 
         backup_dirname = _backup_dir_name(app_version)
         backup_root = app_root / BACKUP_DIR / backup_dirname
-        for name in members:
-            target_path = app_root / name
-            if target_path.exists():
-                backup_path = backup_root / name
-                backup_path.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    shutil.copy2(target_path, backup_path)
-                except (PermissionError, OSError) as e:
-                    logger.warning("Could not backup {}: {}", name, e)
-                    skipped.append(name)
+        backed_up = set(_backup_existing_files(members, app_root, backup_root))
+        backup_failed = {m for m in members if m not in backed_up and (app_root / m).exists()}
 
-        for name in members:
-            target_path = app_root / name
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                with zf.open(name) as src, target_path.open("wb") as dst:
-                    shutil.copyfileobj(src, dst)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not extract {}: {}", name, e)
-                if name not in skipped:
-                    skipped.append(name)
+        err = _extract_zip_to_dir(zf, members, app_root)
+        extract_failed = set() if err is None else set(members)
 
     _clear_pycache(app_root)
+    skipped = backup_failed | extract_failed
 
     if target_version:
         logger.info("Applied patch to update app to version {}", target_version)
@@ -349,17 +344,8 @@ def apply_staged_update(app_root: Path | None = None) -> str | None:
 
     backup_dirname = _backup_dir_name(app_version)
     backup_root = app_root / BACKUP_DIR / backup_dirname
-
-    for rel in members:
-        name = rel.as_posix()
-        target_path = app_root / name
-        if target_path.exists():
-            backup_path = backup_root / name
-            backup_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                shutil.copy2(target_path, backup_path)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not backup {}: {}", name, e)
+    member_names = [rel.as_posix() for rel in members]
+    _backup_existing_files(member_names, app_root, backup_root)
 
     for rel in members:
         name = rel.as_posix()
@@ -496,9 +482,7 @@ def stage_restore_from_snapshot(
             logger.warning("Could not stage {} from snapshot: {}", rel, e)
 
     logger.info("Staged {} files to {}: {}", len(staged), staging, staged)
-    logger.info(
-        "Everything is in place and ready to restore. Run handoff.bat again to apply."
-    )
+    logger.info("Everything is in place and ready to restore. Run handoff.bat again to apply.")
     logger.info("Program about to shut off in 2 seconds.")
 
     return "Backup staged to ./update/. Close in 2s. Run handoff.bat again to restore."
