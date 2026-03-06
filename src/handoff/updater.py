@@ -93,7 +93,7 @@ def stage_patch_with_backup(
     first; the set of paths to backup is derived from the contents of update/
     (paths that will overwrite app_root when the launcher runs). Backup content
     is always copied from app_root (current installed files), not from update/.
-    The launcher (run.bat or run.ps1) later copies update/ into the app root without
+    The launcher (handoff.bat) later copies update/ into the app root without
     starting Python, avoiding WinError 32 on locked .pyd files.
 
     Args:
@@ -170,11 +170,11 @@ def stage_patch_with_backup(
         return (
             f"Update files are ready (target version: {target_version}). "
             "Close in 2s. "
-            "Run run.bat or run.ps1 again to complete the update."
+            "Run handoff.bat again to complete the update."
         )
     logger.info("Staged patch in {}", staging)
     return (
-        "Update files are ready. Close in 2s. Run run.bat or run.ps1 again to complete the update."
+        "Update files are ready. Close in 2s. Run handoff.bat again to complete the update."
     )
 
 
@@ -221,12 +221,12 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
         return (
             f"Update files are ready (target version: {target_version}). "
             "The app will close in 2 seconds. "
-            "Please run run.bat or run.ps1 again to complete the update."
+            "Please run handoff.bat again to complete the update."
         )
     logger.info("Staged patch in {}", staging)
     return (
         "Update files are ready. The app will close in 2 seconds. "
-        "Please run run.bat or run.ps1 again to complete the update."
+        "Please run handoff.bat again to complete the update."
     )
 
 
@@ -455,7 +455,7 @@ def stage_restore_from_snapshot(
     """Stage a backup snapshot into update/ for the launcher to apply on next start.
 
     Copies the snapshot contents into app_root/update/ (clearing update/ first).
-    The launcher (run.bat or run.ps1) then copies update/ into the app root and removes update/,
+    The launcher (handoff.bat) then copies update/ into the app root and removes update/,
     so no Python process touches the app root and locked files (e.g. PyArmor .pyd) can be replaced.
 
     Args:
@@ -497,11 +497,11 @@ def stage_restore_from_snapshot(
 
     logger.info("Staged {} files to {}: {}", len(staged), staging, staged)
     logger.info(
-        "Everything is in place and ready to restore. Run run.bat or run.ps1 again to apply."
+        "Everything is in place and ready to restore. Run handoff.bat again to apply."
     )
     logger.info("Program about to shut off in 2 seconds.")
 
-    return "Backup staged to ./update/. Close in 2s. Run run.bat or run.ps1 again to restore."
+    return "Backup staged to ./update/. Close in 2s. Run handoff.bat again to restore."
 
 
 def _restore_backup_snapshot(snapshot: Path, app_root: Path) -> str:
@@ -539,7 +539,7 @@ def _schedule_shutdown(delay_seconds: float = 2.0) -> None:
     """Schedule a hard process exit after a short delay.
 
     This is used after applying a patch so that the Streamlit process – and any wrapper
-    like `run.bat` – terminates automatically without requiring manually closing
+    like `handoff.bat` – terminates automatically without requiring manually closing
     the terminal window.
 
     Args:
@@ -632,7 +632,7 @@ def render_update_panel(app_version: str) -> None:
     st.markdown("### App updates")
     st.caption(
         "Upload a code-only patch zip (e.g. from a Handoff release). The patch is extracted to "
-        "./update/ and the app will close in 2 seconds. Run run.bat or run.ps1 again to apply the "
+        "./update/ and the app will close in 2 seconds. Run handoff.bat again to apply the "
         "update and start the app."
     )
 
@@ -694,7 +694,7 @@ def render_update_panel(app_version: str) -> None:
     st.caption(
         "Restore code from a timestamped backup created when applying a patch. "
         "Pick a snapshot and click Restore and Restart; the backup is staged to ./update/. "
-        "The app will close. Run run.bat or run.ps1 again to apply the restore "
+        "The app will close. Run handoff.bat again to apply the restore "
         "(same as updating)."
     )
     snapshots = _iter_backup_snapshots(app_root)

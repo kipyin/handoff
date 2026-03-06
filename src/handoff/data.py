@@ -238,6 +238,8 @@ def query_todos(
     statuses: list[TodoStatus] | None = None,
     start: date | None = None,
     end: date | None = None,
+    completed_start: date | datetime | None = None,
+    completed_end: date | datetime | None = None,
     search_text: str | None = None,
     include_archived: bool = False,
 ) -> list[Todo]:
@@ -249,6 +251,8 @@ def query_todos(
         statuses: Optional statuses to include.
         start: Optional inclusive deadline lower bound.
         end: Optional inclusive deadline upper bound.
+        completed_start: Optional inclusive completed_at lower bound.
+        completed_end: Optional inclusive completed_at upper bound.
         search_text: Optional free-text search against name/notes/helper.
         include_archived: When True, include archived todos; otherwise exclude them.
 
@@ -276,6 +280,15 @@ def query_todos(
         if end is not None:
             stmt = stmt.where(Todo.deadline.isnot(None)).where(Todo.deadline <= end)
 
+        if completed_start is not None:
+            stmt = stmt.where(Todo.completed_at.isnot(None)).where(
+                Todo.completed_at >= completed_start
+            )
+        if completed_end is not None:
+            stmt = stmt.where(Todo.completed_at.isnot(None)).where(
+                Todo.completed_at <= completed_end
+            )
+
         normalized_search = (search_text or "").strip()
         if normalized_search:
             like_expr = f"%{normalized_search}%"
@@ -297,6 +310,8 @@ def query_todos(
                 statuses,
                 start is not None,
                 end is not None,
+                completed_start is not None,
+                completed_end is not None,
                 normalized_search,
             ]
         )
@@ -312,6 +327,10 @@ def query_todos(
                 parts.append(f"start={start!s}")
             if end is not None:
                 parts.append(f"end={end!s}")
+            if completed_start is not None:
+                parts.append(f"completed_start={completed_start!s}")
+            if completed_end is not None:
+                parts.append(f"completed_end={completed_end!s}")
             if normalized_search:
                 parts.append(f"search={normalized_search!r}")
             logger.info(

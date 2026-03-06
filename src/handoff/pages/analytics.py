@@ -97,6 +97,9 @@ def _compute_helper_load(todos: list) -> pd.DataFrame:
 def _build_done_dataframe(start: date | None, end: date | None) -> pd.DataFrame:
     """Return a DataFrame of completed todos within the optional date range.
 
+    Filters by completed_at (not deadline) so the date range reflects when
+    todos were actually finished.
+
     Args:
         start: Optional start date for the completed range.
         end: Optional end date for the completed range.
@@ -110,13 +113,12 @@ def _build_done_dataframe(start: date | None, end: date | None) -> pd.DataFrame:
     if start is not None:
         start_dt = datetime.combine(start, time.min)
     if end is not None:
-        # Include the full end day.
         end_dt = datetime.combine(end, time.max)
 
     todos = query_todos(
         statuses=[TodoStatus.DONE],
-        start=start_dt,
-        end=end_dt,
+        completed_start=start_dt,
+        completed_end=end_dt,
         include_archived=False,
     )
     if not todos:

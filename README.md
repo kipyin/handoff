@@ -157,7 +157,7 @@ uv run handoff build-full
 ```
 
 This produces a zip under `dist/` (named like
-`handoff-<version>-windows-embed.zip`). Extract it, then double-click `run.bat`
+`handoff-<version>-windows-embed.zip`). Extract it, then double-click `handoff.bat`
 to start the app. The SQLite database is still stored in your user data
 directory, not inside the extracted folder.
 
@@ -173,13 +173,12 @@ flow:
 ### Updating the app (user flow)
 
 1. Get a patch zip (for example from a Handoff release or your team).
-2. Run the app as usual (for example double‑click `run.bat` or run `run.ps1` in
-   PowerShell).
+2. Run the app as usual (for example double‑click `handoff.bat`).
 3. In the app, open **Settings** → **Update app**, upload the patch zip, and
    click **Apply and Restart**.
 4. The app creates a backup of files that will be overwritten, extracts the
    patch to `./update/`, then exits after a few seconds.
-5. Run the launcher again (`run.bat` or `run.ps1`). It copies the update from
+5. Run the launcher again (`handoff.bat`). It copies the update from
    `./update/` into the app folder (without starting Python first, so locked
    files can be replaced), removes `./update/`, and starts the app. You are now
    on the new version.

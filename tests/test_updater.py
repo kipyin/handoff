@@ -90,7 +90,7 @@ def test_extract_patch_to_staging_writes_to_update_dir(tmp_path: Path) -> None:
     message = extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
 
     assert "2026.2.99" in message
-    assert "run.bat" in message
+    assert "handoff.bat" in message
     # Staging dir contains new content.
     staging = app_root / "update"
     assert (staging / "app.py").read_text(encoding="utf-8") == "new app"
@@ -122,7 +122,7 @@ def test_stage_patch_with_backup_creates_backup_and_staging_leaves_app_root_unch
     )
 
     assert "2026.2.99" in message
-    assert "run.bat" in message or "run.ps1" in message
+    assert "handoff.bat" in message
     # Backup dir exists with version in name and contains previous app.py.
     backup_root = app_root / "backup"
     backups = [p for p in backup_root.iterdir() if p.is_dir()]
@@ -219,7 +219,7 @@ def test_stage_restore_from_snapshot_populates_update_and_leaves_app_root_unchan
 
     message = stage_restore_from_snapshot(snapshot, app_root=app_root)
 
-    assert "run.bat" in message or "run.ps1" in message
+    assert "handoff.bat" in message
     assert "update" in message.lower()
     staging = app_root / "update"
     assert staging.exists()
