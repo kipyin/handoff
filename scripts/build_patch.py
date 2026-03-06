@@ -27,7 +27,7 @@ def build_patch(*, include_pages: bool = True) -> Path:
 
     Args:
         include_pages: If True, include the root-level pages/ directory
-            when present (build_zip does not copy pages by default).
+            when present (build_full does not copy pages by default).
 
     Returns:
         Path to the created patch zip under dist/.
@@ -36,12 +36,12 @@ def build_patch(*, include_pages: bool = True) -> Path:
         RuntimeError: If PyArmor or source copy fails.
 
     """
-    from . import build_zip
+    from . import build_full
 
     BUILD_APP_DIR.mkdir(parents=True, exist_ok=True)
-    build_zip._copy_app_code()
-    build_zip._obfuscate_app_code_with_pyarmor()
-    build_zip._copy_docs()
+    build_full._copy_app_code()
+    build_full._obfuscate_app_code_with_pyarmor()
+    build_full._copy_docs()
 
     src_dir = BUILD_APP_DIR / "src"
     handoff_dir = src_dir / "handoff"

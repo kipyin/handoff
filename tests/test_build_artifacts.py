@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import scripts.build_patch as build_patch_module
-import scripts.build_zip as build_zip_module
+import scripts.build_full as build_full_module
 
 
 def test_copy_docs_copies_readme_and_release_notes(
@@ -28,10 +28,10 @@ def test_copy_docs_copies_readme_and_release_notes(
     # Mock shutil.copy2 to avoid disk I/O
     mock_copy = MagicMock()
     monkeypatch.setattr("shutil.copy2", mock_copy)
-    monkeypatch.setattr(build_zip_module, "ROOT", root)
-    monkeypatch.setattr(build_zip_module, "APP_BUILD_DIR", app_build_dir)
+    monkeypatch.setattr(build_full_module, "ROOT", root)
+    monkeypatch.setattr(build_full_module, "APP_BUILD_DIR", app_build_dir)
 
-    build_zip_module._copy_docs()
+    build_full_module._copy_docs()
 
     # Verify the calls instead of checking the filesystem
     assert mock_copy.call_count == 2
@@ -67,15 +67,15 @@ def test_make_zip_includes_docs_and_core_files(
     dist_root = root / "dist"
     dist_root.mkdir(parents=True, exist_ok=True)
 
-    monkeypatch.setattr(build_zip_module, "BUILD_ROOT", build_root)
-    monkeypatch.setattr(build_zip_module, "DIST_ROOT", dist_root)
-    monkeypatch.setattr(build_zip_module, "APP_BUILD_DIR", app_build_dir)
+    monkeypatch.setattr(build_full_module, "BUILD_ROOT", build_root)
+    monkeypatch.setattr(build_full_module, "DIST_ROOT", dist_root)
+    monkeypatch.setattr(build_full_module, "APP_BUILD_DIR", app_build_dir)
 
     # Mock ZipFile to prevent actual compression
     with patch("zipfile.ZipFile") as mock_zip:
         zip_instance = mock_zip.return_value.__enter__.return_value
 
-        build_zip_module._make_zip("handoff", "1.0.0")
+        build_full_module._make_zip("handoff", "1.0.0")
 
         # Check that write was called for expected files
         written_names = set()
@@ -104,7 +104,7 @@ def test_build_patch_includes_docs_and_core_files(
     """build_patch records correct paths without actual zipping or obfuscation."""
     root = tmp_path
 
-    # Top-level documentation files (build_zip._copy_docs reads from ROOT).
+    # Top-level documentation files (build_full._copy_docs reads from ROOT).
     (root / "README.md").write_text("readme", encoding="utf-8")
     (root / "RELEASE_NOTES.md").write_text("notes", encoding="utf-8")
 
@@ -133,9 +133,9 @@ def test_build_patch_includes_docs_and_core_files(
         (build_app_dir / "README.md").write_text("readme", encoding="utf-8")
         (build_app_dir / "RELEASE_NOTES.md").write_text("notes", encoding="utf-8")
 
-    monkeypatch.setattr(build_zip_module, "_copy_app_code", _fake_copy_app_code)
-    monkeypatch.setattr(build_zip_module, "_obfuscate_app_code_with_pyarmor", _fake_obfuscate)
-    monkeypatch.setattr(build_zip_module, "_copy_docs", _fake_copy_docs)
+    monkeypatch.setattr(build_full_module, "_copy_app_code", _fake_copy_app_code)
+    monkeypatch.setattr(build_full_module, "_obfuscate_app_code_with_pyarmor", _fake_obfuscate)
+    monkeypatch.setattr(build_full_module, "_copy_docs", _fake_copy_docs)
 
     with patch("zipfile.ZipFile") as mock_zip:
         zip_instance = mock_zip.return_value.__enter__.return_value

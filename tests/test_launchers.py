@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from scripts import build_zip
+from scripts import build_full
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Launcher scripts are Windows-specific")
@@ -13,8 +13,8 @@ class TestLaunchers:
         app_dir = tmp_path / "handoff-test-env"
         app_dir.mkdir()
 
-        # Monkeypatch the global APP_BUILD_DIR in build_zip module
-        monkeypatch.setattr(build_zip, "APP_BUILD_DIR", app_dir)
+        # Monkeypatch the global APP_BUILD_DIR in build_full module
+        monkeypatch.setattr(build_full, "APP_BUILD_DIR", app_dir)
 
         # Create dummy python directory
         python_dir = app_dir / "python"
@@ -40,7 +40,7 @@ class TestLaunchers:
     def test_handoff_bat_logic(self, mock_app_env):
         """Verify handoff.bat content and update application logic."""
         # 1. Generate the launcher
-        build_zip._write_handoff_bat()
+        build_full._write_handoff_bat()
         bat_path = mock_app_env / "handoff.bat"
         assert bat_path.exists()
 
