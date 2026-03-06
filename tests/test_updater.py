@@ -11,6 +11,7 @@ from handoff.updater import (
     _can_apply_patch,
     _clear_pycache,
     _format_snapshot_label,
+    _is_safe_member_path,
     _iter_backup_snapshots,
     _read_patch_members,
     _restore_backup_snapshot,
@@ -361,3 +362,48 @@ def test_can_apply_patch_invalid_version_parses_to_zeros() -> None:
     """
     assert _can_apply_patch("not-a-version", "2026.3.6", False) is False
     assert _can_apply_patch("not-a-version", "2026.3.6", True) is True
+
+
+# --- Zip Slip protection ---
+
+
+def test_is_safe_member_path_rejects_traversal() -> None:
+    """Paths with .. segments are rejected."""
+    assert _is_safe_member_path("src/module.py") is True
+    assert _is_safe_member_path("app.py") is True
+    assert _is_safe_member_path("src/../etc/passwd") is False
+    assert _is_safe_member_path("../outside.txt") is False
+    assert _is_safe_member_path("") is False
+    assert _is_safe_member_path("/absolute/path") is False
+
+
+def test_read_patch_members_rejects_traversal_paths() -> None:
+    """_read_patch_members skips entries containing .. segments."""
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("app.py", b"ok")
+        zf.writestr("src/../etc/passwd", b"evil")
+        zf.writestr("src/legit.py", b"ok too")
+    buf.seek(0)
+    with zipfile.ZipFile(buf) as zf:
+        members, _ = _read_patch_members(zf)
+    assert "app.py" in members
+    assert "src/legit.py" in members
+    assert "src/../etc/passwd" not in members
+
+
+def test_apply_patch_zip_skips_traversal_paths(tmp_path: Path) -> None:
+    """apply_patch_zip ignores zip entries with path traversal."""
+    app_root = tmp_path
+    (app_root / "app.py").write_text("old", encoding="utf-8")
+
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("app.py", b"new")
+        zf.writestr("src/../escape.txt", b"evil")
+    buf.seek(0)
+
+    apply_patch_zip(buf, app_root=app_root)
+    assert (app_root / "app.py").read_text(encoding="utf-8") == "new"
+    assert not (app_root / "escape.txt").exists()
+    assert not (app_root.parent / "escape.txt").exists()

@@ -445,3 +445,25 @@ def test_query_todos_completed_start_end(session, monkeypatch) -> None:
     )
     assert len(results) == 1
     assert results[0].name == "Done later"
+
+
+def test_query_todos_completed_end_date_includes_full_day(session, monkeypatch) -> None:
+    """A bare date for completed_end is promoted to end-of-day, including late completions."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    t = Todo(
+        project_id=p.id,
+        name="Done at 11pm",
+        status=TodoStatus.DONE,
+        completed_at=datetime(2026, 1, 15, 23, 30, 0, tzinfo=UTC),
+    )
+    session.add(t)
+    session.commit()
+
+    results = data.query_todos(completed_end=date(2026, 1, 15))
+    assert len(results) == 1
+    assert results[0].name == "Done at 11pm"

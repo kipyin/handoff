@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from handoff.data import query_todos
+from handoff.dates import week_bounds
 from handoff.models import Todo, TodoStatus
 
 
@@ -24,13 +25,6 @@ def _completed_in_range(start: date, end: date) -> list[Todo]:
         completed_end=datetime.combine(end, time.max),
         include_archived=False,
     )
-
-
-def _week_bounds(reference: date) -> tuple[date, date]:
-    """Return (monday, sunday) for the ISO week containing *reference*."""
-    monday = reference - timedelta(days=reference.weekday())
-    sunday = monday + timedelta(days=6)
-    return monday, sunday
 
 
 def _compute_cycle_time_stats(
@@ -98,7 +92,7 @@ def render_analytics_page() -> None:
 
     today = date.today()
 
-    this_mon, this_sun = _week_bounds(today)
+    this_mon, this_sun = week_bounds(today)
     last_mon = this_mon - timedelta(days=7)
     last_sun = this_mon - timedelta(days=1)
 

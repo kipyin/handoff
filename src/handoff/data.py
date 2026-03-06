@@ -1,7 +1,7 @@
 """Data access helpers for projects/todos and common query workflows."""
 
 import enum
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from typing import Any
 
 from loguru import logger
@@ -239,6 +239,20 @@ def delete_todo(todo_id: int) -> bool:
         return True
 
 
+def _to_start_of_day(value: date | datetime) -> datetime:
+    """Promote a bare date to start-of-day datetime; pass datetimes through."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, time.min)
+
+
+def _to_end_of_day(value: date | datetime) -> datetime:
+    """Promote a bare date to end-of-day datetime; pass datetimes through."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, time.max)
+
+
 def query_todos(
     *,
     project_ids: list[int] | None = None,
@@ -252,6 +266,11 @@ def query_todos(
     include_archived: bool = False,
 ) -> list[Todo]:
     """Return todos matching optional unified filters.
+
+    ``completed_start`` and ``completed_end`` accept both ``date`` and
+    ``datetime``.  Bare ``date`` values are promoted to start-of-day /
+    end-of-day so the comparison against ``Todo.completed_at`` (a datetime
+    column) includes the full day.
 
     Args:
         project_ids: Optional project ids to include.
@@ -289,13 +308,11 @@ def query_todos(
             stmt = stmt.where(Todo.deadline.isnot(None)).where(Todo.deadline <= end)
 
         if completed_start is not None:
-            stmt = stmt.where(Todo.completed_at.isnot(None)).where(
-                Todo.completed_at >= completed_start
-            )
+            cs = _to_start_of_day(completed_start)
+            stmt = stmt.where(Todo.completed_at.isnot(None)).where(Todo.completed_at >= cs)
         if completed_end is not None:
-            stmt = stmt.where(Todo.completed_at.isnot(None)).where(
-                Todo.completed_at <= completed_end
-            )
+            ce = _to_end_of_day(completed_end)
+            stmt = stmt.where(Todo.completed_at.isnot(None)).where(Todo.completed_at <= ce)
 
         normalized_search = (search_text or "").strip()
         if normalized_search:

@@ -23,11 +23,20 @@ UPDATE_STAGING_DIR = "update"
 BACKUP_DIR = "backup"
 
 
+def _is_safe_member_path(name: str) -> bool:
+    """Return True if *name* is a safe relative path with no traversal components."""
+    if not name or name.startswith("/") or name.startswith("\\"):
+        return False
+    parts = Path(name).parts
+    return ".." not in parts
+
+
 def _read_patch_members(zf: zipfile.ZipFile) -> tuple[list[str], str | None]:
     """Read patch zip member names and optional VERSION from an open ZipFile.
 
-    Skips directories and VERSION; includes only names that start with ALLOWED_PREFIXES.
-    Logs a warning for any other non-directory entry.
+    Skips directories, VERSION, paths with traversal components (``..``), and
+    entries that don't start with ALLOWED_PREFIXES. Logs a warning for each
+    rejected entry.
 
     Args:
         zf: An open zipfile.ZipFile positioned at the start.
@@ -48,6 +57,9 @@ def _read_patch_members(zf: zipfile.ZipFile) -> tuple[list[str], str | None]:
             continue
         if name == "VERSION":
             continue
+        if not _is_safe_member_path(name):
+            logger.warning("Skipping unsafe path in patch zip: {}", name)
+            continue
         if name.startswith(ALLOWED_PREFIXES):
             members.append(name)
         else:
@@ -55,24 +67,36 @@ def _read_patch_members(zf: zipfile.ZipFile) -> tuple[list[str], str | None]:
     return members, target_version
 
 
-def _extract_zip_to_dir(zf: zipfile.ZipFile, members: list[str], target_dir: Path) -> str | None:
+def _extract_zip_to_dir(
+    zf: zipfile.ZipFile, members: list[str], target_dir: Path
+) -> tuple[list[str], list[str]]:
     """Extract named zip members into *target_dir*, preserving sub-paths.
 
+    Continues past per-file failures so callers can report partial results.
+
     Returns:
-        An error message string on the first extraction failure, or None on success.
+        (extracted, failed) — lists of member names that succeeded and failed.
 
     """
+    resolved_root = target_dir.resolve()
     target_dir.mkdir(parents=True, exist_ok=True)
+    extracted: list[str] = []
+    failed: list[str] = []
     for name in members:
         dest = target_dir / name
+        if not dest.resolve().is_relative_to(resolved_root):
+            logger.warning("Path escapes target dir, skipping: {}", name)
+            failed.append(name)
+            continue
         dest.parent.mkdir(parents=True, exist_ok=True)
         try:
             with zf.open(name) as src, dest.open("wb") as dst:
                 shutil.copyfileobj(src, dst)
+            extracted.append(name)
         except (PermissionError, OSError) as e:
             logger.warning("Could not extract {} to {}: {}", name, target_dir, e)
-            return f"Failed to extract to {target_dir}: {e}"
-    return None
+            failed.append(name)
+    return extracted, failed
 
 
 def _backup_existing_files(paths: list[str], app_root: Path, backup_root: Path) -> list[str]:
@@ -165,11 +189,13 @@ def stage_patch_with_backup(
             return "No applicable files found in patch zip."
 
         staging = app_root / UPDATE_STAGING_DIR
-        err = _extract_zip_to_dir(zf, members, staging)
-        if err:
-            return err
+        extracted, extract_failed = _extract_zip_to_dir(zf, members, staging)
+        if not extracted:
+            return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+        if extract_failed:
+            logger.warning("Some files could not be staged: {}", extract_failed)
 
-    logger.info("Patch unzipped to {} containing: {}", staging, members)
+    logger.info("Patch unzipped to {} containing: {}", staging, extracted)
 
     paths_to_backup = [p.relative_to(staging).as_posix() for p in staging.rglob("*") if p.is_file()]
     backup_dirname = _backup_dir_name(app_version)
@@ -225,9 +251,11 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
             return "No applicable files found in patch zip."
 
         staging = app_root / UPDATE_STAGING_DIR
-        err = _extract_zip_to_dir(zf, members, staging)
-        if err:
-            return err
+        extracted, extract_failed = _extract_zip_to_dir(zf, members, staging)
+        if not extracted:
+            return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+        if extract_failed:
+            logger.warning("Some files could not be staged: {}", extract_failed)
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)
@@ -272,11 +300,10 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
         backed_up = set(_backup_existing_files(members, app_root, backup_root))
         backup_failed = {m for m in members if m not in backed_up and (app_root / m).exists()}
 
-        err = _extract_zip_to_dir(zf, members, app_root)
-        extract_failed = set() if err is None else set(members)
+        _extracted, extract_failed_list = _extract_zip_to_dir(zf, members, app_root)
 
     _clear_pycache(app_root)
-    skipped = backup_failed | extract_failed
+    skipped = backup_failed | set(extract_failed_list)
 
     if target_version:
         logger.info("Applied patch to update app to version {}", target_version)

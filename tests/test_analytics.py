@@ -5,12 +5,12 @@ from __future__ import annotations
 from datetime import date, datetime
 from types import SimpleNamespace
 
+from handoff.dates import week_bounds
 from handoff.pages.analytics import (
     _compute_cycle_time_stats,
     _compute_helper_load,
     _compute_overdue_rate,
     _compute_weekly_counts,
-    _week_bounds,
 )
 
 
@@ -30,24 +30,23 @@ def _make_todo(
     )
 
 
-# --- _week_bounds ---
+# --- week_bounds (shared helper, imported from handoff.dates) ---
 
 
 def test_week_bounds_returns_monday_to_sunday() -> None:
-    """_week_bounds returns the ISO week for the given date."""
-    mon, sun = _week_bounds(date(2026, 2, 27))  # Friday
-    assert mon == date(2026, 2, 23)  # Monday
-    assert sun == date(2026, 3, 1)  # Sunday
+    mon, sun = week_bounds(date(2026, 2, 27))  # Friday
+    assert mon == date(2026, 2, 23)
+    assert sun == date(2026, 3, 1)
 
 
 def test_week_bounds_on_monday() -> None:
-    mon, sun = _week_bounds(date(2026, 3, 2))  # Monday
+    mon, sun = week_bounds(date(2026, 3, 2))
     assert mon == date(2026, 3, 2)
     assert sun == date(2026, 3, 8)
 
 
 def test_week_bounds_on_sunday() -> None:
-    mon, sun = _week_bounds(date(2026, 3, 8))  # Sunday
+    mon, sun = week_bounds(date(2026, 3, 8))
     assert mon == date(2026, 3, 2)
     assert sun == date(2026, 3, 8)
 
