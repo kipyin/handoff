@@ -34,6 +34,36 @@ def _render_create_project_form() -> None:
 # New pure-logic helpers for testability
 
 
+def _build_projects_display_rows(
+    summary_list: list[dict],
+) -> list[dict]:
+    """Build display row dicts for the projects table from get_projects_with_todo_summary.
+
+    Args:
+        summary_list: List of dicts with "project" and "handoff", "done", "canceled" counts.
+
+    Returns:
+        List of dicts with __project_id, name, is_archived, handoff, done, canceled,
+        confirm_delete=False.
+
+    """
+    rows = []
+    for item in summary_list:
+        p = item["project"]
+        rows.append(
+            {
+                "__project_id": p.id,
+                "name": p.name,
+                "is_archived": getattr(p, "is_archived", False),
+                "handoff": item["handoff"],
+                "done": item["done"],
+                "canceled": item["canceled"],
+                "confirm_delete": False,
+            }
+        )
+    return rows
+
+
 def _get_projects_to_delete(edited_df: pd.DataFrame, projects: list) -> list[tuple[int, str]]:
     """Helper to identify projects marked for deletion in the UI."""
     project_by_id = {p.id: p for p in projects}
@@ -151,21 +181,7 @@ def render_projects_page() -> None:
         return
 
     projects = [item["project"] for item in summary_list]
-    rows = []
-    for item in summary_list:
-        p = item["project"]
-        rows.append(
-            {
-                "__project_id": p.id,
-                "name": p.name,
-                "is_archived": getattr(p, "is_archived", False),
-                "handoff": item["handoff"],
-                "done": item["done"],
-                "canceled": item["canceled"],
-                "confirm_delete": False,
-            }
-        )
-    display_df = pd.DataFrame(rows)
+    display_df = pd.DataFrame(_build_projects_display_rows(summary_list))
 
     st.caption(
         'Edit names and archive state below. Check "Confirm delete" for projects to '

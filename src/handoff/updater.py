@@ -594,6 +594,34 @@ def get_patch_version(file_like: BinaryIO) -> str | None:
     return None
 
 
+def _can_apply_patch(
+    patch_version: str | None,
+    app_version: str,
+    apply_anyway: bool,
+) -> bool:
+    """Determine whether the Apply button should be enabled for a patch.
+
+    Args:
+        patch_version: Version string from the patch zip (or None if no VERSION file).
+        app_version: Current app version string.
+        apply_anyway: User checked "apply older patch anyway".
+
+    Returns:
+        True if the patch can be applied (version is >= app or apply_anyway, or
+        version parsing fails and we allow apply).
+
+    """
+    if patch_version is None:
+        return True
+    try:
+        return (
+            apply_anyway
+            or _parse_version(patch_version) >= _parse_version(app_version)
+        )
+    except (ValueError, TypeError):
+        return True
+
+
 def render_update_panel(app_version: str) -> None:
     """Render the Streamlit update and backup-restore panel on the Settings page.
 
@@ -642,14 +670,7 @@ def render_update_panel(app_version: str) -> None:
             st.caption("Patch has no VERSION file.")
 
     if patch_file is not None:
-        try:
-            can_apply = (
-                patch_version is None
-                or apply_anyway
-                or _parse_version(patch_version) >= _parse_version(app_version)
-            )
-        except (ValueError, TypeError):
-            can_apply = True
+        can_apply = _can_apply_patch(patch_version, app_version, apply_anyway)
         if st.button("Apply and Restart", key="settings_apply_patch", disabled=not can_apply):
             patch_file.seek(0)
             msg = stage_patch_with_backup(

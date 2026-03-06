@@ -4,6 +4,7 @@ import pytest
 from handoff.models import Project
 from handoff.pages.projects import (
     _apply_project_changes,
+    _build_projects_display_rows,
     _execute_changes,
     _get_pending_changes,
     _get_projects_to_delete,
@@ -192,3 +193,48 @@ def test_apply_project_changes_validation_failure(mock_projects):
     assert success is False
     assert "Project name cannot be empty" in errors[0]
     assert updated == 0
+
+
+def test_build_projects_display_rows(mock_projects):
+    """_build_projects_display_rows returns one row per summary item with expected keys."""
+    summary_list = [
+        {"project": mock_projects[0], "handoff": 2, "done": 1, "canceled": 0},
+        {"project": mock_projects[1], "handoff": 0, "done": 0, "canceled": 1},
+    ]
+    rows = _build_projects_display_rows(summary_list)
+    assert len(rows) == 2
+    assert rows[0]["__project_id"] == 1
+    assert rows[0]["name"] == "Work"
+    assert rows[0]["is_archived"] is False
+    assert rows[0]["handoff"] == 2
+    assert rows[0]["done"] == 1
+    assert rows[0]["canceled"] == 0
+    assert rows[0]["confirm_delete"] is False
+    assert rows[1]["__project_id"] == 2
+    assert rows[1]["name"] == "Home"
+    assert rows[1]["is_archived"] is False
+
+
+def test_get_pending_changes_skips_row_with_missing_project_id(mock_projects):
+    """Rows with __project_id missing or NaN produce no change for that row."""
+    df = pd.DataFrame(
+        [
+            {"__project_id": None, "name": "X", "is_archived": False, "confirm_delete": False},
+            {"name": "Y", "is_archived": False, "confirm_delete": False},
+        ]
+    )
+    valid, errors, changes = _get_pending_changes(df, mock_projects)
+    assert valid is True
+    assert len(changes) == 0
+
+
+def test_get_pending_changes_skips_unknown_project_id(mock_projects):
+    """Rows with __project_id not in projects are skipped."""
+    df = pd.DataFrame(
+        [
+            {"__project_id": 999, "name": "Unknown", "is_archived": False, "confirm_delete": False},
+        ]
+    )
+    valid, errors, changes = _get_pending_changes(df, mock_projects)
+    assert valid is True
+    assert len(changes) == 0

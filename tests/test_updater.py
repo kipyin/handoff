@@ -7,9 +7,12 @@ from io import BytesIO
 from pathlib import Path
 
 from handoff.updater import (
+    _backup_dir_name,
+    _can_apply_patch,
     _clear_pycache,
     _format_snapshot_label,
     _iter_backup_snapshots,
+    _read_patch_members,
     _restore_backup_snapshot,
     apply_patch_zip,
     apply_staged_update,
@@ -303,3 +306,55 @@ def test_apply_staged_update_returns_none_when_update_dir_empty(tmp_path: Path) 
     app_root = tmp_path
     (app_root / "update").mkdir()
     assert apply_staged_update(app_root=app_root) is None
+
+
+def test_read_patch_members_includes_allowed_excludes_disallowed() -> None:
+    """_read_patch_members returns only allowed paths; disallowed are skipped (warning logged)."""
+    zip_bytes = _build_patch_zip_bytes(
+        {"app.py": b"x", "src/foo.py": b"y", "other.txt": b"z", "README.md": b"readme"},
+        version="2026.2.0",
+    )
+    with zipfile.ZipFile(BytesIO(zip_bytes)) as zf:
+        members, target_version = _read_patch_members(zf)
+    assert target_version == "2026.2.0"
+    assert "app.py" in members
+    assert "src/foo.py" in members
+    assert "README.md" in members
+    assert "other.txt" not in members
+
+
+def test_backup_dir_name_format() -> None:
+    """_backup_dir_name returns timestamp-version<version> format."""
+    result = _backup_dir_name("2026.3.6")
+    assert result.endswith("-version2026.3.6")
+    # Starts with YYYYMMDD-HHMMSS
+    parts = result.rsplit("-", 1)
+    assert len(parts) == 2
+    date_part = parts[0]
+    assert len(date_part) == 15  # YYYYMMDD-HHMMSS
+    assert date_part[8] == "-"
+    assert date_part[:8].isdigit()
+    assert date_part[9:].isdigit()
+
+
+def test_can_apply_patch_none_version_returns_true() -> None:
+    """_can_apply_patch returns True when patch_version is None (no VERSION file)."""
+    assert _can_apply_patch(None, "2026.3.6", False) is True
+
+
+def test_can_apply_patch_newer_or_equal_returns_true() -> None:
+    """_can_apply_patch returns True when patch version >= app version."""
+    assert _can_apply_patch("2026.3.7", "2026.3.6", False) is True
+    assert _can_apply_patch("2026.3.6", "2026.3.6", False) is True
+
+
+def test_can_apply_patch_older_returns_false_unless_apply_anyway() -> None:
+    """_can_apply_patch returns False when patch is older; True if apply_anyway."""
+    assert _can_apply_patch("2026.3.5", "2026.3.6", False) is False
+    assert _can_apply_patch("2026.3.5", "2026.3.6", True) is True
+
+
+def test_can_apply_patch_invalid_version_parses_to_zeros() -> None:
+    """_can_apply_patch: non-numeric version parses to zeros, so patch is 'older' (False unless apply_anyway)."""
+    assert _can_apply_patch("not-a-version", "2026.3.6", False) is False
+    assert _can_apply_patch("not-a-version", "2026.3.6", True) is True
