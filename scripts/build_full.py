@@ -3,7 +3,7 @@
 This script is the moved version of the original `build_zip.py` and is
 intended to be used via the Typer CLI:
 
-    uv run handoff build --full 
+    uv run handoff build --full
 """
 
 from __future__ import annotations
