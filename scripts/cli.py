@@ -95,12 +95,6 @@ def test(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
             "uv",
             "run",
             "pytest",
-            "--cov",
-            "-qx",
-            "--ff",
-            "--no-cov-on-fail",
-            "--cov-report",
-            "term:skip-covered",
             *extra_args,
         ],
         cwd=ROOT,
@@ -132,18 +126,13 @@ def build(
         False, "--full", help="Build the full Windows embedded zip distribution."
     ),
     patch: bool = typer.Option(False, "--patch", help="Build a patch zip from the build output."),
-    include_pages: bool = typer.Option(
-        True,
-        "--include-pages/--skip-pages",
-        help="Include the pages/ directory (from source) in the patch zip (only for --patch).",
-    ),
 ) -> None:
     """Build the application (full distribution or patch)."""
     if full:
         console.print("Building full Windows embedded zip distribution...", style="bold cyan")
         build_zip_module.main()
     elif patch:
-        path = build_patch_module.build_patch(include_pages=include_pages)
+        path = build_patch_module.build_patch()
         console.print(f"Patch zip created at {path}", style="bold green")
     else:
         console.print("Please specify either --full or --patch.", style="bold red")
