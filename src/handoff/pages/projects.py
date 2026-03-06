@@ -30,9 +30,9 @@ def _render_create_project_form() -> None:
             st.success("Project created.")
             st.rerun()
 
+
 # New pure-logic helpers for testability
-from dataclasses import dataclass
-from typing import Any, Dict, List
+
 
 def _get_projects_to_delete(edited_df: pd.DataFrame, projects: list) -> list[tuple[int, str]]:
     """Helper to identify projects marked for deletion in the UI."""
@@ -48,7 +48,10 @@ def _get_projects_to_delete(edited_df: pd.DataFrame, projects: list) -> list[tup
             to_delete.append((pid, getattr(project, "name", "")))
     return to_delete
 
-def _get_pending_changes(edited_df: pd.DataFrame, projects: list) -> tuple[bool, list[str], list[dict]]:
+
+def _get_pending_changes(
+    edited_df: pd.DataFrame, projects: list
+) -> tuple[bool, list[str], list[dict]]:
     """Compare UI-edited DataFrame to current projects and produce a list of changes.
 
     Returns (valid, errors, changes). Changes are dicts with a 'type' key: 'rename', 'archive', 'unarchive', 'delete'.
@@ -80,6 +83,7 @@ def _get_pending_changes(edited_df: pd.DataFrame, projects: list) -> tuple[bool,
 
     valid = len(errors) == 0
     return valid, errors, changes
+
 
 def _execute_changes(changes: list[dict]) -> tuple[int, int, list[str]]:
     """Execute a list of UI-derived changes. Returns (deleted, updated, errors)."""
