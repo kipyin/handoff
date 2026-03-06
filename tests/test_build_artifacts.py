@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-import scripts.build_patch as build_patch_module
 import scripts.build_full as build_full_module
+import scripts.build_patch as build_patch_module
 
 
 def test_copy_docs_copies_readme_and_release_notes(
