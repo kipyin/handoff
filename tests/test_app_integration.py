@@ -71,6 +71,24 @@ def _settings_page_entry() -> None:
     render_settings_page()
 
 
+def _analytics_page_entry() -> None:
+    """Single-page entrypoint for Analytics: setup + render."""
+    import handoff.ui as ui
+    from handoff.pages.analytics import render_analytics_page
+
+    ui.setup("2026.2.24")
+    render_analytics_page()
+
+
+def _docs_page_entry() -> None:
+    """Single-page entrypoint for Docs: setup + render."""
+    import handoff.ui as ui
+    from handoff.pages.docs import render_docs_page
+
+    ui.setup("2026.2.24")
+    render_docs_page()
+
+
 def test_todos_page_renders_with_app_test(app_test_db: Path) -> None:
     """Todos page renders (smoke test)."""
     at = AppTest.from_function(_todos_page_entry)
@@ -102,3 +120,19 @@ def test_settings_page_renders_with_app_test(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("markdown")) >= 1
+
+
+def test_analytics_page_renders_with_app_test(app_test_db: Path) -> None:
+    """Analytics page renders (smoke test)."""
+    at = AppTest.from_function(_analytics_page_entry)
+    at.run(timeout=5)
+    assert len(at.get("subheader")) >= 1
+    assert len(at.get("date_input")) >= 1 or len(at.get("info")) >= 1
+
+
+def test_docs_page_renders_with_app_test(app_test_db: Path) -> None:
+    """Docs page renders (smoke test)."""
+    at = AppTest.from_function(_docs_page_entry)
+    at.run(timeout=5)
+    assert len(at.get("subheader")) >= 1
+    assert len(at.get("tabs")) >= 1 or len(at.get("markdown")) >= 1
