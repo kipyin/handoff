@@ -17,8 +17,10 @@ from streamlit.testing.v1 import AppTest
 def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point handoff.db at a test DB path and reload so the engine is recreated."""
     monkeypatch.setenv("HANDOFF_DB_PATH", str(db_path))
-    import handoff.db as db  # noqa: F401
 
+    import handoff.db as db
+
+    db.dispose_db()  # close any existing engine before reload
     importlib.reload(db)
     import handoff.ui as ui  # noqa: F401
 
