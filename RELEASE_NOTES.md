@@ -121,7 +121,7 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
 
 ## 2026.2.23 [Recommended]
 
-- **Rebrand to Handoff:** Rename the app to *Handoff* with the tagline “See who’s on the hook across all your projects.” Update all UI titles, sidebar, About section, and docs. CLI command is now `handoff` (was `todo`). User data directory is now `handoff` (e.g. `%APPDATA%\handoff`); `HANDOFF_DB_PATH` is the preferred env var (still support `TODO_APP_DB_PATH` for backward compatibility).
+- **Rebrand to Handoff:** Rename the app to *Handoff* with the tagline “See who’s on the hook across all your projects.” Update all UI titles, sidebar, About section, and docs. CLI command is now `handoff` (was `todo`). User data directory is now `handoff` (e.g. `%APPDATA%\handoff`); `HANDOFF_DB_PATH` is the env var for custom DB locations.
 - **Deadline column format:** Format deadline columns in the UI as “Tue, Mar 4th” (moment-style `ddd, MMM Do`) via a display formatter; keep the date column editable.
 - **Updater PermissionError fix:** When applying a patch zip, skip files that cannot be overwritten (e.g. PyArmor runtime `.pyd` locked by the running process on Windows) instead of failing; report skipped files in the success message and advise restart + re-apply if needed.
 - **Patch version check:** When applying a code-only patch zip, the updater now compares the patch version (from a `VERSION` file in the zip) with the current app version. If the patch is older, applying is blocked with a clear message; a checkbox on the Settings page lets you confirm and apply anyway if you understand the risk.

@@ -13,8 +13,8 @@ from handoff.db import DatabaseInitializationError
 
 
 def _reload_db_module(db_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Reload handoff.db with TODO_APP_DB_PATH pointed at db_path."""
-    monkeypatch.setenv("TODO_APP_DB_PATH", str(db_path))
+    """Reload handoff.db with HANDOFF_DB_PATH pointed at db_path."""
+    monkeypatch.setenv("HANDOFF_DB_PATH", str(db_path))
     import handoff.db as db  # type: ignore[import-not-found]
 
     db.dispose_db()  # close any existing engine before reload
@@ -107,7 +107,7 @@ def test_init_db_raises_when_engine_creation_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """When create_engine raises at module load, DatabaseInitializationError is raised."""
-    monkeypatch.setenv("TODO_APP_DB_PATH", str(tmp_path / "todo.db"))
+    monkeypatch.setenv("HANDOFF_DB_PATH", str(tmp_path / "todo.db"))
     import handoff.db as db  # noqa: F401
 
     db.dispose_db()

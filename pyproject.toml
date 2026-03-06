@@ -69,7 +69,6 @@ include = ["src", "scripts"]
 exclude = [
     "src/handoff/data.py",
     "src/handoff/pages/analytics.py",
-    "src/handoff/pages/calendar.py",
     "src/handoff/pages/todos.py",
 ]
 venvPath = "."

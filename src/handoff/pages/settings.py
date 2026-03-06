@@ -65,8 +65,7 @@ def _render_about_section() -> None:
 
     st.write(
         "You get a local, single-user to-do app backed by SQLite, with a unified view across "
-        "projects and helpers, plus a simple weekly calendar, analytics ideas, and an in-app "
-        "update flow."
+        "projects and helpers, and an in-app update flow."
     )
 
     st.write(

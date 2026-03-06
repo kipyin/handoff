@@ -11,7 +11,6 @@ import streamlit as st
 
 from handoff.ui import (
     render_analytics_page,
-    render_calendar_page,
     render_docs_page,
     render_projects_page,
     render_settings_page,
@@ -31,12 +30,6 @@ def _projects_page() -> None:
     """Configure global layout and render the Projects view."""
     setup(APP_VERSION)
     render_projects_page()
-
-
-def _calendar_page() -> None:
-    """Configure global layout and render the Calendar view."""
-    setup(APP_VERSION)
-    render_calendar_page()
 
 
 def _analytics_page() -> None:
@@ -62,7 +55,6 @@ def main() -> None:
     pages = [
         st.Page(_todos_page, title="Todos", icon="✅"),
         st.Page(_projects_page, title="Projects", icon="📁"),
-        # st.Page(_calendar_page, title="Calendar", icon="📅"),
         # st.Page(_analytics_page, title="Analytics", icon="📊"),
         st.Page(_settings_page, title="Settings", icon="⚙️"),
         st.Page(_docs_page, title="Docs", icon="📖"),
