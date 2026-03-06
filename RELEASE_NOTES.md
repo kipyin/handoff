@@ -1,8 +1,24 @@
 # Release notes
 
-Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal**
-where applicable. Version headings keep an impact tag: `[Breaking]`,
-`[Recommended]`, or `[Optional]`.
+Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** where applicable. Version headings keep an impact tag: `[Breaking]`, `[Recommended]`, or `[Optional]`.
+
+## 2026.3.6 [Optional]
+
+- **Fix**
+  - **query_todos logging:** Fixed logging when datetime inputs are passed to `query_todos`.
+  - **CLI argument handling:** Fixed `run`, `sync`, `lint`, `format`, `check`, `test`, `typecheck`, and `ci` commands so `extra_args` are passed correctly to downstream tools.
+  - **CLI defaults:** `lint` and `format` now default to the current directory; `typecheck` accepts extra args.
+  - **Test resource cleanup:** Dispose DB engine in tests to prevent ResourceWarnings; added `dispose_db` hook for launcher and build tests.
+- **Improvement**
+  - **About section:** Synced About section text in Settings to match README description.
+  - **Build script rename:** Renamed `build_zip.py` to `build_full.py` and the CLI module to `build_full` (aligns script name with `build-full` CLI command).
+  - **Test command:** Simplified `test` command; removed `--include-pages`/`--skip-pages` from `build --patch`.
+  - **Refactors:** Extracted pure-logic helpers for updater, projects, and analytics.
+- **Internal**
+  - **Test coverage:** Added tests for docs, db, project page helpers, executor, unarchive flow, data helpers, todos filters/persistence, launchers, and build artifacts.
+  - **Config:** Coverage omits `scripts/`; pytest options moved to `pyproject.toml`.
+  - **Release plan:** Added `docs/release-2026.3.6-plan.md`.
+  - **Style:** Ruff-driven formatting and import fixes.
 
 ## 2026.3.5 [Breaking]
 
