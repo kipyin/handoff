@@ -1,5 +1,6 @@
 """Tests for data access helpers."""
 
+import importlib
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 
@@ -285,6 +286,25 @@ def test_list_projects_excludes_archived_by_default(session, monkeypatch) -> Non
 
     all_projects = data.list_projects(include_archived=True)
     assert len(all_projects) == 2
+
+
+def test_list_projects_survives_models_reload(session, monkeypatch) -> None:
+    """Reloading handoff.models does not poison SQLModel's registry for list_projects."""
+    _patch_session_context(monkeypatch, session)
+    project = Project(name="Reload safe")
+    session.add(project)
+    session.commit()
+
+    import handoff.models as models
+
+    before_project = models.Project
+    before_todo = models.Todo
+    importlib.reload(models)
+
+    assert models.Project is before_project
+    assert models.Todo is before_todo
+    projects = data.list_projects(include_archived=True)
+    assert [p.name for p in projects] == ["Reload safe"]
 
 
 def test_rename_project(session, monkeypatch) -> None:
