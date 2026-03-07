@@ -52,7 +52,7 @@ def render_projects_page() -> None:
 
 
 def render_analytics_page() -> None:
-    """Render the analytics page."""
+    """Render the main dashboard page."""
     _render_analytics_page_impl()
 
 
