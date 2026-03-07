@@ -39,5 +39,5 @@ def get_readme_intro() -> str:
     if len(parts) < 2:
         return content.strip()
     intro = parts[1]
-    heading_line, _, body = intro.partition("\n")
+    _, _, body = intro.partition("\n")
     return body.strip()
