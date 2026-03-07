@@ -14,7 +14,7 @@ from handoff.models import Todo, TodoStatus
 
 def _count_open_handoffs() -> int:
     """Return the number of currently open (delegated) todos."""
-    return len(query_todos(statuses=[TodoStatus.DELEGATED], include_archived=False))
+    return len(query_todos(statuses=[TodoStatus.HANDOFF], include_archived=False))
 
 
 def _completed_in_range(start: date, end: date) -> list[Todo]:
@@ -136,7 +136,7 @@ def render_analytics_page() -> None:
     else:
         st.info("No completed todos in the last 8 weeks.")
 
-    handoff_todos = query_todos(statuses=[TodoStatus.DELEGATED], include_archived=False)
+    handoff_todos = query_todos(statuses=[TodoStatus.HANDOFF], include_archived=False)
     if handoff_todos:
         st.markdown("#### Current helper load")
         helper_counts = _compute_helper_load(handoff_todos)

@@ -12,7 +12,8 @@ class TodoStatus(StrEnum):
     Values are persisted as strings in the database and used for filtering and display.
     """
 
-    DELEGATED = "handoff"  # Display name: "handoff"; persisted in DB as "handoff"
+    HANDOFF = "handoff"
+    DELEGATED = HANDOFF  # Backward-compatible alias for older call sites/tests.
     DONE = "done"
     CANCELED = "canceled"
 
@@ -28,7 +29,10 @@ class Project(SQLModel, table=True):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     is_archived: bool = Field(default=False, index=True)
 
-    todos: list["Todo"] = Relationship(back_populates="project")
+    todos: list["Todo"] = Relationship(
+        back_populates="project",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
 
 
 class Todo(SQLModel, table=True):
@@ -44,7 +48,7 @@ class Todo(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="project.id", index=True)
     name: str
-    status: TodoStatus = Field(default=TodoStatus.DELEGATED, index=True)
+    status: TodoStatus = Field(default=TodoStatus.HANDOFF, index=True)
     deadline: date | None = Field(default=None, index=True)
     helper: str | None = Field(default=None, index=True)
     notes: str | None = Field(default=None)
