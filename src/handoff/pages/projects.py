@@ -40,14 +40,15 @@ def _render_create_project_form() -> None:
 def _build_projects_display_rows(
     summary_list: list[dict],
 ) -> list[ProjectSummaryRow]:
-    """Build display row dicts for the projects table from get_projects_with_todo_summary.
+    """Build typed summary rows for the projects table.
 
     Args:
         summary_list: List of dicts with "project" and "handoff", "done", "canceled" counts.
 
     Returns:
-        List of dicts with __project_id, name, is_archived, handoff, done, canceled,
-        confirm_delete=False.
+        List of :class:`ProjectSummaryRow` values. The UI later adds editor-only
+        columns like ``__project_id`` and ``confirm_delete`` when building the
+        DataFrame passed to Streamlit.
 
     """
     rows: list[ProjectSummaryRow] = []

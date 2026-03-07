@@ -271,14 +271,20 @@ def query_todos(
 ) -> list[Todo]:
     """Return todos matching optional unified filters.
 
+    Callers may either provide the individual filter arguments directly or pass a
+    :class:`handoff.page_models.TodoQuery` via ``query``. When ``query`` is provided,
+    its values populate the individual filters for this call.
+
     ``completed_start`` and ``completed_end`` accept both ``date`` and
     ``datetime``.  Bare ``date`` values are promoted to start-of-day /
     end-of-day so the comparison against ``Todo.completed_at`` (a datetime
     column) includes the full day.
 
     Args:
+        query: Optional typed query contract for project/helper/status/search/deadline filters.
         project_ids: Optional project ids to include.
         helper_name: Optional helper substring filter.
+        helper_names: Optional exact helper names to include.
         statuses: Optional statuses to include.
         start: Optional inclusive deadline lower bound.
         end: Optional inclusive deadline upper bound.

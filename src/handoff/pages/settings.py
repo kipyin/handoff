@@ -16,6 +16,7 @@ from typing import Any
 
 import pandas as pd
 import streamlit as st
+from loguru import logger
 
 from handoff.backup_schema import BackupPayload
 from handoff.data import get_export_payload, import_payload
@@ -110,14 +111,22 @@ def _render_data_import_section() -> None:
     try:
         raw_text = uploaded.getvalue().decode("utf-8")
         payload = BackupPayload.from_dict(json.loads(raw_text))
-
-        st.info(
-            f"File contains **{len(payload.projects)}** projects "
-            f"and **{len(payload.todos)}** todos."
-        )
-    except Exception as exc:
-        st.error(f"Could not parse file: {exc}")
+    except UnicodeDecodeError:
+        st.error("Could not read the file as UTF-8 text. Please upload a JSON backup.")
         return
+    except json.JSONDecodeError:
+        st.error("Invalid JSON file. Please upload a Handoff JSON backup.")
+        return
+    except (KeyError, ValueError) as exc:
+        logger.warning("Invalid backup upload: {}", exc)
+        st.error(
+            "Invalid backup file. Expected a Handoff backup with 'projects' and 'todos' lists."
+        )
+        return
+
+    st.info(
+        f"File contains **{len(payload.projects)}** projects and **{len(payload.todos)}** todos."
+    )
 
     confirm = st.checkbox(
         "I understand this will replace all existing projects and todos.",

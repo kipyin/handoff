@@ -8,6 +8,7 @@ Streamlit's st.navigation API.
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import wraps
 
 import streamlit as st
 
@@ -23,11 +24,11 @@ from handoff.version import __version__ as APP_VERSION
 def _page(renderer: Callable[[], None]) -> Callable[[], None]:
     """Wrap a page renderer so global setup runs first."""
 
+    @wraps(renderer)
     def _run() -> None:
         setup(APP_VERSION)
         renderer()
 
-    _run.__name__ = renderer.__name__
     return _run
 
 
