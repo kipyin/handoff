@@ -47,6 +47,12 @@ class DatabaseInitializationError(RuntimeError):
 _DB_PATH = _resolve_db_path()
 DATABASE_URL = f"sqlite:///{_DB_PATH}"
 
+
+def get_db_path() -> Path:
+    """Return the resolved path to the SQLite database file."""
+    return _DB_PATH
+
+
 try:
     engine = create_engine(DATABASE_URL, echo=False)
 except Exception as exc:  # noqa: BLE001
