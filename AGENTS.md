@@ -20,6 +20,18 @@
 
 All commands are documented in `CONTRIBUTING.md`.
 
+### Coding style summary
+
+Follow the canonical style guide in `STYLE.md`.
+
+Short version:
+
+- Keep the code small in concept count and easy to scan.
+- Prefer one clear representation of data over multiple ad hoc ones.
+- Keep boundaries explicit between models, data-layer logic, and UI adapters.
+- Validate inputs before destructive actions and produce clean user-facing errors.
+- Favor patterns that would still make sense in a future CLI or Textual frontend.
+
 ### Non-obvious caveats
 
 - **Python 3.13+ required.** The VM may ship with an older Python. Use `uv python install 3.13` to get the right version; `uv sync` will then use it automatically.
