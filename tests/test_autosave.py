@@ -190,6 +190,32 @@ class TestPersistProjectEdits:
         assert result is False
         assert rename_calls == []
 
+    def test_negative_row_index_is_skipped(self, monkeypatch):
+        """Negative row indices must not index from the end."""
+        rename_calls: list = []
+        monkeypatch.setattr(
+            "handoff.pages.projects.rename_project",
+            lambda pid, name: rename_calls.append((pid, name)),
+        )
+        display_df = self._make_display_df([{"__project_id": 1, "name": "Work"}])
+        state = {"edited_rows": {"-1": {"name": "Sneaky"}}}
+        result = _persist_project_edits(state, display_df)
+        assert result is False
+        assert rename_calls == []
+
+    def test_non_numeric_row_index_is_skipped(self, monkeypatch):
+        """Non-numeric row index keys are skipped without crashing."""
+        rename_calls: list = []
+        monkeypatch.setattr(
+            "handoff.pages.projects.rename_project",
+            lambda pid, name: rename_calls.append((pid, name)),
+        )
+        display_df = self._make_display_df([{"__project_id": 1, "name": "Work"}])
+        state = {"edited_rows": {"abc": {"name": "Bad"}}}
+        result = _persist_project_edits(state, display_df)
+        assert result is False
+        assert rename_calls == []
+
     def test_missing_project_id_is_skipped(self, monkeypatch):
         """Rows with NaN __project_id are silently skipped."""
         rename_calls: list = []
@@ -203,8 +229,10 @@ class TestPersistProjectEdits:
         assert result is False
         assert rename_calls == []
 
-    def test_rename_exception_is_caught(self, monkeypatch):
-        """DB errors during rename should be logged, not raised."""
+    def test_rename_exception_surfaces_error(self, monkeypatch):
+        """DB errors during rename are collected in session state for display."""
+        session: dict = {}
+        monkeypatch.setattr("streamlit.session_state", session)
 
         def bad_rename(pid, name):
             raise RuntimeError("DB locked")
@@ -214,6 +242,28 @@ class TestPersistProjectEdits:
         state = {"edited_rows": {"0": {"name": "Kaboom"}}}
         result = _persist_project_edits(state, display_df)
         assert result is False
+        errors = session.get("__projects_autosave_errors", [])
+        assert len(errors) == 1
+        assert "rename" in errors[0].lower() or "project 1" in errors[0]
+
+    def test_archive_exception_surfaces_error(self, monkeypatch):
+        """DB errors during archive toggle are collected in session state."""
+        session: dict = {}
+        monkeypatch.setattr("streamlit.session_state", session)
+
+        def bad_archive(pid):
+            raise RuntimeError("DB locked")
+
+        monkeypatch.setattr("handoff.pages.projects.archive_project", bad_archive)
+        display_df = self._make_display_df(
+            [{"__project_id": 2, "name": "Home", "is_archived": False}]
+        )
+        state = {"edited_rows": {"0": {"is_archived": True}}}
+        result = _persist_project_edits(state, display_df)
+        assert result is False
+        errors = session.get("__projects_autosave_errors", [])
+        assert len(errors) == 1
+        assert "archive" in errors[0].lower() or "project 2" in errors[0]
 
     def test_mixed_rename_and_archive(self, monkeypatch):
         """A single row edit with both rename and archive should apply both."""

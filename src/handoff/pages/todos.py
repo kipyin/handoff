@@ -381,8 +381,12 @@ def _persist_changes(
                 logger.info("Deleted todo_id={}", todo_id)
 
     # 2. Handle Edits
-    for row_idx, changes in edited.items():
-        row_idx = int(row_idx)
+    for row_idx_key, changes in edited.items():
+        try:
+            row_idx = int(row_idx_key)
+        except (TypeError, ValueError):
+            logger.warning("Ignoring invalid edited row index: {}", row_idx_key)
+            continue
         if not (0 <= row_idx < len(display_df)):
             continue
 

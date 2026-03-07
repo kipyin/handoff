@@ -175,20 +175,33 @@ def _apply_project_changes(
     return (True, [], deleted, updated)
 
 
+_AUTOSAVE_ERRORS_KEY = "__projects_autosave_errors"
+
+
 def _persist_project_edits(state: dict, display_df: pd.DataFrame) -> bool:
     """Autosave callback for project renames and archive toggles.
 
     Skips ``confirm_delete`` changes — those are handled by the separate
     deletion confirmation flow.  Returns ``False`` (no rerun needed for
     simple cell edits).
+
+    Errors are collected into ``st.session_state[_AUTOSAVE_ERRORS_KEY]``
+    so the page can surface them after the editor renders.
     """
     edited = state.get("edited_rows", {})
     if not edited:
         return False
 
+    errors: list[str] = []
+
     for row_idx_str, changes in edited.items():
-        row_idx = int(row_idx_str)
-        if row_idx >= len(display_df):
+        try:
+            row_idx = int(row_idx_str)
+        except (TypeError, ValueError):
+            logger.warning("Ignoring invalid edited row index: {}", row_idx_str)
+            continue
+
+        if not (0 <= row_idx < len(display_df)):
             continue
         pid = display_df.iloc[row_idx].get("__project_id")
         if pid is None or pd.isna(pid):
@@ -204,6 +217,7 @@ def _persist_project_edits(state: dict, display_df: pd.DataFrame) -> bool:
                     logger.info("Auto-saved rename for project_id={}", pid)
                 except Exception:
                     logger.exception("Failed to auto-save rename for project_id={}", pid)
+                    errors.append(f"Could not rename project {pid}.")
 
         new_archived = changes.get("is_archived")
         if new_archived is not None:
@@ -215,6 +229,10 @@ def _persist_project_edits(state: dict, display_df: pd.DataFrame) -> bool:
                 logger.info("Auto-saved archive={} for project_id={}", new_archived, pid)
             except Exception:
                 logger.exception("Failed to auto-save archive for project_id={}", pid)
+                errors.append(f"Could not update archive state for project {pid}.")
+
+    if errors:
+        st.session_state[_AUTOSAVE_ERRORS_KEY] = errors
 
     return False
 
@@ -297,6 +315,9 @@ def render_projects_page() -> None:
             ),
         },
     )
+
+    for err in st.session_state.pop(_AUTOSAVE_ERRORS_KEY, []):
+        st.error(err)
 
     to_delete = _get_projects_to_delete(edited_df, projects)
 
