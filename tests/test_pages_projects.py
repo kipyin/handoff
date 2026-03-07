@@ -310,16 +310,15 @@ def test_reset_projects_table_state_clears_editor_and_pending_delete(monkeypatch
         (
             False,
             "projects_table_active",
-            "Edit names and archive state below. Show archived projects to review or "
-            'unarchive hidden items. Check "Confirm delete" for projects to remove, then '
-            "click Save changes.",
+            "Edit names and archive state below — changes save automatically. "
+            'Check "Delete" to mark projects for removal.',
         ),
         (
             True,
             "projects_table_all",
-            "Edit names and archive state below. Archived projects are visible here and can "
-            'be unarchived. Check "Confirm delete" for projects to remove, then click Save '
-            "changes.",
+            "Edit names and archive state below — changes save automatically. "
+            "Archived projects are visible here and can be unarchived. "
+            'Check "Delete" to mark projects for removal.',
         ),
     ],
 )
@@ -349,11 +348,11 @@ def test_render_projects_page_uses_toggle_specific_editor_state(
 
     monkeypatch.setattr("handoff.pages.projects.st.caption", fake_caption)
 
-    def fake_data_editor(df, **kwargs):
-        captured["editor_key"] = kwargs["key"]
+    def fake_autosave_editor(df, *, key, **kwargs):
+        captured["editor_key"] = key
         return df
 
-    monkeypatch.setattr("handoff.pages.projects.st.data_editor", fake_data_editor)
+    monkeypatch.setattr("handoff.pages.projects.autosave_editor", fake_autosave_editor)
     monkeypatch.setattr("handoff.pages.projects.st.button", lambda *args, **kwargs: False)
     monkeypatch.setattr("streamlit.session_state", {})
 
