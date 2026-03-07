@@ -36,25 +36,21 @@ def test_read_markdown_from_app_root_os_error(
 
 def test_cached_markdown_caches_and_calls_read_once(monkeypatch: pytest.MonkeyPatch) -> None:
     """pages.docs._cached_markdown caches result and reads each name once."""
-    from unittest.mock import MagicMock
+    from handoff.pages.docs import _cached_markdown
 
-    session_state = {}
-    mock_st = MagicMock()
-    mock_st.session_state = session_state
-    read_calls = []
+    _cached_markdown.clear()
+
+    read_calls: list[str] = []
 
     def track_read(name: str) -> str:
         read_calls.append(name)
         return f"Content of {name}"
 
-    monkeypatch.setattr("handoff.pages.docs.st", mock_st)
     monkeypatch.setattr("handoff.pages.docs.read_markdown_from_app_root", track_read)
-
-    from handoff.pages.docs import _cached_markdown
 
     first = _cached_markdown("README.md")
     second = _cached_markdown("README.md")
-    assert first == second == "Content of README.md"
+    assert first == second == "Content of {name}".format(name="README.md")
     assert read_calls == ["README.md"]
     _cached_markdown("RELEASE_NOTES.md")
     assert read_calls == ["README.md", "RELEASE_NOTES.md"]
