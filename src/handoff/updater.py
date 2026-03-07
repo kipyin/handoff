@@ -215,13 +215,18 @@ def stage_patch_with_backup(
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)
-        return (
+        msg = (
             f"Update files are ready (target version: {target_version}). "
             "Close in 2s. "
             "Run handoff.bat again to complete the update."
         )
-    logger.info("Staged patch in {}", staging)
-    return "Update files are ready. Close in 2s. Run handoff.bat again to complete the update."
+    else:
+        logger.info("Staged patch in {}", staging)
+        msg = "Update files are ready. Close in 2s. Run handoff.bat again to complete the update."
+
+    if extract_failed:
+        msg += f" Warning: {len(extract_failed)} file(s) could not be staged."
+    return msg
 
 
 def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) -> str:
@@ -259,16 +264,21 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)
-        return (
+        msg = (
             f"Update files are ready (target version: {target_version}). "
             "The app will close in 2 seconds. "
             "Please run handoff.bat again to complete the update."
         )
-    logger.info("Staged patch in {}", staging)
-    return (
-        "Update files are ready. The app will close in 2 seconds. "
-        "Please run handoff.bat again to complete the update."
-    )
+    else:
+        logger.info("Staged patch in {}", staging)
+        msg = (
+            "Update files are ready. The app will close in 2 seconds. "
+            "Please run handoff.bat again to complete the update."
+        )
+
+    if extract_failed:
+        msg += f" Warning: {len(extract_failed)} file(s) could not be staged."
+    return msg
 
 
 def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
