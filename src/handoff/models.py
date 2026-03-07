@@ -5,8 +5,8 @@ from enum import StrEnum
 
 from sqlmodel import Field, Relationship, SQLModel
 
-
 if "TodoStatus" not in globals():
+
     class TodoStatus(StrEnum):
         """Status of a todo item.
 
@@ -20,6 +20,7 @@ if "TodoStatus" not in globals():
 
 
 if "Project" not in globals():
+
     class Project(SQLModel, table=True):
         """An engagement/project that contains many todos."""
 
@@ -38,6 +39,7 @@ if "Project" not in globals():
 
 
 if "Todo" not in globals():
+
     class Todo(SQLModel, table=True):
         """A single todo item belonging to a project.
 

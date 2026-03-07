@@ -145,7 +145,7 @@ class TestRememberedDefaults:
                 {"project_filters": [], "status_filters": ["handoff"], "helper_filters": []},
             ),
         )
-        monkeypatch.setattr("handoff.pages.todos.query_todos", lambda query: [])
+        monkeypatch.setattr("handoff.pages.todos.query_todos", lambda query=None, **kwargs: [])
         monkeypatch.setattr(
             "handoff.pages.todos._build_todo_dataframe",
             lambda rows: pd.DataFrame(
