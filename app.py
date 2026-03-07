@@ -33,7 +33,7 @@ def _projects_page() -> None:
 
 
 def _analytics_page() -> None:
-    """Configure global layout and render the Analytics view."""
+    """Configure global layout and render the Dashboard view."""
     setup(APP_VERSION)
     render_analytics_page()
 
