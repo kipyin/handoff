@@ -8,6 +8,7 @@ from handoff.pages.projects import (
     _execute_changes,
     _get_pending_changes,
     _get_projects_to_delete,
+    render_projects_page,
 )
 
 
@@ -238,3 +239,49 @@ def test_get_pending_changes_skips_unknown_project_id(mock_projects):
     valid, errors, changes = _get_pending_changes(df, mock_projects)
     assert valid is True
     assert len(changes) == 0
+
+
+def test_render_projects_page_can_include_archived(monkeypatch):
+    """The archived-project toggle passes include_archived=True to the data layer."""
+    seen = {}
+    info_messages = []
+
+    monkeypatch.setattr("handoff.pages.projects._render_create_project_form", lambda: None)
+    monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr("handoff.pages.projects.st.checkbox", lambda *args, **kwargs: True)
+
+    def fake_get_projects_with_todo_summary(*, include_archived):
+        seen["include_archived"] = include_archived
+        return []
+
+    monkeypatch.setattr(
+        "handoff.pages.projects.get_projects_with_todo_summary",
+        fake_get_projects_with_todo_summary,
+    )
+    monkeypatch.setattr("handoff.pages.projects.st.info", info_messages.append)
+
+    render_projects_page()
+
+    assert seen["include_archived"] is True
+    assert info_messages == ["No projects yet. Use the form above to create the first project."]
+
+
+def test_render_projects_page_empty_state_mentions_archived_toggle(monkeypatch):
+    """The empty state hints at archived projects when only active projects are shown."""
+    info_messages = []
+
+    monkeypatch.setattr("handoff.pages.projects._render_create_project_form", lambda: None)
+    monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr("handoff.pages.projects.st.checkbox", lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        "handoff.pages.projects.get_projects_with_todo_summary",
+        lambda *, include_archived: [],
+    )
+    monkeypatch.setattr("handoff.pages.projects.st.info", info_messages.append)
+
+    render_projects_page()
+
+    assert info_messages == [
+        'No active projects yet. Create one above or enable "Show archived projects" to '
+        "manage archived ones."
+    ]

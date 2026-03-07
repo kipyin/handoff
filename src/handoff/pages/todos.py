@@ -423,7 +423,14 @@ def _render_editable_table(
 
     editor_key = f"{key_prefix}_table_editor"
 
-    st.caption("Changes are saved automatically as you edit.")
+    total_count = len(source_df.index)
+    filtered_count = len(filtered_df.index)
+    st.caption(
+        f"Showing {filtered_count} of {total_count} todo{'s' if total_count != 1 else ''}. "
+        "Changes are saved automatically as you edit."
+    )
+    if total_count > 0 and filtered_count == 0:
+        st.info("No todos match the current filters. Clear or adjust them to see results.")
 
     st.data_editor(
         display_df,

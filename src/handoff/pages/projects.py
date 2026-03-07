@@ -175,17 +175,30 @@ def render_projects_page() -> None:
     st.subheader("Projects")
     _render_create_project_form()
 
-    summary_list = get_projects_with_todo_summary(include_archived=False)
+    show_archived = st.checkbox(
+        "Show archived projects",
+        key="projects_show_archived",
+        help="Include archived projects so you can review or unarchive them.",
+    )
+
+    summary_list = get_projects_with_todo_summary(include_archived=show_archived)
     if not summary_list:
-        st.info("No projects yet. Use the form above to create the first project.")
+        if show_archived:
+            st.info("No projects yet. Use the form above to create the first project.")
+        else:
+            st.info(
+                "No active projects yet. Create one above or enable "
+                '"Show archived projects" to manage archived ones.'
+            )
         return
 
     projects = [item["project"] for item in summary_list]
     display_df = pd.DataFrame(_build_projects_display_rows(summary_list))
 
     st.caption(
-        'Edit names and archive state below. Check "Confirm delete" for projects to '
-        "remove, then click Save changes."
+        'Edit names and archive state below. Enable "Show archived projects" to review '
+        'or unarchive hidden items. Check "Confirm delete" for projects to remove, then '
+        "click Save changes."
     )
     edited_df = st.data_editor(
         display_df,
