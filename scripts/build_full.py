@@ -1,9 +1,10 @@
-"""Build a Windows-only zip with an embedded Python runtime.
+"""Build a distributable archive with an embedded/standalone Python runtime.
 
-This script is the moved version of the original `build_zip.py` and is
-intended to be used via the Typer CLI:
+Supports Windows (embedded Python zip) and macOS (python-build-standalone).
+Intended to be used via the Typer CLI:
 
-    uv run handoff build --full
+    uv run handoff build --full              # Windows (default)
+    uv run handoff build --full --platform mac   # macOS
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+import tarfile
 import textwrap
 import tomllib
 import urllib.request
@@ -30,6 +32,14 @@ PY_VERSION = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_in
 EMBED_ZIP_NAME = f"python-{PY_VERSION}-embed-amd64.zip"
 EMBED_ZIP_URL = f"https://www.python.org/ftp/python/{PY_VERSION}/{EMBED_ZIP_NAME}"
 EMBED_ZIP_PATH = BUILD_ROOT / EMBED_ZIP_NAME
+
+PBS_VERSION = "20250317"
+PBS_TAG = f"{PY_VERSION.replace('.', '')}"
+PBS_ARCHIVE_NAME = (
+    f"cpython-{PY_VERSION}+{PBS_VERSION}-aarch64-apple-darwin-install_only_stripped.tar.gz"
+)
+PBS_URL = f"https://github.com/astral-sh/python-build-standalone/releases/download/{PBS_VERSION}/{PBS_ARCHIVE_NAME}"
+PBS_ARCHIVE_PATH = BUILD_ROOT / PBS_ARCHIVE_NAME
 
 
 def _read_project_metadata() -> tuple[str, str]:
@@ -302,36 +312,184 @@ def _make_zip(name: str, version: str) -> Path:
     return dist_path
 
 
-def main() -> None:
-    """Build the full Windows embedded zip distribution for the app."""
+# ---------------------------------------------------------------------------
+# macOS-specific helpers
+# ---------------------------------------------------------------------------
+
+
+def _download_standalone_python_mac() -> None:
+    """Download a python-build-standalone macOS release if not already cached."""
+    BUILD_ROOT.mkdir(parents=True, exist_ok=True)
+    if PBS_ARCHIVE_PATH.exists():
+        return
+    print(f"Downloading standalone Python {PY_VERSION} for macOS from {PBS_URL}...")
+    with urllib.request.urlopen(PBS_URL) as resp, PBS_ARCHIVE_PATH.open("wb") as f:
+        shutil.copyfileobj(resp, f)
+
+
+def _extract_standalone_python_mac() -> None:
+    """Extract the standalone Python tarball into the build directory."""
+    print("Extracting standalone Python for macOS...")
+    PYTHON_DIR.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(PBS_ARCHIVE_PATH, "r:gz") as tf:
+        tf.extractall(PYTHON_DIR)
+
+    extracted = PYTHON_DIR / "python"
+    if extracted.exists() and extracted.is_dir():
+        for child in extracted.iterdir():
+            child.rename(PYTHON_DIR / child.name)
+        extracted.rmdir()
+
+
+def _install_deps_into_mac_python() -> None:
+    """Install runtime dependencies into the standalone macOS Python."""
+    site_packages = (
+        PYTHON_DIR
+        / "lib"
+        / f"python{sys.version_info.major}.{sys.version_info.minor}"
+        / "site-packages"
+    )
+    site_packages.mkdir(parents=True, exist_ok=True)
+    print("Installing dependencies into standalone macOS Python...")
+
+    uv_cmd = shutil.which("uv")
+    if not uv_cmd:
+        raise RuntimeError(
+            "The 'uv' CLI is required to build the distribution. "
+            "Install uv from https://docs.astral.sh/uv/ and retry."
+        )
+
+    python_bin = PYTHON_DIR / "bin" / f"python{sys.version_info.major}.{sys.version_info.minor}"
+    if not python_bin.exists():
+        python_bin = PYTHON_DIR / "bin" / "python3"
+
+    reqs = _get_runtime_deps()
+    for req in reqs:
+        print(f"  - {req}")
+
+    cmd = [
+        uv_cmd,
+        "pip",
+        "install",
+        "--python",
+        str(python_bin),
+        "-t",
+        str(site_packages),
+        "--link-mode=copy",
+        *reqs,
+    ]
+    subprocess.run(cmd, check=True)
+
+
+def _write_handoff_sh() -> None:
+    """Write a handoff.sh launcher for macOS."""
+    print("Writing handoff.sh launcher...")
+    content = textwrap.dedent("""\
+        #!/usr/bin/env bash
+        set -euo pipefail
+
+        SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+        cd "$SCRIPT_DIR"
+
+        export PYTHONHOME="$SCRIPT_DIR/python"
+        export PYTHONPATH="$SCRIPT_DIR:$SCRIPT_DIR/src"
+
+        if [ -d "$SCRIPT_DIR/update" ] && [ "$(ls -A "$SCRIPT_DIR/update")" ]; then
+            echo "Applying update..."
+            cp -R "$SCRIPT_DIR/update/"* "$SCRIPT_DIR/"
+            rm -rf "$SCRIPT_DIR/update"
+            echo "Update applied."
+        fi
+
+        PYVER_MAJOR=%d
+        PYVER_MINOR=%d
+        PYTHON_BIN="$SCRIPT_DIR/python/bin/python${PYVER_MAJOR}.${PYVER_MINOR}"
+        if [ ! -x "$PYTHON_BIN" ]; then
+            PYTHON_BIN="$SCRIPT_DIR/python/bin/python3"
+        fi
+
+        exec "$PYTHON_BIN" -m handoff "$@"
+    """) % (sys.version_info.major, sys.version_info.minor)
+    launcher = APP_BUILD_DIR / "handoff.sh"
+    launcher.write_text(content, encoding="utf-8")
+    launcher.chmod(0o755)
+
+
+def _make_tar_gz(name: str, version: str) -> Path:
+    """Create a .tar.gz archive for the macOS distribution."""
+    tar_name = f"{name}-{version}-macos.tar.gz"
+    dist_path = DIST_ROOT / tar_name
+    if dist_path.exists():
+        dist_path.unlink()
+    print(f"Creating tar.gz at {dist_path}...")
+    tar_root = f"{name}-{version}"
+    with tarfile.open(dist_path, "w:gz") as tf:
+        for path in APP_BUILD_DIR.rglob("*"):
+            if path.is_file() and "__pycache__" not in path.parts:
+                rel_path = path.relative_to(APP_BUILD_DIR)
+                arcname = str(Path(tar_root) / rel_path)
+                info = tf.gettarinfo(str(path), arcname=arcname)
+                if path.name == "handoff.sh" or path.suffix == "" and "bin" in path.parts:
+                    info.mode = 0o755
+                with open(path, "rb") as fobj:
+                    tf.addfile(info, fobj)
+    return dist_path
+
+
+def main(*, platform: str = "windows") -> None:
+    """Build the full embedded/standalone distribution for the app.
+
+    Args:
+        platform: Target platform — ``"windows"`` or ``"mac"``.
+    """
     name, version = _read_project_metadata()
 
-    # Update build directory to include version
     global APP_BUILD_DIR, SRC_PLAIN_DIR, PYTHON_DIR
     APP_BUILD_DIR = BUILD_ROOT / f"{name}-{version}"
     SRC_PLAIN_DIR = APP_BUILD_DIR / "src_plain"
     PYTHON_DIR = APP_BUILD_DIR / "python"
 
-    print(f"Building {name} {version} (Windows embedded Python zip)...")
-    _prepare_dirs()
-    _download_embedded_python()
-    _extract_embedded_python()
-    _install_deps_into_embedded()
-    _copy_app_code()
-    _copy_docs()
-    _obfuscate_app_code_with_pyarmor()
-    _write_handoff_bat()
-    out_zip = _make_zip(name, version)
-    print()
-    print("Build complete.")
-    print(f"Zip file: {out_zip}")
-    print("To run:")
-    print("  1. Extract the zip.")
-    print("  2. Open the extracted folder.")
-    print("  3. Double-click handoff.bat.")
+    if platform == "mac":
+        print(f"Building {name} {version} (macOS standalone Python tar.gz)...")
+        _prepare_dirs()
+        _download_standalone_python_mac()
+        _extract_standalone_python_mac()
+        _install_deps_into_mac_python()
+        _copy_app_code()
+        _copy_docs()
+        _obfuscate_app_code_with_pyarmor()
+        _write_handoff_sh()
+        out = _make_tar_gz(name, version)
+        print()
+        print("Build complete.")
+        print(f"Archive: {out}")
+        print("To run:")
+        print("  1. Extract the archive: tar xzf " + out.name)
+        print(f"  2. cd {name}-{version}")
+        print("  3. ./handoff.sh")
+    else:
+        print(f"Building {name} {version} (Windows embedded Python zip)...")
+        _prepare_dirs()
+        _download_embedded_python()
+        _extract_embedded_python()
+        _install_deps_into_embedded()
+        _copy_app_code()
+        _copy_docs()
+        _obfuscate_app_code_with_pyarmor()
+        _write_handoff_bat()
+        out = _make_zip(name, version)
+        print()
+        print("Build complete.")
+        print(f"Zip file: {out}")
+        print("To run:")
+        print("  1. Extract the zip.")
+        print("  2. Open the extracted folder.")
+        print("  3. Double-click handoff.bat.")
+
     print(
         "Your SQLite database will be stored in your user data directory "
-        "(e.g. %APPDATA%\\handoff\\todo.db)."
+        "(e.g. ~/Library/Application Support/handoff/todo.db on macOS "
+        "or %APPDATA%\\handoff\\todo.db on Windows)."
     )
 
 
