@@ -53,7 +53,7 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
   - **Todos sorted by created time:** The main todos table now always sorts by each row's creation timestamp (oldest first). The manual sort controls have been removed so the list remains stable and predictable as you edit.
 - **Improvement**
   - **Build command rename:** The Windows embedded zip build command has been renamed from `build-zip` to `build-full` in the `handoff` CLI. Use `uv run handoff build-full` to create the full embedded zip; patch builds still use `uv run handoff build-patch`.
-  - **Windows launcher wording:** Docs and updater messages clarify that `run.bat` / `run.ps1` are the launchers for embedded builds.
+  - **Windows launcher wording:** Docs and updater messages clarify that `handoff.bat` is the launcher for embedded builds.
   - **Docs polish:** README and CONTRIBUTING have been refreshed with clearer quickstart, deployment philosophy, macOS planning notes, hyperlinks (including the Gitee repository), and a more explicit release workflow.
   - **macOS planning:** CONTRIBUTING documents the current \"run from source\" story on macOS and outlines a future signed/notarized bundle approach.
   - **Style guidance in one place:** CONTRIBUTING now inlines key code-style expectations (Ruff, Google-style docstrings, pyright) so human contributors do not need to read separate Cursor rule files.
@@ -66,10 +66,10 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
 ## 2026.3.2 [Recommended]
 
 - **Fix**
-  - **Updater WinError 32:** Apply and Restart now creates the backup and extracts the patch to `./update/` in the app, then exits. The launcher (`run.bat` or `run.ps1`) copies from `./update/` into the app root **without** starting Python first, so locked files (e.g. PyArmor runtime `.pyd`) can be replaced. This avoids "The process cannot access the file because it is being used by another process" on Windows.
+  - **Updater WinError 32:** Apply and Restart now creates the backup and extracts the patch to `./update/` in the app, then exits. The launcher (`handoff.bat`) copies from `./update/` into the app root **without** starting Python first, so locked files (e.g. PyArmor runtime `.pyd`) can be replaced. This avoids "The process cannot access the file because it is being used by another process" on Windows.
   - **Backup folder name:** Timestamped backups use `backup/<YYYYMMDD-HHMMSS>-version<version>/` so folders sort by date and the app version is visible. Restore snapshot labels in Settings show date and version.
 - **Improvement**
-  - **Restore from backup:** "Restore and Restart" now stages the selected backup into `./update/` (same as a patch) and exits; run.bat then applies it on the next start. No Python process performs the restore copy, so locked files can be replaced. run.bat is unchanged and treats restore like an update.
+  - **Restore from backup:** "Restore and Restart" now stages the selected backup into `./update/` (same as a patch) and exits; handoff.bat then applies it on the next start. No Python process performs the restore copy, so locked files can be replaced. handoff.bat is unchanged and treats restore like an update.
 - **Feature**
   - **Calendar:** The today column is visually highlighted with a light background so the current day stands out in the week view.
   - **Analytics ideas:** A short brainstorm of future analytics (throughput by helper/project, cycle time, load, deadline adherence, export) is in `docs/analytics-ideas.md`.
@@ -86,12 +86,12 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
 - **Feature**
   - **Projects page:** Removed the "Show archived projects" checkbox; the page now lists only active (non-archived) projects. Added read-only todo statistics next to each project: handoff, done, and canceled counts.
 - **Improvement**
-  - **Update backup and UI:** When you run `run.bat` after staging an update, the app now creates a timestamped backup of overwritten files under `backup/YYYYMMDD-HHMMSS/` before applying the patch (previously no backup was created in the staging flow). The next time you open the **Settings** page, the app shows a one-time message with the backup path; the "Restore from backup" section lists snapshots as before.
+  - **Update backup and UI:** When you run `handoff.bat` after staging an update, the app now creates a timestamped backup of overwritten files under `backup/YYYYMMDD-HHMMSS/` before applying the patch (previously no backup was created in the staging flow). The next time you open the **Settings** page, the app shows a one-time message with the backup path; the "Restore from backup" section lists snapshots as before.
   - **Patch command rename:** The patch build script and CLI command have been renamed from `build-obfuscated-patch` to `build-patch`. Use `uv run handoff build-patch` (after `build-zip`) for patch builds; the script is now `scripts/build_patch.py`.
   - **Performance:** Todos now load projects in one query via `selectinload(Todo.project)` (fixes N+1). The Todos page calls `list_helpers()` once per run and passes the result to filters and column config. Doc markdown (README, RELEASE_NOTES) is cached in session state to avoid repeated file I/O.
   - **DRY:** Shared `handoff.dates.week_bounds(reference)` for Monday–Sunday week logic used by todos deadline presets and the calendar. Updater zip parsing (VERSION + member list) extracted into `_read_patch_members(zf)` and reused by `extract_patch_to_staging` and `apply_patch_zip`.
   - **Readability:** Todos page refactors: `_row_equals` uses `_normalize_str_field` and `_normalize_deadline_for_compare`; `_save_rows` uses `_parse_previous_snapshot`; `_apply_native_filters` delegates to `_apply_dataframe_filters`; `_render_editable_table` uses `_compute_defaults_from_filters` and `_sort_and_build_display_df`.
-  - **Streamlit config launcher:** The app is started via `python -m handoff` so Streamlit options take effect. The launcher applies env vars from `handoff.config` (showErrorDetails, toolbarMode, showSidebarNavigation, showErrorLinks, gatherUsageStats) before starting Streamlit. Both `uv run handoff run` and the embedded build's `run.bat` use this launcher; there is no user-editable config file, and the package is obfuscated with PyArmor at deploy.
+  - **Streamlit config launcher:** The app is started via `python -m handoff` so Streamlit options take effect. The launcher applies env vars from `handoff.config` (showErrorDetails, toolbarMode, showSidebarNavigation, showErrorLinks, gatherUsageStats) before starting Streamlit. Both `uv run handoff run` and the embedded build's `handoff.bat` use this launcher; there is no user-editable config file, and the package is obfuscated with PyArmor at deploy.
 - **Internal**
   - **Docstrings:** Standardized all module and function docstrings to Google style across the codebase. Summary lines, optional extended descriptions, and consistent Args/Returns/Raises (and Yields where relevant) are used in handoff, app, scripts, and tests. Sphinx/reST markup (:mod:, :func:, inline literals) has been removed in favour of plain prose so documentation is tooling-agnostic and readable in source.
   - **Code quality:** Removed unused code (`get_session`, no-op `_init_session_state`), fixed package `__version__` to re-export from `handoff.version`, re-enabled Analytics in the nav, and corrected `_clear_pycache` to only clear `app_root` and `app_root/src` (removed non-existent `pages` path).
@@ -116,12 +116,12 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
 - **Calendar:** Deadline and Update controls for handoff todos are more compact (single row). Week navigation is aligned so "Previous week" lines up with Monday and "Next week" with Sunday. The current day column is labelled "— *Today*".
 - **Todo table limit:** When more than 30 todos match the current filters, the table shows the first 30 and a caption; use filters to narrow the list.
 - **Integration tests:** Added Streamlit AppTest-based smoke tests for the Todos, Projects, Calendar, and Settings pages (each page tested in isolation with a temporary database).
-- **Update flow:** The in-app updater no longer applies the patch in-place. It extracts the patch zip to `./update/` and then exits after 2 seconds. The user runs `run.bat` again; the batch file applies the staged update (copies from `./update/` into the app directory and removes `./update/`) before starting the app, so PyArmor and other in-use files are replaced correctly on the next start.
+- **Update flow:** The in-app updater no longer applies the patch in-place. It extracts the patch zip to `./update/` and then exits after 2 seconds. The user runs `handoff.bat` again; the batch file applies the staged update (copies from `./update/` into the app directory and removes `./update/`) before starting the app, so PyArmor and other in-use files are replaced correctly on the next start.
 - **Database filename:** The app still uses `todo.db` as the default database filename. A future release may rename it to e.g. `handoff.db` with a one-time migration; no change in this release.
 
 ## 2026.2.23 [Recommended]
 
-- **Rebrand to Handoff:** Rename the app to *Handoff* with the tagline “See who’s on the hook across all your projects.” Update all UI titles, sidebar, About section, and docs. CLI command is now `handoff` (was `todo`). User data directory is now `handoff` (e.g. `%APPDATA%\handoff`); `HANDOFF_DB_PATH` is the preferred env var (still support `TODO_APP_DB_PATH` for backward compatibility).
+- **Rebrand to Handoff:** Rename the app to *Handoff* with the tagline “See who’s on the hook across all your projects.” Update all UI titles, sidebar, About section, and docs. CLI command is now `handoff` (was `todo`). User data directory is now `handoff` (e.g. `%APPDATA%\handoff`); `HANDOFF_DB_PATH` is the env var for custom DB locations.
 - **Deadline column format:** Format deadline columns in the UI as “Tue, Mar 4th” (moment-style `ddd, MMM Do`) via a display formatter; keep the date column editable.
 - **Updater PermissionError fix:** When applying a patch zip, skip files that cannot be overwritten (e.g. PyArmor runtime `.pyd` locked by the running process on Windows) instead of failing; report skipped files in the success message and advise restart + re-apply if needed.
 - **Patch version check:** When applying a code-only patch zip, the updater now compares the patch version (from a `VERSION` file in the zip) with the current app version. If the patch is older, applying is blocked with a clear message; a checkbox on the Settings page lets you confirm and apply anyway if you understand the risk.
@@ -224,7 +224,7 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
 - **Updater UX:** The in-app **Update app** panel now blocks applying a patch while there are
  unsaved changes in the main Todos table and shows a clear warning asking you to save first.
 - **Auto-restart flow:** After successfully applying a code-only patch, the app now exits
- automatically so that the `run.bat` window closes; reopening `run.bat` starts the updated
+ automatically so that the `handoff.bat` window closes; reopening `handoff.bat` starts the updated
  version without requiring manual process termination.
 
 ## 2026.2.8 [Recommended]

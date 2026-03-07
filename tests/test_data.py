@@ -1,7 +1,7 @@
 """Tests for data access helpers."""
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, date, datetime
 
 from sqlmodel import select
 
@@ -260,3 +260,210 @@ def test_query_todos_helper_name_filter(session, monkeypatch) -> None:
     results = data.query_todos(helper_name="lic")
     assert len(results) == 1
     assert results[0].helper == "Alice"
+
+
+def test_create_project(session, monkeypatch) -> None:
+    """create_project stores and returns a new project."""
+    _patch_session_context(monkeypatch, session)
+    project = data.create_project("New Project")
+    assert project.id is not None
+    assert project.name == "New Project"
+    assert session.get(Project, project.id) is not None
+
+
+def test_list_projects_excludes_archived_by_default(session, monkeypatch) -> None:
+    """list_projects omits archived projects unless include_archived=True."""
+    _patch_session_context(monkeypatch, session)
+    p1 = Project(name="Active")
+    p2 = Project(name="Old", is_archived=True)
+    session.add_all([p1, p2])
+    session.commit()
+
+    active = data.list_projects()
+    assert len(active) == 1
+    assert active[0].name == "Active"
+
+    all_projects = data.list_projects(include_archived=True)
+    assert len(all_projects) == 2
+
+
+def test_rename_project(session, monkeypatch) -> None:
+    """rename_project updates the project name."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="Before")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    renamed = data.rename_project(p.id, "After")
+    assert renamed is not None
+    assert renamed.name == "After"
+
+
+def test_rename_project_missing_id(session, monkeypatch) -> None:
+    """rename_project returns None for a non-existent id."""
+    _patch_session_context(monkeypatch, session)
+    assert data.rename_project(99999, "No-op") is None
+
+
+def test_delete_todo_success(session, monkeypatch) -> None:
+    """delete_todo removes the todo and returns True."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    t = Todo(project_id=p.id, name="To delete")
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+
+    assert data.delete_todo(t.id) is True
+    assert session.get(Todo, t.id) is None
+
+
+def test_delete_project_missing_id(session, monkeypatch) -> None:
+    """delete_project returns False for a non-existent id."""
+    _patch_session_context(monkeypatch, session)
+    assert data.delete_project(99999) is False
+
+
+def test_archive_and_unarchive_todo(session, monkeypatch) -> None:
+    """archive_todo and unarchive_todo toggle the is_archived flag."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    t = Todo(project_id=p.id, name="Toggle")
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+
+    assert data.archive_todo(t.id) is True
+    session.refresh(t)
+    assert t.is_archived is True
+
+    assert data.unarchive_todo(t.id) is True
+    session.refresh(t)
+    assert t.is_archived is False
+
+
+def test_archive_todo_missing_id(session, monkeypatch) -> None:
+    """archive_todo/unarchive_todo return False for missing ids."""
+    _patch_session_context(monkeypatch, session)
+    assert data.archive_todo(99999) is False
+    assert data.unarchive_todo(99999) is False
+
+
+def test_archive_project_missing_id(session, monkeypatch) -> None:
+    """archive_project/unarchive_project return False for missing ids."""
+    _patch_session_context(monkeypatch, session)
+    assert data.archive_project(99999) is False
+    assert data.unarchive_project(99999) is False
+
+
+def test_update_todo_changes_project_name_status(session, monkeypatch) -> None:
+    """update_todo can change project_id, name, and status."""
+    _patch_session_context(monkeypatch, session)
+    p1 = Project(name="P1")
+    p2 = Project(name="P2")
+    session.add_all([p1, p2])
+    session.commit()
+    session.refresh(p1)
+    session.refresh(p2)
+
+    t = Todo(project_id=p1.id, name="Original", status=TodoStatus.DELEGATED)
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+
+    updated = data.update_todo(t.id, project_id=p2.id, name="Renamed", status=TodoStatus.DONE)
+    assert updated is not None
+    assert updated.project_id == p2.id
+    assert updated.name == "Renamed"
+    assert updated.status == TodoStatus.DONE
+    assert updated.completed_at is not None
+
+
+def test_get_projects_with_todo_summary(session, monkeypatch) -> None:
+    """get_projects_with_todo_summary returns counts per status."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="Summarise")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    session.add(Todo(project_id=p.id, name="A", status=TodoStatus.DELEGATED))
+    session.add(Todo(project_id=p.id, name="B", status=TodoStatus.DELEGATED))
+    session.add(Todo(project_id=p.id, name="C", status=TodoStatus.DONE))
+    session.add(Todo(project_id=p.id, name="D", status=TodoStatus.CANCELED))
+    session.commit()
+
+    summaries = data.get_projects_with_todo_summary()
+    assert len(summaries) == 1
+    s = summaries[0]
+    assert s["total"] == 4
+    assert s["handoff"] == 2
+    assert s["done"] == 1
+    assert s["canceled"] == 1
+
+
+def test_query_todos_completed_start_end(session, monkeypatch) -> None:
+    """query_todos filters by completed_at with completed_start/completed_end."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    t1 = Todo(
+        project_id=p.id,
+        name="Done early",
+        status=TodoStatus.DONE,
+        completed_at=datetime(2026, 1, 5, tzinfo=UTC),
+    )
+    t2 = Todo(
+        project_id=p.id,
+        name="Done later",
+        status=TodoStatus.DONE,
+        completed_at=datetime(2026, 1, 15, tzinfo=UTC),
+    )
+    t3 = Todo(
+        project_id=p.id,
+        name="Not done",
+        status=TodoStatus.DELEGATED,
+    )
+    session.add_all([t1, t2, t3])
+    session.commit()
+
+    results = data.query_todos(
+        completed_start=date(2026, 1, 10),
+        completed_end=date(2026, 1, 20),
+    )
+    assert len(results) == 1
+    assert results[0].name == "Done later"
+
+
+def test_query_todos_completed_end_date_includes_full_day(session, monkeypatch) -> None:
+    """A bare date for completed_end is promoted to end-of-day, including late completions."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    t = Todo(
+        project_id=p.id,
+        name="Done at 11pm",
+        status=TodoStatus.DONE,
+        completed_at=datetime(2026, 1, 15, 23, 30, 0, tzinfo=UTC),
+    )
+    session.add(t)
+    session.commit()
+
+    results = data.query_todos(completed_end=date(2026, 1, 15))
+    assert len(results) == 1
+    assert results[0].name == "Done at 11pm"

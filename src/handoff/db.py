@@ -29,10 +29,10 @@ def _resolve_db_path() -> Path:
     """Resolve the database path, allowing an override via environment variable.
 
     Returns:
-        Path to the SQLite database (from HANDOFF_DB_PATH, TODO_APP_DB_PATH, or default).
+        Path to the SQLite database (from HANDOFF_DB_PATH or default).
 
     """
-    override = os.environ.get("HANDOFF_DB_PATH") or os.environ.get("TODO_APP_DB_PATH")
+    override = os.environ.get("HANDOFF_DB_PATH")
     if override:
         path = Path(override).expanduser().resolve()
         path.parent.mkdir(parents=True, exist_ok=True)

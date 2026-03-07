@@ -1,6 +1,7 @@
 """Data access helpers for projects/todos and common query workflows."""
 
-from datetime import UTC, date, datetime
+import enum
+from datetime import UTC, date, datetime, time
 from typing import Any
 
 from loguru import logger
@@ -10,7 +11,14 @@ from sqlmodel import or_, select
 from handoff.db import session_context
 from handoff.models import Project, Todo, TodoStatus
 
-_UNSET = object()
+
+class _Unset(enum.Enum):
+    """Sentinel distinguishing 'not provided' from None in update functions."""
+
+    UNSET = "UNSET"
+
+
+_UNSET = _Unset.UNSET
 
 
 def _helper_to_db(helper: str | list[str] | None) -> str | None:
@@ -140,12 +148,12 @@ def create_todo(
 def update_todo(
     todo_id: int,
     *,
-    project_id: int | None | object = _UNSET,
-    name: str | None | object = _UNSET,
-    status: TodoStatus | None | object = _UNSET,
-    deadline: date | None | object = _UNSET,
-    helper: str | list[str] | None | object = _UNSET,
-    notes: str | None | object = _UNSET,
+    project_id: int | None | _Unset = _UNSET,
+    name: str | None | _Unset = _UNSET,
+    status: TodoStatus | None | _Unset = _UNSET,
+    deadline: date | None | _Unset = _UNSET,
+    helper: str | list[str] | None | _Unset = _UNSET,
+    notes: str | None | _Unset = _UNSET,
 ) -> Todo | None:
     """Update a todo by id. Only provided fields are updated.
 
@@ -231,6 +239,20 @@ def delete_todo(todo_id: int) -> bool:
         return True
 
 
+def _to_start_of_day(value: date | datetime) -> datetime:
+    """Promote a bare date to start-of-day datetime; pass datetimes through."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, time.min)
+
+
+def _to_end_of_day(value: date | datetime) -> datetime:
+    """Promote a bare date to end-of-day datetime; pass datetimes through."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, time.max)
+
+
 def query_todos(
     *,
     project_ids: list[int] | None = None,
@@ -238,10 +260,17 @@ def query_todos(
     statuses: list[TodoStatus] | None = None,
     start: date | None = None,
     end: date | None = None,
+    completed_start: date | datetime | None = None,
+    completed_end: date | datetime | None = None,
     search_text: str | None = None,
     include_archived: bool = False,
 ) -> list[Todo]:
     """Return todos matching optional unified filters.
+
+    ``completed_start`` and ``completed_end`` accept both ``date`` and
+    ``datetime``.  Bare ``date`` values are promoted to start-of-day /
+    end-of-day so the comparison against ``Todo.completed_at`` (a datetime
+    column) includes the full day.
 
     Args:
         project_ids: Optional project ids to include.
@@ -249,6 +278,8 @@ def query_todos(
         statuses: Optional statuses to include.
         start: Optional inclusive deadline lower bound.
         end: Optional inclusive deadline upper bound.
+        completed_start: Optional inclusive completed_at lower bound.
+        completed_end: Optional inclusive completed_at upper bound.
         search_text: Optional free-text search against name/notes/helper.
         include_archived: When True, include archived todos; otherwise exclude them.
 
@@ -276,6 +307,13 @@ def query_todos(
         if end is not None:
             stmt = stmt.where(Todo.deadline.isnot(None)).where(Todo.deadline <= end)
 
+        if completed_start is not None:
+            cs = _to_start_of_day(completed_start)
+            stmt = stmt.where(Todo.completed_at.isnot(None)).where(Todo.completed_at >= cs)
+        if completed_end is not None:
+            ce = _to_end_of_day(completed_end)
+            stmt = stmt.where(Todo.completed_at.isnot(None)).where(Todo.completed_at <= ce)
+
         normalized_search = (search_text or "").strip()
         if normalized_search:
             like_expr = f"%{normalized_search}%"
@@ -297,6 +335,8 @@ def query_todos(
                 statuses,
                 start is not None,
                 end is not None,
+                completed_start is not None,
+                completed_end is not None,
                 normalized_search,
             ]
         )
@@ -312,6 +352,10 @@ def query_todos(
                 parts.append(f"start={start!s}")
             if end is not None:
                 parts.append(f"end={end!s}")
+            if completed_start is not None:
+                parts.append(f"completed_start={completed_start!s}")
+            if completed_end is not None:
+                parts.append(f"completed_end={completed_end!s}")
             if normalized_search:
                 parts.append(f"search={normalized_search!r}")
             logger.info(

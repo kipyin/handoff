@@ -23,11 +23,20 @@ UPDATE_STAGING_DIR = "update"
 BACKUP_DIR = "backup"
 
 
+def _is_safe_member_path(name: str) -> bool:
+    """Return True if *name* is a safe relative path with no traversal components."""
+    if not name or name.startswith("/") or name.startswith("\\"):
+        return False
+    parts = Path(name).parts
+    return ".." not in parts
+
+
 def _read_patch_members(zf: zipfile.ZipFile) -> tuple[list[str], str | None]:
     """Read patch zip member names and optional VERSION from an open ZipFile.
 
-    Skips directories and VERSION; includes only names that start with ALLOWED_PREFIXES.
-    Logs a warning for any other non-directory entry.
+    Skips directories, VERSION, paths with traversal components (``..``), and
+    entries that don't start with ALLOWED_PREFIXES. Logs a warning for each
+    rejected entry.
 
     Args:
         zf: An open zipfile.ZipFile positioned at the start.
@@ -48,11 +57,68 @@ def _read_patch_members(zf: zipfile.ZipFile) -> tuple[list[str], str | None]:
             continue
         if name == "VERSION":
             continue
+        if not _is_safe_member_path(name):
+            logger.warning("Skipping unsafe path in patch zip: {}", name)
+            continue
         if name.startswith(ALLOWED_PREFIXES):
             members.append(name)
         else:
             logger.warning("Skipping unexpected path in patch zip: {}", name)
     return members, target_version
+
+
+def _extract_zip_to_dir(
+    zf: zipfile.ZipFile, members: list[str], target_dir: Path
+) -> tuple[list[str], list[str]]:
+    """Extract named zip members into *target_dir*, preserving sub-paths.
+
+    Continues past per-file failures so callers can report partial results.
+
+    Returns:
+        (extracted, failed) — lists of member names that succeeded and failed.
+
+    """
+    resolved_root = target_dir.resolve()
+    target_dir.mkdir(parents=True, exist_ok=True)
+    extracted: list[str] = []
+    failed: list[str] = []
+    for name in members:
+        dest = target_dir / name
+        if not dest.resolve().is_relative_to(resolved_root):
+            logger.warning("Path escapes target dir, skipping: {}", name)
+            failed.append(name)
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with zf.open(name) as src, dest.open("wb") as dst:
+                shutil.copyfileobj(src, dst)
+            extracted.append(name)
+        except (PermissionError, OSError) as e:
+            logger.warning("Could not extract {} to {}: {}", name, dest, e)
+            failed.append(name)
+    return extracted, failed
+
+
+def _backup_existing_files(paths: list[str], app_root: Path, backup_root: Path) -> list[str]:
+    """Copy files from *app_root* into *backup_root* for each path that exists.
+
+    Returns:
+        List of paths that were successfully backed up.
+
+    """
+    backed_up: list[str] = []
+    for name in paths:
+        source = app_root / name
+        if not source.exists():
+            continue
+        dest = backup_root / name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(source, dest)
+            backed_up.append(name)
+        except (PermissionError, OSError) as e:
+            logger.warning("Could not backup {}: {}", name, e)
+    return backed_up
 
 
 def _get_app_root() -> Path:
@@ -93,7 +159,7 @@ def stage_patch_with_backup(
     first; the set of paths to backup is derived from the contents of update/
     (paths that will overwrite app_root when the launcher runs). Backup content
     is always copied from app_root (current installed files), not from update/.
-    The launcher (run.bat or run.ps1) later copies update/ into the app root without
+    The launcher (handoff.bat) later copies update/ into the app root without
     starting Python, avoiding WinError 32 on locked .pyd files.
 
     Args:
@@ -122,38 +188,20 @@ def stage_patch_with_backup(
         if not members:
             return "No applicable files found in patch zip."
 
-        # Extract first: zip -> update/ (staging). Launcher will copy update/ -> app_root later.
         staging = app_root / UPDATE_STAGING_DIR
-        staging.mkdir(parents=True, exist_ok=True)
-        for name in members:
-            target_path = staging / name
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                with zf.open(name) as src, target_path.open("wb") as dst:
-                    shutil.copyfileobj(src, dst)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not extract {} to staging: {}", name, e)
-                return f"Failed to extract to ./{UPDATE_STAGING_DIR}: {e}"
+        extracted, extract_failed = _extract_zip_to_dir(zf, members, staging)
+        if not extracted:
+            return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+        if extract_failed:
+            logger.warning("Some files could not be staged: {}", extract_failed)
 
-    logger.info("Patch unzipped to {} containing: {}", staging, members)
+    logger.info("Patch unzipped to {} containing: {}", staging, extracted)
 
-    # Backup after extraction: list paths from update/ (what will be overwritten);
-    # copy from app_root only (current installed files).
     paths_to_backup = [p.relative_to(staging).as_posix() for p in staging.rglob("*") if p.is_file()]
     backup_dirname = _backup_dir_name(app_version)
     backup_root = app_root / BACKUP_DIR / backup_dirname
     backup_root.mkdir(parents=True, exist_ok=True)
-    backed_up: list[str] = []
-    for name in paths_to_backup:
-        target_path = app_root / name
-        if target_path.exists():
-            backup_path = backup_root / name
-            backup_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                shutil.copy2(target_path, backup_path)
-                backed_up.append(name)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not backup {}: {}", name, e)
+    backed_up = _backup_existing_files(paths_to_backup, app_root, backup_root)
     logger.info("Backup of {} created at {}", backed_up, backup_root)
 
     sentinel = app_root / LAST_UPDATE_BACKUP_FILE
@@ -167,15 +215,18 @@ def stage_patch_with_backup(
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)
-        return (
+        msg = (
             f"Update files are ready (target version: {target_version}). "
             "Close in 2s. "
-            "Run run.bat or run.ps1 again to complete the update."
+            "Run handoff.bat again to complete the update."
         )
-    logger.info("Staged patch in {}", staging)
-    return (
-        "Update files are ready. Close in 2s. Run run.bat or run.ps1 again to complete the update."
-    )
+    else:
+        logger.info("Staged patch in {}", staging)
+        msg = "Update files are ready. Close in 2s. Run handoff.bat again to complete the update."
+
+    if extract_failed:
+        msg += f" Warning: {len(extract_failed)} file(s) could not be staged."
+    return msg
 
 
 def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) -> str:
@@ -205,29 +256,29 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
             return "No applicable files found in patch zip."
 
         staging = app_root / UPDATE_STAGING_DIR
-        staging.mkdir(parents=True, exist_ok=True)
-        for name in members:
-            target_path = staging / name
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                with zf.open(name) as src, target_path.open("wb") as dst:
-                    shutil.copyfileobj(src, dst)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not extract {} to staging: {}", name, e)
-                return f"Failed to extract to ./{UPDATE_STAGING_DIR}: {e}"
+        extracted, extract_failed = _extract_zip_to_dir(zf, members, staging)
+        if not extracted:
+            return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+        if extract_failed:
+            logger.warning("Some files could not be staged: {}", extract_failed)
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)
-        return (
+        msg = (
             f"Update files are ready (target version: {target_version}). "
             "The app will close in 2 seconds. "
-            "Please run run.bat or run.ps1 again to complete the update."
+            "Please run handoff.bat again to complete the update."
         )
-    logger.info("Staged patch in {}", staging)
-    return (
-        "Update files are ready. The app will close in 2 seconds. "
-        "Please run run.bat or run.ps1 again to complete the update."
-    )
+    else:
+        logger.info("Staged patch in {}", staging)
+        msg = (
+            "Update files are ready. The app will close in 2 seconds. "
+            "Please run handoff.bat again to complete the update."
+        )
+
+    if extract_failed:
+        msg += f" Warning: {len(extract_failed)} file(s) could not be staged."
+    return msg
 
 
 def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
@@ -252,36 +303,17 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
         if not members:
             return "No applicable files found in patch zip."
 
-        skipped: list[str] = []
-
-        # Create a timestamped backup with version in the folder name.
         from handoff.version import __version__ as app_version
 
         backup_dirname = _backup_dir_name(app_version)
         backup_root = app_root / BACKUP_DIR / backup_dirname
-        for name in members:
-            target_path = app_root / name
-            if target_path.exists():
-                backup_path = backup_root / name
-                backup_path.parent.mkdir(parents=True, exist_ok=True)
-                try:
-                    shutil.copy2(target_path, backup_path)
-                except (PermissionError, OSError) as e:
-                    logger.warning("Could not backup {}: {}", name, e)
-                    skipped.append(name)
+        backed_up = set(_backup_existing_files(members, app_root, backup_root))
+        backup_failed = {m for m in members if m not in backed_up and (app_root / m).exists()}
 
-        for name in members:
-            target_path = app_root / name
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                with zf.open(name) as src, target_path.open("wb") as dst:
-                    shutil.copyfileobj(src, dst)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not extract {}: {}", name, e)
-                if name not in skipped:
-                    skipped.append(name)
+        _extracted, extract_failed_list = _extract_zip_to_dir(zf, members, app_root)
 
     _clear_pycache(app_root)
+    skipped = backup_failed | set(extract_failed_list)
 
     if target_version:
         logger.info("Applied patch to update app to version {}", target_version)
@@ -349,17 +381,8 @@ def apply_staged_update(app_root: Path | None = None) -> str | None:
 
     backup_dirname = _backup_dir_name(app_version)
     backup_root = app_root / BACKUP_DIR / backup_dirname
-
-    for rel in members:
-        name = rel.as_posix()
-        target_path = app_root / name
-        if target_path.exists():
-            backup_path = backup_root / name
-            backup_path.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                shutil.copy2(target_path, backup_path)
-            except (PermissionError, OSError) as e:
-                logger.warning("Could not backup {}: {}", name, e)
+    member_names = [rel.as_posix() for rel in members]
+    _backup_existing_files(member_names, app_root, backup_root)
 
     for rel in members:
         name = rel.as_posix()
@@ -455,7 +478,7 @@ def stage_restore_from_snapshot(
     """Stage a backup snapshot into update/ for the launcher to apply on next start.
 
     Copies the snapshot contents into app_root/update/ (clearing update/ first).
-    The launcher (run.bat or run.ps1) then copies update/ into the app root and removes update/,
+    The launcher (handoff.bat) then copies update/ into the app root and removes update/,
     so no Python process touches the app root and locked files (e.g. PyArmor .pyd) can be replaced.
 
     Args:
@@ -496,12 +519,10 @@ def stage_restore_from_snapshot(
             logger.warning("Could not stage {} from snapshot: {}", rel, e)
 
     logger.info("Staged {} files to {}: {}", len(staged), staging, staged)
-    logger.info(
-        "Everything is in place and ready to restore. Run run.bat or run.ps1 again to apply."
-    )
+    logger.info("Everything is in place and ready to restore. Run handoff.bat again to apply.")
     logger.info("Program about to shut off in 2 seconds.")
 
-    return "Backup staged to ./update/. Close in 2s. Run run.bat or run.ps1 again to restore."
+    return "Backup staged to ./update/. Close in 2s. Run handoff.bat again to restore."
 
 
 def _restore_backup_snapshot(snapshot: Path, app_root: Path) -> str:
@@ -539,7 +560,7 @@ def _schedule_shutdown(delay_seconds: float = 2.0) -> None:
     """Schedule a hard process exit after a short delay.
 
     This is used after applying a patch so that the Streamlit process – and any wrapper
-    like `run.bat` – terminates automatically without requiring manually closing
+    like `handoff.bat` – terminates automatically without requiring manually closing
     the terminal window.
 
     Args:
@@ -632,7 +653,7 @@ def render_update_panel(app_version: str) -> None:
     st.markdown("### App updates")
     st.caption(
         "Upload a code-only patch zip (e.g. from a Handoff release). The patch is extracted to "
-        "./update/ and the app will close in 2 seconds. Run run.bat or run.ps1 again to apply the "
+        "./update/ and the app will close in 2 seconds. Run handoff.bat again to apply the "
         "update and start the app."
     )
 
@@ -694,7 +715,7 @@ def render_update_panel(app_version: str) -> None:
     st.caption(
         "Restore code from a timestamped backup created when applying a patch. "
         "Pick a snapshot and click Restore and Restart; the backup is staged to ./update/. "
-        "The app will close. Run run.bat or run.ps1 again to apply the restore "
+        "The app will close. Run handoff.bat again to apply the restore "
         "(same as updating)."
     )
     snapshots = _iter_backup_snapshots(app_root)

@@ -15,8 +15,7 @@ uv run handoff
 ```
 
 You get a local, single-user to-do app backed by SQLite, with a unified view
-across projects and helpers, plus a simple weekly calendar, analytics ideas, and
-an in-app update flow.
+across projects and helpers, and an in-app update flow.
 
 ## Who is this for?
 
@@ -83,11 +82,10 @@ To keep the app simple and robust, some things are intentionally out of scope:
      From/To dates).
    Sort by clicking column headers. Edit inline and click **Save changes** to
    create, update, or delete todos.
-4. **Calendar view** — A weekly calendar groups todos by deadline day and
-   highlights today so you can see what is coming up.
-5. **Analytics ideas** — A lightweight Analytics page surfaces ideas like
-   throughput by helper or project, cycle time, and helper load.
-6. **Updates and backups** — An in-app Settings page lets you apply code-only
+4. **Dashboard** — At-a-glance metrics: open handoffs, completed this week vs
+   last, median cycle time, and on-time rate. Plus a weekly throughput chart
+   and current helper load.
+5. **Updates and backups** — An in-app Settings page lets you apply code-only
    patch zips and restore from backups created before each update.
 
 ## Where your data lives
@@ -95,8 +93,12 @@ To keep the app simple and robust, some things are intentionally out of scope:
 By default, the SQLite database is stored in your per-user data directory so app
 updates do not overwrite your data (for example on Windows:
 `%APPDATA%\handoff\todo.db`). You can override the location by setting the
-`HANDOFF_DB_PATH` environment variable (or `TODO_APP_DB_PATH` for backward
-compatibility) before starting the app.
+`HANDOFF_DB_PATH` environment variable before starting the app.
+
+> **Migrating from `TODO_APP_DB_PATH`:** The legacy `TODO_APP_DB_PATH`
+> environment variable is no longer recognised. If you were using it to point
+> the app at a custom database location, rename the variable to
+> `HANDOFF_DB_PATH` (same value) and restart the app.
 
 `app.py` is intentionally kept thin and delegates version handling to
 `src/handoff/version.py`, which exposes a single `__version__` constant used by
@@ -156,7 +158,7 @@ uv run handoff build-full
 ```
 
 This produces a zip under `dist/` (named like
-`handoff-<version>-windows-embed.zip`). Extract it, then double-click `run.bat`
+`handoff-<version>-windows-embed.zip`). Extract it, then double-click `handoff.bat`
 to start the app. The SQLite database is still stored in your user data
 directory, not inside the extracted folder.
 
@@ -172,13 +174,12 @@ flow:
 ### Updating the app (user flow)
 
 1. Get a patch zip (for example from a Handoff release or your team).
-2. Run the app as usual (for example double‑click `run.bat` or run `run.ps1` in
-   PowerShell).
+2. Run the app as usual (for example double‑click `handoff.bat`).
 3. In the app, open **Settings** → **Update app**, upload the patch zip, and
    click **Apply and Restart**.
 4. The app creates a backup of files that will be overwritten, extracts the
    patch to `./update/`, then exits after a few seconds.
-5. Run the launcher again (`run.bat` or `run.ps1`). It copies the update from
+5. Run the launcher again (`handoff.bat`). It copies the update from
    `./update/` into the app folder (without starting Python first, so locked
    files can be replaced), removes `./update/`, and starts the app. You are now
    on the new version.

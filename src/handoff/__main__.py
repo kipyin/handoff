@@ -3,7 +3,7 @@
 Run with: python -m handoff
 
 This ensures STREAMLIT_* env vars are set before the Streamlit process starts,
-so options in handoff.config take effect. Used by the embedded build (run.bat)
+so options in handoff.config take effect. Used by the embedded build (handoff.bat)
 and can be used for dev: uv run python -m handoff
 """
 

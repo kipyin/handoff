@@ -11,7 +11,6 @@ import streamlit as st
 from .db import DatabaseInitializationError, init_db
 from .logging import configure_logging
 from .pages.analytics import render_analytics_page as _render_analytics_page_impl
-from .pages.calendar import render_calendar_page as _render_calendar_page_impl
 from .pages.docs import render_docs_page as _render_docs_page_impl
 from .pages.projects import render_projects_page as _render_projects_page_impl
 from .pages.settings import render_settings_page as _render_settings_page_impl
@@ -52,13 +51,8 @@ def render_projects_page() -> None:
     _render_projects_page_impl()
 
 
-def render_calendar_page() -> None:
-    """Render the calendar/weekly view page."""
-    _render_calendar_page_impl()
-
-
 def render_analytics_page() -> None:
-    """Render the analytics page."""
+    """Render the main dashboard page."""
     _render_analytics_page_impl()
 
 
@@ -76,7 +70,6 @@ __all__ = [
     "setup",
     "render_todos_page",
     "render_projects_page",
-    "render_calendar_page",
     "render_analytics_page",
     "render_settings_page",
     "render_docs_page",
