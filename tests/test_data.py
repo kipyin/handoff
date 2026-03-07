@@ -1,7 +1,7 @@
 """Tests for data access helpers."""
 
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlmodel import select
 
@@ -260,3 +260,34 @@ def test_query_todos_helper_name_filter(session, monkeypatch) -> None:
     results = data.query_todos(helper_name="lic")
     assert len(results) == 1
     assert results[0].helper == "Alice"
+
+
+def test_query_todos_accepts_datetime_bounds(session, monkeypatch) -> None:
+    """query_todos accepts datetime start/end values used by analytics."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    t_in = Todo(
+        project_id=p.id,
+        name="In range",
+        status=TodoStatus.DELEGATED,
+        deadline=date(2026, 1, 10),
+    )
+    t_out = Todo(
+        project_id=p.id,
+        name="Out of range",
+        status=TodoStatus.DELEGATED,
+        deadline=date(2026, 1, 20),
+    )
+    session.add_all([t_in, t_out])
+    session.commit()
+
+    results = data.query_todos(
+        start=datetime(2026, 1, 5, 0, 0, 0),
+        end=datetime(2026, 1, 15, 23, 59, 59),
+    )
+
+    assert len(results) == 1
+    assert results[0].name == "In range"

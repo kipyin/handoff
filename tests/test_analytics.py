@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, time
 
 import pandas as pd
 import pytest
 
+from handoff.models import TodoStatus
 from handoff.pages.analytics import (
     _build_done_dataframe,
     _compute_cycle_time_stats,
@@ -151,3 +152,25 @@ def test_build_done_dataframe_with_todos(monkeypatch: pytest.MonkeyPatch) -> Non
     assert result.iloc[0]["name"] == "Done task"
     assert result.iloc[0]["helper"] == "Alice"
     assert result.iloc[0]["project"] == "Proj"
+
+
+def test_build_done_dataframe_passes_full_day_datetime_range(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_build_done_dataframe sends inclusive datetime bounds to query_todos."""
+    captured: dict[str, object] = {}
+
+    def _fake_query_todos(**kwargs):
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("handoff.pages.analytics.query_todos", _fake_query_todos)
+    start = date(2026, 1, 1)
+    end = date(2026, 1, 31)
+
+    _build_done_dataframe(start, end)
+
+    assert captured["statuses"] == [TodoStatus.DONE]
+    assert captured["start"] == datetime.combine(start, time.min)
+    assert captured["end"] == datetime.combine(end, time.max)
+    assert captured["include_archived"] is False
