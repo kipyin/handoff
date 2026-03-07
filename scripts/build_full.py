@@ -34,12 +34,15 @@ EMBED_ZIP_URL = f"https://www.python.org/ftp/python/{PY_VERSION}/{EMBED_ZIP_NAME
 EMBED_ZIP_PATH = BUILD_ROOT / EMBED_ZIP_NAME
 
 PBS_VERSION = "20250317"
-PBS_TAG = f"{PY_VERSION.replace('.', '')}"
-PBS_ARCHIVE_NAME = (
-    f"cpython-{PY_VERSION}+{PBS_VERSION}-aarch64-apple-darwin-install_only_stripped.tar.gz"
-)
-PBS_URL = f"https://github.com/astral-sh/python-build-standalone/releases/download/{PBS_VERSION}/{PBS_ARCHIVE_NAME}"
-PBS_ARCHIVE_PATH = BUILD_ROOT / PBS_ARCHIVE_NAME
+
+
+def _mac_archive_name() -> str:
+    """Return the python-build-standalone archive name for the current macOS architecture."""
+    import platform as _platform
+
+    machine = _platform.machine()
+    arch = "aarch64" if machine == "arm64" else "x86_64"
+    return f"cpython-{PY_VERSION}+{PBS_VERSION}-{arch}-apple-darwin-install_only_stripped.tar.gz"
 
 
 def _read_project_metadata() -> tuple[str, str]:
@@ -320,10 +323,13 @@ def _make_zip(name: str, version: str) -> Path:
 def _download_standalone_python_mac() -> None:
     """Download a python-build-standalone macOS release if not already cached."""
     BUILD_ROOT.mkdir(parents=True, exist_ok=True)
-    if PBS_ARCHIVE_PATH.exists():
+    archive_name = _mac_archive_name()
+    archive_path = BUILD_ROOT / archive_name
+    if archive_path.exists():
         return
-    print(f"Downloading standalone Python {PY_VERSION} for macOS from {PBS_URL}...")
-    with urllib.request.urlopen(PBS_URL) as resp, PBS_ARCHIVE_PATH.open("wb") as f:
+    url = f"https://github.com/astral-sh/python-build-standalone/releases/download/{PBS_VERSION}/{archive_name}"
+    print(f"Downloading standalone Python {PY_VERSION} for macOS from {url}...")
+    with urllib.request.urlopen(url) as resp, archive_path.open("wb") as f:
         shutil.copyfileobj(resp, f)
 
 
@@ -331,8 +337,9 @@ def _extract_standalone_python_mac() -> None:
     """Extract the standalone Python tarball into the build directory."""
     print("Extracting standalone Python for macOS...")
     PYTHON_DIR.mkdir(parents=True, exist_ok=True)
-    with tarfile.open(PBS_ARCHIVE_PATH, "r:gz") as tf:
-        tf.extractall(PYTHON_DIR)
+    archive_path = BUILD_ROOT / _mac_archive_name()
+    with tarfile.open(archive_path, "r:gz") as tf:
+        tf.extractall(PYTHON_DIR, filter="data")
 
     extracted = PYTHON_DIR / "python"
     if extracted.exists() and extracted.is_dir():

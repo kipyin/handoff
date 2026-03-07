@@ -7,7 +7,6 @@ one place.
 
 from __future__ import annotations
 
-import csv
 import io
 import json
 import platform
@@ -91,51 +90,17 @@ def _render_send_log_section() -> None:
     )
 
 
-def _parse_csv_to_payload(text: str) -> dict[str, Any]:
-    """Build an import payload from a CSV string (todos-only, projects auto-created)."""
-    reader = csv.DictReader(io.StringIO(text))
-    todos_raw: list[dict[str, Any]] = []
-    project_ids: dict[int, bool] = {}
-    for row in reader:
-        pid = int(row["project_id"])
-        project_ids[pid] = row.get("is_archived", "False").lower() in ("true", "1")
-        todos_raw.append(
-            {
-                "id": int(row["id"]),
-                "project_id": pid,
-                "name": row["name"],
-                "status": row.get("status", "handoff"),
-                "deadline": row.get("deadline") or None,
-                "helper": row.get("helper") or None,
-                "notes": row.get("notes") or None,
-                "created_at": row.get("created_at", datetime.now().isoformat()),
-                "completed_at": row.get("completed_at") or None,
-                "is_archived": row.get("is_archived", "False").lower() in ("true", "1"),
-            }
-        )
-    projects_raw = [
-        {
-            "id": pid,
-            "name": f"Project {pid}",
-            "created_at": datetime.now().isoformat(),
-            "is_archived": archived,
-        }
-        for pid, archived in project_ids.items()
-    ]
-    return {"projects": projects_raw, "todos": todos_raw}
-
-
 def _render_data_import_section() -> None:
-    """Render JSON and CSV import controls for restoring data from a backup."""
+    """Render JSON import controls for restoring data from a backup."""
     st.markdown("### Data import")
     st.caption(
-        "Restore from a JSON or CSV backup. **This will overwrite all existing data** "
+        "Restore from a JSON backup. **This will overwrite all existing data** "
         "(projects and todos)."
     )
 
     uploaded = st.file_uploader(
-        "Upload a .json or .csv backup file",
-        type=["json", "csv"],
+        "Upload a .json backup file",
+        type=["json"],
         key="settings_import_file",
     )
     if uploaded is None:
@@ -143,10 +108,7 @@ def _render_data_import_section() -> None:
 
     try:
         raw_text = uploaded.getvalue().decode("utf-8")
-        if uploaded.name.endswith(".csv"):
-            payload = _parse_csv_to_payload(raw_text)
-        else:
-            payload = json.loads(raw_text)
+        payload = json.loads(raw_text)
 
         if "projects" not in payload or "todos" not in payload:
             st.error("Invalid file: expected top-level 'projects' and 'todos' keys.")

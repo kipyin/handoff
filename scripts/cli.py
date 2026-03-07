@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 import typer
 from rich.console import Console
 
@@ -11,10 +13,23 @@ from . import build_patch as build_patch_module
 from . import bump_version as bump_version_module
 from .subprocess_utils import run_cmd
 
+
+class BuildPlatform(StrEnum):
+    """Supported target platforms for full builds."""
+
+    WINDOWS = "windows"
+    MAC = "mac"
+
+
 app = typer.Typer(help="Handoff development and build commands.")
 console = Console()
 
 EXTRA_ARGS_ARG = typer.Argument(None)
+PLATFORM_OPT = typer.Option(
+    BuildPlatform.WINDOWS,
+    "--platform",
+    help="Target platform for --full builds: 'windows' or 'mac'.",
+)
 
 
 def _format_and_lint(extra_args: list[str] | None = None) -> None:
@@ -126,17 +141,13 @@ def build(
         False, "--full", help="Build a full embedded/standalone distribution."
     ),
     patch: bool = typer.Option(False, "--patch", help="Build a patch zip from the build output."),
-    platform: str = typer.Option(
-        "windows",
-        "--platform",
-        help="Target platform for --full builds: 'windows' or 'mac'.",
-    ),
+    platform: BuildPlatform = PLATFORM_OPT,
 ) -> None:
     """Build the application (full distribution or patch)."""
     if full:
-        label = "macOS standalone" if platform == "mac" else "Windows embedded zip"
+        label = "macOS standalone" if platform == BuildPlatform.MAC else "Windows embedded zip"
         console.print(f"Building full {label} distribution...", style="bold cyan")
-        build_full_module.main(platform=platform)
+        build_full_module.main(platform=platform.value)
     elif patch:
         path = build_patch_module.build_patch()
         console.print(f"Patch zip created at {path}", style="bold green")
@@ -157,9 +168,9 @@ def bump(
 @app.command("db-path")
 def db_path() -> None:
     """Print the resolved SQLite database path."""
-    from handoff.db import _DB_PATH
+    from handoff.db import get_db_path
 
-    console.print(str(_DB_PATH))
+    console.print(str(get_db_path()))
 
 
 def main() -> None:

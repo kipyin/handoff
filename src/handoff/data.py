@@ -576,11 +576,14 @@ def import_payload(data_payload: dict[str, Any]) -> None:
             session.add(project)
 
         for t in todos_raw:
+            raw_status = t["status"]
+            if raw_status == "delegated":
+                raw_status = "handoff"
             todo = Todo(
                 id=t["id"],
                 project_id=t["project_id"],
                 name=t["name"],
-                status=TodoStatus(t["status"]),
+                status=TodoStatus(raw_status),
                 deadline=(date.fromisoformat(t["deadline"]) if t.get("deadline") else None),
                 helper=t.get("helper"),
                 notes=t.get("notes"),

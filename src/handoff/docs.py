@@ -31,8 +31,8 @@ def read_markdown_from_app_root(name: str) -> str:
 def get_readme_intro() -> str:
     """Return the introductory paragraphs from README.md (before the second ``##`` heading).
 
-    Falls back to a short generic description if the README cannot be loaded or
-    parsed.
+    If the README cannot be loaded, the placeholder message from
+    :func:`read_markdown_from_app_root` is returned instead.
     """
     content = read_markdown_from_app_root("README.md")
     parts = re.split(r"^## ", content, maxsplit=2, flags=re.MULTILINE)
