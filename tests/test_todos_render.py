@@ -166,7 +166,13 @@ class TestRememberedDefaults:
             lambda df: (df.copy(), df.copy()),
         )
         monkeypatch.setattr("handoff.pages.todos.st.caption", lambda *a, **kw: None)
-        monkeypatch.setattr("handoff.pages.todos.st.data_editor", lambda *a, **kw: None)
+
+        editor_calls = []
+
+        def capture_data_editor(*args, **kwargs):
+            editor_calls.append(kwargs)
+
+        monkeypatch.setattr("handoff.pages.todos.st.data_editor", capture_data_editor)
 
         monkeypatch.setattr(
             "streamlit.session_state",
@@ -176,16 +182,16 @@ class TestRememberedDefaults:
             },
         )
 
-        defaults_captured = {}
-
-        def fake_persist(state, display_df=None, projects=None, defaults=None, key_prefix=None):
-            defaults_captured["defaults"] = defaults
-
-        monkeypatch.setattr("handoff.pages.todos._persist_changes", fake_persist)
-
         _render_editable_table(
             projects=[p1], helper_options=[], key_prefix="test", context_label="test"
         )
+
+        assert len(editor_calls) == 1
+        column_config = editor_calls[0]["column_config"]
+        project_col = column_config["project"]
+        helper_col = column_config["helper"]
+        assert project_col["default"] == "Work"
+        assert helper_col["default"] == "Bob"
 
 
 class TestPersistChangesAddition:
