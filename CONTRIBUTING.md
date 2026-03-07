@@ -45,12 +45,12 @@ are the canonical day-to-day commands for local development and CI:
 - `uv run handoff typecheck` – run type checking with pyright over `src/` and `scripts/`.
 - `uv run handoff test` – run the pytest suite.
 - `uv run handoff ci` – run lint, format, type checking, and tests together.
-- `uv run handoff build-full` – build the embedded Windows zip (obfuscates `src/handoff` with PyArmor).
-- `uv run handoff build-patch` – build a patch zip from the obfuscated build (run after `build-full`).
-- `uv run handoff bump-version 2026.M.P` – bump version in `pyproject.toml` and `handoff.version`.
+- `uv run handoff build --full` – build the embedded Windows zip (obfuscates `src/handoff` with PyArmor).
+- `uv run handoff build --patch` – build a patch zip from the obfuscated build (run after `build --full`).
+- `uv run handoff bump 2026.M.P` – bump version in `pyproject.toml` and `handoff.version`.
 
 Version sync: `src/handoff/version.py` and `pyproject.toml` must match;
-`tests/test_version_sync.py` enforces this. Use `bump-version` to update both.
+`tests/test_version_sync.py` enforces this. Use `bump` to update both.
 
 Project layout: `app.py` (entrypoint), `src/handoff/` (package), `pages/`
 (legacy), `tests/`.
@@ -134,7 +134,7 @@ When preparing a release (for example `2026.3.4`), use this checklist:
 2. Ensure dependencies are in sync:
    - `uv sync` (if dependencies changed).
 3. Bump the version using the CLI helper:
-   - `uv run handoff bump-version 2026.3.4`
+   - `uv run handoff bump 2026.3.4`
    - This keeps `pyproject.toml` and `src/handoff/version.py` in sync.
 4. Update release notes:
    - Add `## 2026.3.4 [Tag]` to `RELEASE_NOTES.md`, using
@@ -144,8 +144,8 @@ When preparing a release (for example `2026.3.4`), use this checklist:
 6. Run checks and tests:
    - `uv run handoff ci` (or `check`, `typecheck`, and `test` separately).
 7. Build artefacts (for Windows distribution):
-   - `uv run handoff build-full`
-   - `uv run handoff build-patch`
+   - `uv run handoff build --full`
+   - `uv run handoff build --patch`
 8. Merge back into `main` once everything passes and artefacts look correct.
 
 ### macOS support (planning)
