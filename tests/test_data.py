@@ -467,3 +467,83 @@ def test_query_todos_completed_end_date_includes_full_day(session, monkeypatch) 
     results = data.query_todos(completed_end=date(2026, 1, 15))
     assert len(results) == 1
     assert results[0].name == "Done at 11pm"
+
+
+# ---------------------------------------------------------------------------
+# import_payload tests
+# ---------------------------------------------------------------------------
+
+
+def test_import_payload_replaces_existing_data(session, monkeypatch) -> None:
+    """import_payload wipes existing rows and inserts from the payload."""
+    _patch_session_context(monkeypatch, session)
+
+    old_project = Project(name="Old")
+    session.add(old_project)
+    session.commit()
+    session.refresh(old_project)
+    session.add(Todo(project_id=old_project.id, name="old todo"))
+    session.commit()
+
+    payload = {
+        "projects": [
+            {
+                "id": 100,
+                "name": "Imported",
+                "created_at": "2026-03-01T00:00:00",
+                "is_archived": False,
+            },
+        ],
+        "todos": [
+            {
+                "id": 200,
+                "project_id": 100,
+                "name": "Imported todo",
+                "status": "handoff",
+                "deadline": "2026-04-01",
+                "helper": "Alice",
+                "notes": "some notes",
+                "created_at": "2026-03-01T00:00:00",
+                "completed_at": None,
+                "is_archived": False,
+            },
+        ],
+    }
+    data.import_payload(payload)
+
+    projects = list(session.exec(select(Project)).all())
+    todos = list(session.exec(select(Todo)).all())
+    assert len(projects) == 1
+    assert projects[0].name == "Imported"
+    assert len(todos) == 1
+    assert todos[0].name == "Imported todo"
+    assert todos[0].helper == "Alice"
+
+
+def test_import_payload_empty(session, monkeypatch) -> None:
+    """import_payload with empty lists clears all data."""
+    _patch_session_context(monkeypatch, session)
+
+    p = Project(name="Will be gone")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+    session.add(Todo(project_id=p.id, name="Also gone"))
+    session.commit()
+
+    data.import_payload({"projects": [], "todos": []})
+
+    assert list(session.exec(select(Project)).all()) == []
+    assert list(session.exec(select(Todo)).all()) == []
+
+
+def test_import_payload_missing_key_raises(session, monkeypatch) -> None:
+    """import_payload raises KeyError when required keys are missing."""
+    _patch_session_context(monkeypatch, session)
+    import pytest
+
+    with pytest.raises(KeyError):
+        data.import_payload({"projects": []})
+
+    with pytest.raises(KeyError):
+        data.import_payload({"todos": []})

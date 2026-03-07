@@ -542,6 +542,64 @@ def unarchive_todo(todo_id: int) -> bool:
         return True
 
 
+def import_payload(data_payload: dict[str, Any]) -> None:
+    """Replace all projects and todos with the contents of *data_payload*.
+
+    The payload must match the schema produced by :func:`get_export_payload`
+    (keys ``"projects"`` and ``"todos"``).  The operation runs inside a single
+    transaction: existing rows are deleted, then new rows are inserted.
+
+    Args:
+        data_payload: Dict with ``"projects"`` and ``"todos"`` lists.
+
+    Raises:
+        KeyError: If ``"projects"`` or ``"todos"`` key is missing.
+        ValueError: If a record cannot be parsed.
+
+    """
+    projects_raw = data_payload["projects"]
+    todos_raw = data_payload["todos"]
+
+    with session_context() as session:
+        for todo in session.exec(select(Todo)).all():
+            session.delete(todo)
+        for project in session.exec(select(Project)).all():
+            session.delete(project)
+
+        for p in projects_raw:
+            project = Project(
+                id=p["id"],
+                name=p["name"],
+                created_at=datetime.fromisoformat(p["created_at"]),
+                is_archived=p.get("is_archived", False),
+            )
+            session.add(project)
+
+        for t in todos_raw:
+            todo = Todo(
+                id=t["id"],
+                project_id=t["project_id"],
+                name=t["name"],
+                status=TodoStatus(t["status"]),
+                deadline=(date.fromisoformat(t["deadline"]) if t.get("deadline") else None),
+                helper=t.get("helper"),
+                notes=t.get("notes"),
+                created_at=datetime.fromisoformat(t["created_at"]),
+                completed_at=(
+                    datetime.fromisoformat(t["completed_at"]) if t.get("completed_at") else None
+                ),
+                is_archived=t.get("is_archived", False),
+            )
+            session.add(todo)
+
+        session.commit()
+        logger.info(
+            "Imported {project_count} projects and {todo_count} todos",
+            project_count=len(projects_raw),
+            todo_count=len(todos_raw),
+        )
+
+
 def get_export_payload() -> dict[str, Any]:
     """Return JSON-serializable snapshot of projects and todos.
 
