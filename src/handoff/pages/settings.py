@@ -17,10 +17,11 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from handoff.backup_schema import BackupPayload
 from handoff.data import get_export_payload, import_payload
 from handoff.docs import get_readme_intro
 from handoff.logging import _get_logs_dir
-from handoff.updater import render_update_panel
+from handoff.update_ui import render_update_panel
 from handoff.version import __version__ as APP_VERSION
 
 
@@ -108,15 +109,11 @@ def _render_data_import_section() -> None:
 
     try:
         raw_text = uploaded.getvalue().decode("utf-8")
-        payload = json.loads(raw_text)
-
-        if "projects" not in payload or "todos" not in payload:
-            st.error("Invalid file: expected top-level 'projects' and 'todos' keys.")
-            return
+        payload = BackupPayload.from_dict(json.loads(raw_text))
 
         st.info(
-            f"File contains **{len(payload['projects'])}** projects "
-            f"and **{len(payload['todos'])}** todos."
+            f"File contains **{len(payload.projects)}** projects "
+            f"and **{len(payload.todos)}** todos."
         )
     except Exception as exc:
         st.error(f"Could not parse file: {exc}")
@@ -128,7 +125,7 @@ def _render_data_import_section() -> None:
     )
     if confirm and st.button("Import and overwrite", key="settings_import_apply"):
         try:
-            import_payload(payload)
+            import_payload(payload.to_dict())
             st.success("Import complete — all data has been replaced.")
         except Exception as exc:
             st.error(f"Import failed: {exc}")
