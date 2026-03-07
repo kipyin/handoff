@@ -219,14 +219,36 @@ def _persist_project_edits(state: dict, display_df: pd.DataFrame) -> bool:
     return False
 
 
+def _reset_projects_table_state() -> None:
+    """Clear editor, autosave context, and deletion-confirmation state."""
+    for key in ("projects_table_active", "projects_table_all", "projects_pending_deletion"):
+        st.session_state.pop(key, None)
+    for key in list(st.session_state):
+        if isinstance(key, str) and key.startswith("__projects_table_"):
+            st.session_state.pop(key, None)
+
+
 def render_projects_page() -> None:
     """Render the projects management page with autosave for edits."""
     st.subheader("Projects")
     _render_create_project_form()
 
-    summary_list = get_projects_with_todo_summary(include_archived=False)
+    show_archived = st.checkbox(
+        "Show archived projects",
+        key="projects_show_archived",
+        help="Include archived projects so you can review or unarchive them.",
+        on_change=_reset_projects_table_state,
+    )
+
+    summary_list = get_projects_with_todo_summary(include_archived=show_archived)
     if not summary_list:
-        st.info("No projects yet. Use the form above to create the first project.")
+        if show_archived:
+            st.info("No projects yet. Use the form above to create the first project.")
+        else:
+            st.info(
+                "No active projects yet. Create one above or enable "
+                '"Show archived projects" to manage archived ones.'
+            )
         return
 
     projects = [item["project"] for item in summary_list]
@@ -240,14 +262,22 @@ def render_projects_page() -> None:
             for row in _build_projects_display_rows(summary_list)
         ]
     ).drop(columns=["project_id"])
+    editor_key = "projects_table_all" if show_archived else "projects_table_active"
 
-    st.caption(
-        "Edit names and archive state below — changes save automatically. "
-        'Check "Delete" to mark projects for removal.'
-    )
+    if show_archived:
+        st.caption(
+            "Edit names and archive state below — changes save automatically. "
+            "Archived projects are visible here and can be unarchived. "
+            'Check "Delete" to mark projects for removal.'
+        )
+    else:
+        st.caption(
+            "Edit names and archive state below — changes save automatically. "
+            'Check "Delete" to mark projects for removal.'
+        )
     edited_df = autosave_editor(
         display_df,
-        key="projects_table",
+        key=editor_key,
         persist_fn=_persist_project_edits,
         num_rows="fixed",
         height="content",
