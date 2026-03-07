@@ -20,7 +20,7 @@ EXTRA_ARGS_ARG = typer.Argument(None)
 def _format_and_lint(extra_args: list[str] | None = None) -> None:
     """Run lint and format with optional extra args passed to underlying tools."""
     extra_args = list(extra_args) if extra_args else []
-    format(extra_args=extra_args)
+    format_(extra_args=extra_args)
     lint(extra_args=extra_args)
 
 
@@ -68,8 +68,8 @@ def lint(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     )
 
 
-@app.command()
-def format(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
+@app.command("format")
+def format_(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     """Run Ruff formatter."""
     extra_args = list(extra_args) if extra_args else ["."]
     run_cmd(
@@ -82,7 +82,7 @@ def format(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
 @app.command("check")
 def check_command(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     """Run lint and format in sequence."""
-    format(extra_args)
+    format_(extra_args)
     lint(extra_args)
 
 
@@ -123,14 +123,20 @@ def ci(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
 @app.command("build")
 def build(
     full: bool = typer.Option(
-        False, "--full", help="Build the full Windows embedded zip distribution."
+        False, "--full", help="Build a full embedded/standalone distribution."
     ),
     patch: bool = typer.Option(False, "--patch", help="Build a patch zip from the build output."),
+    platform: str = typer.Option(
+        "windows",
+        "--platform",
+        help="Target platform for --full builds: 'windows' or 'mac'.",
+    ),
 ) -> None:
     """Build the application (full distribution or patch)."""
     if full:
-        console.print("Building full Windows embedded zip distribution...", style="bold cyan")
-        build_full_module.main()
+        label = "macOS standalone" if platform == "mac" else "Windows embedded zip"
+        console.print(f"Building full {label} distribution...", style="bold cyan")
+        build_full_module.main(platform=platform)
     elif patch:
         path = build_patch_module.build_patch()
         console.print(f"Patch zip created at {path}", style="bold green")
@@ -146,6 +152,14 @@ def bump(
     """Bump project and app version together."""
     bump_version_module.bump_version(version)
     console.print(f"Bumped version to {version}", style="bold green")
+
+
+@app.command("db-path")
+def db_path() -> None:
+    """Print the resolved SQLite database path."""
+    from handoff.db import _DB_PATH
+
+    console.print(str(_DB_PATH))
 
 
 def main() -> None:
