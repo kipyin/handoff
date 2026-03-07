@@ -8,6 +8,7 @@ from handoff.pages.projects import (
     _execute_changes,
     _get_pending_changes,
     _get_projects_to_delete,
+    _reset_projects_table_state,
     render_projects_page,
 )
 
@@ -285,3 +286,80 @@ def test_render_projects_page_empty_state_mentions_archived_toggle(monkeypatch):
         'No active projects yet. Create one above or enable "Show archived projects" to '
         "manage archived ones."
     ]
+
+
+def test_reset_projects_table_state_clears_editor_and_pending_delete(monkeypatch):
+    session_state = {
+        "projects_table_active": {"edited_rows": {"0": {"name": "Renamed"}}},
+        "projects_table_all": {"edited_rows": {"1": {"confirm_delete": True}}},
+        "projects_pending_deletion": {"names": ["Work"]},
+        "projects_show_archived": True,
+    }
+    monkeypatch.setattr("streamlit.session_state", session_state)
+
+    _reset_projects_table_state()
+
+    assert "projects_table_active" not in session_state
+    assert "projects_table_all" not in session_state
+    assert "projects_pending_deletion" not in session_state
+    assert session_state["projects_show_archived"] is True
+
+
+@pytest.mark.parametrize(
+    ("show_archived", "expected_key", "expected_caption"),
+    [
+        (
+            False,
+            "projects_table_active",
+            "Edit names and archive state below. Show archived projects to review or "
+            'unarchive hidden items. Check "Confirm delete" for projects to remove, then '
+            "click Save changes.",
+        ),
+        (
+            True,
+            "projects_table_all",
+            "Edit names and archive state below. Archived projects are visible here and can "
+            'be unarchived. Check "Confirm delete" for projects to remove, then click Save '
+            "changes.",
+        ),
+    ],
+)
+def test_render_projects_page_uses_toggle_specific_editor_state(
+    monkeypatch, show_archived, expected_key, expected_caption
+):
+    captured = {}
+    project = Project(id=1, name="Work", is_archived=False)
+
+    monkeypatch.setattr("handoff.pages.projects._render_create_project_form", lambda: None)
+    monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
+
+    def fake_checkbox(*args, **kwargs):
+        captured["checkbox_on_change"] = kwargs.get("on_change")
+        return show_archived
+
+    monkeypatch.setattr("handoff.pages.projects.st.checkbox", fake_checkbox)
+    monkeypatch.setattr(
+        "handoff.pages.projects.get_projects_with_todo_summary",
+        lambda *, include_archived: [
+            {"project": project, "handoff": 0, "done": 0, "canceled": 0},
+        ],
+    )
+
+    def fake_caption(message):
+        captured["caption"] = message
+
+    monkeypatch.setattr("handoff.pages.projects.st.caption", fake_caption)
+
+    def fake_data_editor(df, **kwargs):
+        captured["editor_key"] = kwargs["key"]
+        return df
+
+    monkeypatch.setattr("handoff.pages.projects.st.data_editor", fake_data_editor)
+    monkeypatch.setattr("handoff.pages.projects.st.button", lambda *args, **kwargs: False)
+    monkeypatch.setattr("streamlit.session_state", {})
+
+    render_projects_page()
+
+    assert captured["editor_key"] == expected_key
+    assert captured["caption"] == expected_caption
+    assert captured["checkbox_on_change"] is _reset_projects_table_state

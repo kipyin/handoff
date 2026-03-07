@@ -170,6 +170,13 @@ def _apply_project_changes(
     return (True, [], deleted, updated)
 
 
+def _reset_projects_table_state() -> None:
+    """Clear editor and deletion-confirmation state when the dataset shape changes."""
+    st.session_state.pop("projects_table_active", None)
+    st.session_state.pop("projects_table_all", None)
+    st.session_state.pop("projects_pending_deletion", None)
+
+
 def render_projects_page() -> None:
     """Render the projects management page as a table with Save changes."""
     st.subheader("Projects")
@@ -179,6 +186,7 @@ def render_projects_page() -> None:
         "Show archived projects",
         key="projects_show_archived",
         help="Include archived projects so you can review or unarchive them.",
+        on_change=_reset_projects_table_state,
     )
 
     summary_list = get_projects_with_todo_summary(include_archived=show_archived)
@@ -194,17 +202,25 @@ def render_projects_page() -> None:
 
     projects = [item["project"] for item in summary_list]
     display_df = pd.DataFrame(_build_projects_display_rows(summary_list))
+    editor_key = "projects_table_all" if show_archived else "projects_table_active"
 
-    st.caption(
-        'Edit names and archive state below. Enable "Show archived projects" to review '
-        'or unarchive hidden items. Check "Confirm delete" for projects to remove, then '
-        "click Save changes."
-    )
+    if show_archived:
+        st.caption(
+            "Edit names and archive state below. Archived projects are visible here and can "
+            'be unarchived. Check "Confirm delete" for projects to remove, then click Save '
+            "changes."
+        )
+    else:
+        st.caption(
+            "Edit names and archive state below. Show archived projects to review or "
+            'unarchive hidden items. Check "Confirm delete" for projects to remove, then '
+            "click Save changes."
+        )
     edited_df = st.data_editor(
         display_df,
         num_rows="fixed",
         height="content",
-        key="projects_table",
+        key=editor_key,
         hide_index=True,
         column_order=["name", "is_archived", "handoff", "done", "canceled", "confirm_delete"],
         column_config={
