@@ -49,7 +49,7 @@ def test_init_db_creates_tables_and_completed_at(
 
     db.init_db()
 
-    sqlite_path = _get_sqlite_path(db.DATABASE_URL)
+    sqlite_path = _get_sqlite_path(db.get_database_url())
     todo_columns = _fetch_columns(sqlite_path, "todo")
     project_columns = _fetch_columns(sqlite_path, "project")
     # Sanity-check core columns plus the migration columns.
@@ -67,7 +67,7 @@ def test_init_db_adds_completed_at_to_existing_schema(
     db_path = tmp_path / "todo.db"
     db = _reload_db_module(db_path, monkeypatch)
 
-    sqlite_path = _get_sqlite_path(db.DATABASE_URL)
+    sqlite_path = _get_sqlite_path(db.get_database_url())
     # Simulate an older schema that predates the completed_at/is_archived columns.
     conn = sqlite3.connect(sqlite_path)
     try:
@@ -106,14 +106,14 @@ def test_init_db_adds_completed_at_to_existing_schema(
 def test_init_db_raises_when_engine_creation_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When create_engine raises at module load, DatabaseInitializationError is raised."""
+    """When engine creation fails lazily, DatabaseInitializationError is raised."""
     monkeypatch.setenv("HANDOFF_DB_PATH", str(tmp_path / "todo.db"))
     import handoff.db as db  # noqa: F401
 
     db.dispose_db()
-    with patch("sqlmodel.create_engine", side_effect=Exception("Engine failed")):
+    with patch("handoff.db.create_engine", side_effect=Exception("Engine failed")):
         with pytest.raises((DatabaseInitializationError, Exception)) as exc_info:
-            importlib.reload(db)
+            db.get_engine()
         assert type(exc_info.value).__name__ == "DatabaseInitializationError"
         msg = exc_info.value.args[0].lower()
         assert "engine" in msg or "initialise" in msg
@@ -130,7 +130,7 @@ def test_init_db_raises_when_migration_fails(
         mock_conn.exec_driver_sql.side_effect = Exception("Migration failed")
         mock_conn.__enter__ = lambda self: self
         mock_conn.__exit__ = lambda *a: None
-        with patch.object(db.engine, "connect", return_value=mock_conn):
+        with patch.object(db.get_engine(), "connect", return_value=mock_conn):
             with pytest.raises((DatabaseInitializationError, Exception)) as exc_info:
                 db.init_db()
             assert type(exc_info.value).__name__ == "DatabaseInitializationError"
