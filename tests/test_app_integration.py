@@ -97,6 +97,34 @@ def test_projects_page_renders_with_app_test(app_test_db: Path) -> None:
     assert len(at.get("text_input")) >= 1 or len(at.get("info")) >= 1
 
 
+def test_projects_page_archived_toggle_survives_models_reload(app_test_db: Path) -> None:
+    """Toggling archived projects survives a hot reload of handoff.models."""
+    import importlib
+
+    import handoff.data as data
+    import handoff.db as db
+    import handoff.models as models
+
+    db.init_db()
+    active = data.create_project("Active")
+    archived = data.create_project("Archived")
+    assert active.id is not None
+    assert archived.id is not None
+    assert data.archive_project(archived.id) is True
+
+    at = AppTest.from_function(_projects_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+    assert len(at.checkbox) >= 1
+
+    importlib.reload(models)
+    at.checkbox[0].check().run(timeout=5)
+
+    assert len(at.exception) == 0
+    assert at.checkbox[0].value is True
+    assert len(at.get("subheader")) >= 1
+
+
 def test_settings_page_renders_with_app_test(app_test_db: Path) -> None:
     """Settings page renders (smoke test)."""
     at = AppTest.from_function(_settings_page_entry)

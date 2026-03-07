@@ -9,6 +9,7 @@ persisted edit.
 import pandas as pd
 
 from handoff.models import TodoStatus
+from handoff.page_models import TodoQuery
 from handoff.pages.todos import DEADLINE_ANY, _apply_native_filters, _render_editable_table
 
 
@@ -67,25 +68,13 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
     monkeypatch.setattr(
         "handoff.pages.todos._apply_native_filters",
         lambda key_prefix, project_by_name, helper_options: (
-            type(
-                "Q",
-                (),
-                {
-                    "search_text": "",
-                    "statuses": (),
-                    "project_ids": (),
-                    "helper_names": (),
-                    "deadline_start": None,
-                    "deadline_end": None,
-                    "include_archived": False,
-                },
-            )(),
+            TodoQuery(),
             {"project_filters": ["Work"], "status_filters": ["handoff"], "helper_filters": []},
         ),
     )
     monkeypatch.setattr(
         "handoff.pages.todos.query_todos",
-        lambda query: [],
+        lambda query=None, **kwargs: [],
     )
     monkeypatch.setattr(
         "handoff.pages.todos._build_todo_dataframe",
@@ -154,3 +143,63 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
     assert "state" in persisted
     assert persisted["state"] == {"edited_rows": {"0": {"name": "New Name"}}}
     assert ran["rerun"] is True
+
+
+def test_render_editable_table_shows_counts_and_no_results(monkeypatch):
+    source_df = pd.DataFrame(
+        [
+            {
+                "id": 1,
+                "name": "Task",
+                "project": "Work",
+                "status": "handoff",
+                "helper": "",
+                "deadline": None,
+                "notes": "",
+                "created_at": None,
+            }
+        ]
+    )
+    empty_filtered_df = source_df.iloc[0:0].copy()
+    filtered_query = TodoQuery(search_text="zzz-no-match")
+
+    monkeypatch.setattr(
+        "handoff.pages.todos._apply_native_filters",
+        lambda key_prefix, project_by_name, helper_options: (
+            filtered_query,
+            {"project_filters": [], "status_filters": ["handoff"], "helper_filters": []},
+        ),
+    )
+    monkeypatch.setattr(
+        "handoff.pages.todos.query_todos",
+        lambda query=None, **kwargs: [] if query == filtered_query else [object()],
+    )
+    monkeypatch.setattr(
+        "handoff.pages.todos._build_todo_dataframe",
+        lambda rows: empty_filtered_df if not rows else source_df,
+    )
+    monkeypatch.setattr(
+        "handoff.pages.todos._sort_and_build_display_df",
+        lambda df: (df, df.copy()),
+    )
+
+    captions = []
+    info_messages = []
+    monkeypatch.setattr("handoff.pages.todos.st.caption", captions.append)
+    monkeypatch.setattr("handoff.pages.todos.st.info", info_messages.append)
+    monkeypatch.setattr("handoff.pages.todos.st.data_editor", lambda *args, **kwargs: None)
+    monkeypatch.setattr("streamlit.session_state", {})
+
+    p1 = type("P", (), {"id": 1, "name": "Work"})()
+
+    _render_editable_table(
+        projects=[p1],
+        helper_options=[],
+        key_prefix="test",
+        context_label="view=todos_page",
+    )
+
+    assert captions == ["Showing 0 of 1 todo. Changes are saved automatically as you edit."]
+    assert info_messages == [
+        "No todos match the current filters. Clear or adjust them to see results."
+    ]
