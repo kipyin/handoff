@@ -561,10 +561,9 @@ def import_payload(data_payload: dict[str, Any]) -> None:
     todos_raw = data_payload["todos"]
 
     with session_context() as session:
-        for todo in session.exec(select(Todo)).all():
-            session.delete(todo)
-        for project in session.exec(select(Project)).all():
-            session.delete(project)
+        session.exec(select(Todo)).all()  # ensure model is loaded
+        session.execute(Todo.__table__.delete())
+        session.execute(Project.__table__.delete())
 
         for p in projects_raw:
             project = Project(
