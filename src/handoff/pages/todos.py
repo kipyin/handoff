@@ -7,12 +7,14 @@ its UI and data flow.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import date, datetime, timedelta
 
 import pandas as pd
 import streamlit as st
 from loguru import logger
 
+from handoff.autosave import autosave_editor
 from handoff.data import (
     create_todo,
     delete_todo,
@@ -422,6 +424,31 @@ def _persist_changes(
         logger.info("Created todo_id={}", created.id)
 
 
+def _make_todos_persist_fn(
+    projects: list,
+    defaults: TodoMutationDefaults,
+    key_prefix: str,
+) -> Callable[[dict, pd.DataFrame], bool]:
+    """Build a persist callback for :func:`autosave_editor`.
+
+    Returns a callable ``(state, prev_display_df) -> needs_rerun`` that
+    delegates to :func:`_persist_changes` and requests a full rerun only
+    when the editor's row count changes (additions or deletions).
+    """
+
+    def _persist(state: dict, display_df: pd.DataFrame) -> bool:
+        _persist_changes(
+            state=state,
+            display_df=display_df,
+            projects=projects,
+            defaults=defaults,
+            key_prefix=key_prefix,
+        )
+        return bool(state.get("added_rows") or state.get("deleted_rows"))
+
+    return _persist
+
+
 def _render_editable_table(
     *,
     projects: list,
@@ -429,7 +456,7 @@ def _render_editable_table(
     key_prefix: str,
     context_label: str,
 ) -> None:
-    """Render editable table with filters and native Streamlit delta persistence."""
+    """Render editable table with filters and autosave persistence."""
     project_names = [project.name for project in projects]
     project_by_name = {p.name: p for p in projects}
 
@@ -443,7 +470,6 @@ def _render_editable_table(
 
     defaults = _compute_defaults_from_filters(filter_state, project_by_name, projects)
 
-    # Apply remembered defaults from previous additions
     remembered_project_id = st.session_state.get(f"{key_prefix}_last_new_project_id")
     if isinstance(remembered_project_id, int):
         for name, project in project_by_name.items():
@@ -471,11 +497,14 @@ def _render_editable_table(
 
     st.caption("Changes are saved automatically as you edit.")
 
-    st.data_editor(
+    persist_fn = _make_todos_persist_fn(projects, defaults, key_prefix)
+
+    autosave_editor(
         display_df,
+        key=editor_key,
+        persist_fn=persist_fn,
         num_rows="dynamic",
         height="content",
-        key=editor_key,
         hide_index=True,
         column_order=["project", "name", "status", "helper", "deadline", "notes"],
         column_config={
@@ -499,18 +528,6 @@ def _render_editable_table(
             "notes": st.column_config.TextColumn("Notes"),
         },
     )
-
-    # Check for changes in the editor state
-    state = st.session_state.get(editor_key)
-    if state and (state.get("edited_rows") or state.get("added_rows") or state.get("deleted_rows")):
-        _persist_changes(
-            state=state,
-            display_df=display_df,
-            projects=projects,
-            defaults=defaults,
-            key_prefix=key_prefix,
-        )
-        st.rerun()
 
 
 def render_todos_page() -> None:

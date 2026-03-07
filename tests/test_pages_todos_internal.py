@@ -63,7 +63,7 @@ def test_apply_native_filters_unit(monkeypatch):
     assert filter_state["helper_filters"] == ["Alice"]
 
 
-def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
+def test_render_editable_table_uses_autosave_editor(monkeypatch):
     monkeypatch.setattr(
         "handoff.pages.todos._apply_native_filters",
         lambda key_prefix, project_by_name, helper_options: (
@@ -107,7 +107,6 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
         "handoff.pages.todos._sort_and_build_display_df", lambda df: (df, df.copy())
     )
 
-    # Patch UI rendering and persistence hooks
     class FakeCol:
         def __enter__(self):
             return self
@@ -119,29 +118,17 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
         "handoff.pages.todos.st.columns", lambda widths: [FakeCol() for _ in range(5)]
     )
     monkeypatch.setattr("handoff.pages.todos.st.caption", lambda *args, **kwargs: None)
-    monkeypatch.setattr("handoff.pages.todos.st.data_editor", lambda *args, **kwargs: None)
+    monkeypatch.setattr("streamlit.session_state", {})
 
-    # Simulate an edit in the editor state
-    monkeypatch.setattr(
-        "streamlit.session_state",
-        {"test_table_editor": {"edited_rows": {"0": {"name": "New Name"}}}},
-    )
+    captured: dict = {}
 
-    persisted = {}
+    def fake_autosave_editor(display_df, *, key, persist_fn, **kwargs):
+        captured["key"] = key
+        captured["persist_fn"] = persist_fn
+        captured["display_df"] = display_df
 
-    def fake_persist_changes(state, display_df=None, projects=None, defaults=None, key_prefix=None):
-        persisted["state"] = state
-        persisted["display_df"] = display_df
-        persisted["projects"] = projects
-        persisted["defaults"] = defaults
-        persisted["key_prefix"] = key_prefix
+    monkeypatch.setattr("handoff.pages.todos.autosave_editor", fake_autosave_editor)
 
-    monkeypatch.setattr("handoff.pages.todos._persist_changes", fake_persist_changes)
-
-    ran = {"rerun": False}
-    monkeypatch.setattr("streamlit.rerun", lambda: ran.__setitem__("rerun", True))
-
-    # Minimal project to satisfy _render_editable_table
     p1 = type("P", (), {"id": 1, "name": "Work"})()
 
     _render_editable_table(
@@ -151,6 +138,6 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
         context_label="view=todos_page",
     )
 
-    assert "state" in persisted
-    assert persisted["state"] == {"edited_rows": {"0": {"name": "New Name"}}}
-    assert ran["rerun"] is True
+    assert "persist_fn" in captured
+    assert captured["key"] == "test_table_editor"
+    assert callable(captured["persist_fn"])

@@ -6,7 +6,9 @@ from dataclasses import asdict
 
 import pandas as pd
 import streamlit as st
+from loguru import logger
 
+from handoff.autosave import autosave_editor
 from handoff.data import (
     archive_project,
     create_project,
@@ -173,8 +175,52 @@ def _apply_project_changes(
     return (True, [], deleted, updated)
 
 
+def _persist_project_edits(state: dict, display_df: pd.DataFrame) -> bool:
+    """Autosave callback for project renames and archive toggles.
+
+    Skips ``confirm_delete`` changes — those are handled by the separate
+    deletion confirmation flow.  Returns ``False`` (no rerun needed for
+    simple cell edits).
+    """
+    edited = state.get("edited_rows", {})
+    if not edited:
+        return False
+
+    for row_idx_str, changes in edited.items():
+        row_idx = int(row_idx_str)
+        if row_idx >= len(display_df):
+            continue
+        pid = display_df.iloc[row_idx].get("__project_id")
+        if pid is None or pd.isna(pid):
+            continue
+        pid = int(pid)
+
+        new_name = changes.get("name")
+        if new_name is not None:
+            cleaned = new_name.strip()
+            if cleaned:
+                try:
+                    rename_project(pid, cleaned)
+                    logger.info("Auto-saved rename for project_id={}", pid)
+                except Exception:
+                    logger.exception("Failed to auto-save rename for project_id={}", pid)
+
+        new_archived = changes.get("is_archived")
+        if new_archived is not None:
+            try:
+                if new_archived:
+                    archive_project(pid)
+                else:
+                    unarchive_project(pid)
+                logger.info("Auto-saved archive={} for project_id={}", new_archived, pid)
+            except Exception:
+                logger.exception("Failed to auto-save archive for project_id={}", pid)
+
+    return False
+
+
 def render_projects_page() -> None:
-    """Render the projects management page as a table with Save changes."""
+    """Render the projects management page with autosave for edits."""
     st.subheader("Projects")
     _render_create_project_form()
 
@@ -196,14 +242,15 @@ def render_projects_page() -> None:
     ).drop(columns=["project_id"])
 
     st.caption(
-        'Edit names and archive state below. Check "Confirm delete" for projects to '
-        "remove, then click Save changes."
+        "Edit names and archive state below — changes save automatically. "
+        'Check "Delete" to mark projects for removal.'
     )
-    edited_df = st.data_editor(
+    edited_df = autosave_editor(
         display_df,
+        key="projects_table",
+        persist_fn=_persist_project_edits,
         num_rows="fixed",
         height="content",
-        key="projects_table",
         hide_index=True,
         column_order=["name", "is_archived", "handoff", "done", "canceled", "confirm_delete"],
         column_config={
@@ -216,15 +263,13 @@ def render_projects_page() -> None:
             "confirm_delete": st.column_config.CheckboxColumn(
                 "Delete",
                 default=False,
-                help="Check to mark this project for deletion. Click Save changes to apply.",
+                help="Check to mark this project for deletion.",
             ),
         },
     )
 
-    # Count rows marked for deletion for confirmation.
     to_delete = _get_projects_to_delete(edited_df, projects)
 
-    # Show confirmation UI when user previously clicked Save with deletions pending.
     pending = st.session_state.get("projects_pending_deletion")
     if pending is not None:
         names = pending["names"]
@@ -241,9 +286,7 @@ def render_projects_page() -> None:
                     for msg in errors:
                         st.error(msg)
                 else:
-                    if deleted and updated:
-                        st.success(f"Deleted {deleted} project(s); other changes saved.")
-                    elif deleted:
+                    if deleted:
                         st.success(f"Deleted {deleted} project(s).")
                     else:
                         st.success("Changes saved.")
@@ -255,24 +298,8 @@ def render_projects_page() -> None:
                 st.rerun()
         return
 
-    if st.button("Save changes", key="projects_save_button", type="primary"):
-        if to_delete:
-            st.session_state["projects_pending_deletion"] = {
-                "names": [name for _, name in to_delete],
-            }
-            st.rerun()
-        else:
-            success, errors, deleted, updated = _apply_project_changes(edited_df, projects)
-            if errors:
-                for msg in errors:
-                    st.error(msg)
-            elif deleted or updated:
-                if deleted and updated:
-                    st.success(f"Deleted {deleted} project(s); other changes saved.")
-                elif deleted:
-                    st.success(f"Deleted {deleted} project(s).")
-                else:
-                    st.success("Changes saved.")
-                st.rerun()
-            else:
-                st.info("No changes to save.")
+    if to_delete and st.button("Delete selected", key="projects_delete_button", type="primary"):
+        st.session_state["projects_pending_deletion"] = {
+            "names": [name for _, name in to_delete],
+        }
+        st.rerun()
