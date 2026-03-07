@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pandas as pd
 
 from handoff.models import TodoStatus
+from handoff.page_models import TodoMutationDefaults, TodoRow
 from handoff.pages.todos import (
     DEADLINE_TODAY,
     _apply_dataframe_filters,
@@ -135,7 +136,12 @@ def test_persist_changes_deletions(monkeypatch):
         state=state,
         display_df=display_df,
         projects=[],
-        default_project_id=None,
+        defaults=TodoMutationDefaults(
+            project_id=None,
+            project_name=None,
+            status=TodoStatus.HANDOFF,
+            helper="",
+        ),
         key_prefix="test",
     )
     assert deleted_ids == [10]
@@ -176,7 +182,12 @@ def test_persist_changes_additions(monkeypatch):
         state=state,
         display_df=display_df,
         projects=[p1],
-        default_project_id=1,
+        defaults=TodoMutationDefaults(
+            project_id=1,
+            project_name="Work",
+            status=TodoStatus.HANDOFF,
+            helper="",
+        ),
         key_prefix="test",
     )
 
@@ -195,20 +206,16 @@ def test_compute_defaults_from_filters():
 
     # Case 1: Single project filter should set default project
     filter_state = {"project_filters": ["Home"], "status_filters": ["done"]}
-    pid, pname, status, helper = _compute_defaults_from_filters(
-        filter_state, project_by_name, projects
-    )
-    assert pid == 2
-    assert pname == "Home"
-    assert status == "done"
+    defaults = _compute_defaults_from_filters(filter_state, project_by_name, projects)
+    assert defaults.project_id == 2
+    assert defaults.project_name == "Home"
+    assert defaults.status == TodoStatus.DONE
 
     # Case 2: Multiple filters or no filters should fallback to first project and DELEGATED
     filter_state = {"project_filters": ["Work", "Home"], "status_filters": []}
-    pid, pname, status, helper = _compute_defaults_from_filters(
-        filter_state, project_by_name, projects
-    )
-    assert pid == 1
-    assert status == TodoStatus.DELEGATED.value
+    defaults = _compute_defaults_from_filters(filter_state, project_by_name, projects)
+    assert defaults.project_id == 1
+    assert defaults.status == TodoStatus.HANDOFF
 
 
 def test_apply_dataframe_filters_multi_select():
@@ -269,7 +276,12 @@ def test_persist_changes_updates(monkeypatch):
         state=state,
         display_df=display_df,
         projects=[p1, p2],
-        default_project_id=1,
+        defaults=TodoMutationDefaults(
+            project_id=1,
+            project_name="Work",
+            status=TodoStatus.HANDOFF,
+            helper="",
+        ),
         key_prefix="test",
     )
 
@@ -278,23 +290,23 @@ def test_persist_changes_updates(monkeypatch):
     assert tid == 100
     assert kwargs["name"] == "New Name"
     assert kwargs["project_id"] == 2
-    assert kwargs["status"] == TodoStatus.DELEGATED
+    assert kwargs["status"] == TodoStatus.HANDOFF
 
 
 def test_build_todo_dataframe_populated():
-    proj = SimpleNamespace(name="Project A")
-    todo = SimpleNamespace(
-        id=5,
+    row = TodoRow(
+        todo_id=5,
+        project_id=1,
+        project_name="Project A",
         name="Task",
         status=TodoStatus.DONE,
-        project=proj,
         helper="Alice",
         deadline=date(2024, 1, 1),
         notes="Some notes",
         created_at=datetime(2024, 1, 1, tzinfo=UTC),
     )
 
-    df = _build_todo_dataframe([todo])
+    df = _build_todo_dataframe([row])
     assert len(df) == 1
     assert df.iloc[0]["id"] == 5
     assert df.iloc[0]["project"] == "Project A"

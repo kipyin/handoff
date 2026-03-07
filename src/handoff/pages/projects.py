@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 import pandas as pd
 import streamlit as st
 
@@ -13,6 +15,7 @@ from handoff.data import (
     rename_project,
     unarchive_project,
 )
+from handoff.page_models import ProjectSummaryRow
 
 
 def _render_create_project_form() -> None:
@@ -36,7 +39,7 @@ def _render_create_project_form() -> None:
 
 def _build_projects_display_rows(
     summary_list: list[dict],
-) -> list[dict]:
+) -> list[ProjectSummaryRow]:
     """Build display row dicts for the projects table from get_projects_with_todo_summary.
 
     Args:
@@ -47,19 +50,18 @@ def _build_projects_display_rows(
         confirm_delete=False.
 
     """
-    rows = []
+    rows: list[ProjectSummaryRow] = []
     for item in summary_list:
         p = item["project"]
         rows.append(
-            {
-                "__project_id": p.id,
-                "name": p.name,
-                "is_archived": getattr(p, "is_archived", False),
-                "handoff": item["handoff"],
-                "done": item["done"],
-                "canceled": item["canceled"],
-                "confirm_delete": False,
-            }
+            ProjectSummaryRow(
+                project_id=p.id,
+                name=p.name,
+                is_archived=getattr(p, "is_archived", False),
+                handoff=item["handoff"],
+                done=item["done"],
+                canceled=item["canceled"],
+            )
         )
     return rows
 
@@ -181,7 +183,16 @@ def render_projects_page() -> None:
         return
 
     projects = [item["project"] for item in summary_list]
-    display_df = pd.DataFrame(_build_projects_display_rows(summary_list))
+    display_df = pd.DataFrame(
+        [
+            {
+                "__project_id": row.project_id,
+                **asdict(row),
+                "confirm_delete": False,
+            }
+            for row in _build_projects_display_rows(summary_list)
+        ]
+    ).drop(columns=["project_id"])
 
     st.caption(
         'Edit names and archive state below. Check "Confirm delete" for projects to '
