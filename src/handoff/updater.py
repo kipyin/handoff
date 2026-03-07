@@ -94,7 +94,7 @@ def _extract_zip_to_dir(
                 shutil.copyfileobj(src, dst)
             extracted.append(name)
         except (PermissionError, OSError) as e:
-            logger.warning("Could not extract {} to {}: {}", name, target_dir, e)
+            logger.warning("Could not extract {} to {}: {}", name, dest, e)
             failed.append(name)
     return extracted, failed
 
