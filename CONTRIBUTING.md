@@ -2,7 +2,9 @@
 
 For **user-facing docs** (how to run, update the app, backups, and where your
 data lives), see [`README.md`](README.md). For **developer docs** (CLI, layout,
-deployment and release workflow, and code style), stay here.
+deployment and release workflow, and code style), stay here. For the concise,
+opinionated coding-style summary used by both humans and agents, see
+[`STYLE.md`](STYLE.md).
 
 This project is a personal app, but the repo is structured so future-you (or an
 AI assistant) can work on it safely and consistently.
@@ -107,6 +109,8 @@ consistent:
 
 The `.cursor/rules/` directory contains more detailed guidance used by Cursor
 and other automation; human contributors only need the summary above.
+
+For the repo's preferred style beyond tool choice, see [`STYLE.md`](STYLE.md).
 
 ### Testing
 

@@ -1,11 +1,13 @@
 """Database engine and session for SQLite + SQLModel."""
 
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
 from loguru import logger
 from platformdirs import user_data_dir
+from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
 
@@ -44,24 +46,49 @@ class DatabaseInitializationError(RuntimeError):
     """Raised when the database engine or schema cannot be initialized."""
 
 
-_DB_PATH = _resolve_db_path()
-DATABASE_URL = f"sqlite:///{_DB_PATH}"
+_DB_PATH: Path | None = None
+_DATABASE_URL: str | None = None
+_ENGINE: Engine | None = None
+
+
+def _ensure_db_config() -> tuple[Path, str]:
+    """Resolve and cache the current database path and URL."""
+    global _DB_PATH, _DATABASE_URL
+    if _DB_PATH is None or _DATABASE_URL is None:
+        _DB_PATH = _resolve_db_path()
+        _DATABASE_URL = f"sqlite:///{_DB_PATH}"
+    return _DB_PATH, _DATABASE_URL
 
 
 def get_db_path() -> Path:
     """Return the resolved path to the SQLite database file."""
-    return _DB_PATH
+    db_path, _ = _ensure_db_config()
+    return db_path
 
 
-try:
-    engine = create_engine(DATABASE_URL, echo=False)
-except Exception as exc:  # noqa: BLE001
-    logger.exception("Failed to create database engine for {}", DATABASE_URL)
-    msg = (
-        "Could not initialise the database engine. "
-        "Check that the configured path is writable and valid."
-    )
-    raise DatabaseInitializationError(msg) from exc
+def get_database_url() -> str:
+    """Return the current SQLite connection URL."""
+    _, database_url = _ensure_db_config()
+    return database_url
+
+
+def get_engine() -> Engine:
+    """Return the lazily-created application engine."""
+    global _ENGINE
+    if _ENGINE is not None:
+        return _ENGINE
+
+    database_url = get_database_url()
+    try:
+        _ENGINE = create_engine(database_url, echo=False)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Failed to create database engine for {}", database_url)
+        msg = (
+            "Could not initialise the database engine. "
+            "Check that the configured path is writable and valid."
+        )
+        raise DatabaseInitializationError(msg) from exc
+    return _ENGINE
 
 
 def init_db() -> None:
@@ -75,6 +102,7 @@ def init_db() -> None:
 
     """
     try:
+        engine = get_engine()
         # Ensure models are imported so SQLModel's metadata is populated with
         # the Project and Todo tables before create_all() runs.
         from handoff import models as _models  # noqa: F401
@@ -113,11 +141,11 @@ def init_db() -> None:
         msg = "Database initialisation failed. See the log file for details."
         raise DatabaseInitializationError(msg) from exc
 
-    logger.info("Database initialized at {}", _DB_PATH)
+    logger.info("Database initialized at {}", get_db_path())
 
 
 @contextmanager
-def session_context():
+def session_context() -> Iterator[Session]:
     """Context manager yielding a database session.
 
     Preferred entrypoint for DB access; used by functions in handoff.data to ensure
@@ -127,10 +155,15 @@ def session_context():
         A SQLModel Session bound to the application engine.
 
     """
-    with Session(engine) as session:
+    with Session(get_engine()) as session:
         yield session
 
 
 def dispose_db() -> None:
-    """Dispose of the global database engine."""
-    engine.dispose()
+    """Dispose of cached engine and clear resolved DB config."""
+    global _ENGINE, _DB_PATH, _DATABASE_URL
+    if _ENGINE is not None:
+        _ENGINE.dispose()
+    _ENGINE = None
+    _DB_PATH = None
+    _DATABASE_URL = None

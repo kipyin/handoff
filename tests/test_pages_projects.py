@@ -205,16 +205,15 @@ def test_build_projects_display_rows(mock_projects):
     ]
     rows = _build_projects_display_rows(summary_list)
     assert len(rows) == 2
-    assert rows[0]["__project_id"] == 1
-    assert rows[0]["name"] == "Work"
-    assert rows[0]["is_archived"] is False
-    assert rows[0]["handoff"] == 2
-    assert rows[0]["done"] == 1
-    assert rows[0]["canceled"] == 0
-    assert rows[0]["confirm_delete"] is False
-    assert rows[1]["__project_id"] == 2
-    assert rows[1]["name"] == "Home"
-    assert rows[1]["is_archived"] is False
+    assert rows[0].project_id == 1
+    assert rows[0].name == "Work"
+    assert rows[0].is_archived is False
+    assert rows[0].handoff == 2
+    assert rows[0].done == 1
+    assert rows[0].canceled == 0
+    assert rows[1].project_id == 2
+    assert rows[1].name == "Home"
+    assert rows[1].is_archived is False
 
 
 def test_get_pending_changes_skips_row_with_missing_project_id(mock_projects):

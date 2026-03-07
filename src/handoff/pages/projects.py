@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
+
 import pandas as pd
 import streamlit as st
 
@@ -13,6 +15,7 @@ from handoff.data import (
     rename_project,
     unarchive_project,
 )
+from handoff.page_models import ProjectSummaryRow
 
 
 def _render_create_project_form() -> None:
@@ -36,30 +39,30 @@ def _render_create_project_form() -> None:
 
 def _build_projects_display_rows(
     summary_list: list[dict],
-) -> list[dict]:
-    """Build display row dicts for the projects table from get_projects_with_todo_summary.
+) -> list[ProjectSummaryRow]:
+    """Build typed summary rows for the projects table.
 
     Args:
         summary_list: List of dicts with "project" and "handoff", "done", "canceled" counts.
 
     Returns:
-        List of dicts with __project_id, name, is_archived, handoff, done, canceled,
-        confirm_delete=False.
+        List of :class:`ProjectSummaryRow` values. The UI later adds editor-only
+        columns like ``__project_id`` and ``confirm_delete`` when building the
+        DataFrame passed to Streamlit.
 
     """
-    rows = []
+    rows: list[ProjectSummaryRow] = []
     for item in summary_list:
         p = item["project"]
         rows.append(
-            {
-                "__project_id": p.id,
-                "name": p.name,
-                "is_archived": getattr(p, "is_archived", False),
-                "handoff": item["handoff"],
-                "done": item["done"],
-                "canceled": item["canceled"],
-                "confirm_delete": False,
-            }
+            ProjectSummaryRow(
+                project_id=p.id,
+                name=p.name,
+                is_archived=getattr(p, "is_archived", False),
+                handoff=item["handoff"],
+                done=item["done"],
+                canceled=item["canceled"],
+            )
         )
     return rows
 
@@ -201,7 +204,16 @@ def render_projects_page() -> None:
         return
 
     projects = [item["project"] for item in summary_list]
-    display_df = pd.DataFrame(_build_projects_display_rows(summary_list))
+    display_df = pd.DataFrame(
+        [
+            {
+                "__project_id": row.project_id,
+                **asdict(row),
+                "confirm_delete": False,
+            }
+            for row in _build_projects_display_rows(summary_list)
+        ]
+    ).drop(columns=["project_id"])
     editor_key = "projects_table_all" if show_archived else "projects_table_active"
 
     if show_archived:

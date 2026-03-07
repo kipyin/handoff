@@ -8,33 +8,11 @@ persisted edit.
 
 import pandas as pd
 
+from handoff.models import TodoStatus
 from handoff.pages.todos import DEADLINE_ANY, _apply_native_filters, _render_editable_table
 
 
 def test_apply_native_filters_unit(monkeypatch):
-    df = pd.DataFrame(
-        [
-            {
-                "name": "Milk Task",
-                "project": "P1",
-                "status": "done",
-                "helper": "Alice",
-                "deadline": None,
-                "notes": "",
-                "id": 1,
-            },
-            {
-                "name": "Other Task",
-                "project": "P1",
-                "status": "handoff",
-                "helper": "",
-                "deadline": None,
-                "notes": "",
-                "id": 2,
-            },
-        ]
-    )
-
     class FakeCol:
         def __enter__(self):
             return self
@@ -69,38 +47,60 @@ def test_apply_native_filters_unit(monkeypatch):
     )
     monkeypatch.setattr("handoff.pages.todos.st.date_input", lambda *args, **kwargs: None)
 
-    filtered_df, filter_state = _apply_native_filters(
-        df, key_prefix="test", project_names=["P1"], helper_options=["Alice"]
+    p1 = type("P", (), {"id": 1, "name": "P1"})()
+    todo_query, filter_state = _apply_native_filters(
+        key_prefix="test",
+        project_by_name={"P1": p1},
+        helper_options=["Alice"],
     )
 
-    assert len(filtered_df) == 1
-    assert filtered_df.iloc[0]["name"] == "Milk Task"
+    assert todo_query.search_text == "milk"
+    assert todo_query.project_ids == (1,)
+    assert todo_query.helper_names == ("Alice",)
+    assert todo_query.statuses == (TodoStatus.DONE,)
     assert filter_state["project_filters"] == ["P1"]
     assert filter_state["status_filters"] == ["done"]
     assert filter_state["helper_filters"] == ["Alice"]
 
 
 def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
-    # Prepare a tiny filtered dataframe and mock the downstream helpers
-    df_filtered = pd.DataFrame(
-        [
-            {
-                "__todo_id": 0,
-                "id": 1,
-                "name": "N",
-                "project": "Work",
-                "status": "handoff",
-                "deadline": None,
-                "notes": "",
-            },
-        ]
-    )
-
     monkeypatch.setattr(
         "handoff.pages.todos._apply_native_filters",
-        lambda source_df, key_prefix, project_names, helper_options: (
-            df_filtered,
+        lambda key_prefix, project_by_name, helper_options: (
+            type(
+                "Q",
+                (),
+                {
+                    "search_text": "",
+                    "statuses": (),
+                    "project_ids": (),
+                    "helper_names": (),
+                    "deadline_start": None,
+                    "deadline_end": None,
+                    "include_archived": False,
+                },
+            )(),
             {"project_filters": ["Work"], "status_filters": ["handoff"], "helper_filters": []},
+        ),
+    )
+    monkeypatch.setattr(
+        "handoff.pages.todos.query_todos",
+        lambda query: [],
+    )
+    monkeypatch.setattr(
+        "handoff.pages.todos._build_todo_dataframe",
+        lambda rows: pd.DataFrame(
+            [
+                {
+                    "__todo_id": 0,
+                    "id": 1,
+                    "name": "N",
+                    "project": "Work",
+                    "status": "handoff",
+                    "deadline": None,
+                    "notes": "",
+                },
+            ]
         ),
     )
     monkeypatch.setattr(
@@ -129,13 +129,11 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
 
     persisted = {}
 
-    def fake_persist_changes(
-        state, display_df=None, projects=None, default_project_id=None, key_prefix=None
-    ):
+    def fake_persist_changes(state, display_df=None, projects=None, defaults=None, key_prefix=None):
         persisted["state"] = state
         persisted["display_df"] = display_df
         persisted["projects"] = projects
-        persisted["default_project_id"] = default_project_id
+        persisted["defaults"] = defaults
         persisted["key_prefix"] = key_prefix
 
     monkeypatch.setattr("handoff.pages.todos._persist_changes", fake_persist_changes)
@@ -146,22 +144,7 @@ def test_render_editable_table_calls_persist_and_rerun(monkeypatch):
     # Minimal project to satisfy _render_editable_table
     p1 = type("P", (), {"id": 1, "name": "Work"})()
 
-    _source_df = pd.DataFrame(
-        [
-            {
-                "__todo_id": 0,
-                "id": 1,
-                "name": "N",
-                "project": "Work",
-                "status": "handoff",
-                "deadline": None,
-                "notes": "",
-            }
-        ]
-    )
-
     _render_editable_table(
-        source_df=_source_df,
         projects=[p1],
         helper_options=[],
         key_prefix="test",

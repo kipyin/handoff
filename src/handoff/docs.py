@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import re
 
-from .updater import _get_app_root
+from .paths import get_app_root
+
+_get_app_root = get_app_root
 
 
 def read_markdown_from_app_root(name: str) -> str:
