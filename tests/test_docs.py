@@ -90,4 +90,7 @@ def test_get_readme_intro_extracts_first_section(
 def test_get_readme_intro_real() -> None:
     """get_readme_intro returns non-empty text from the real README."""
     result = get_readme_intro()
-    assert "Handoff" in result or "to-do" in result.lower() or len(result) > 20
+    assert len(result) > 20
+    lowered = result.lower()
+    assert "not found" not in lowered
+    assert "could not be read" not in lowered
