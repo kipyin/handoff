@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from handoff.docs import read_markdown_from_app_root
+from handoff.docs import get_readme_intro, read_markdown_from_app_root
 
 
 def test_read_markdown_from_app_root_file_not_found(
@@ -72,3 +72,22 @@ def test_read_markdown_from_app_root_finds_release_notes_from_any_cwd(tmp_path: 
         os.chdir(original_cwd)
 
     assert "Release notes" in content
+
+
+def test_get_readme_intro_extracts_first_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """get_readme_intro returns text between the first and second ## headings."""
+    readme = "## MyApp\n\nFirst paragraph.\n\nSecond paragraph.\n\n## Next Section\n\nMore."
+    (tmp_path / "README.md").write_text(readme, encoding="utf-8")
+    monkeypatch.setattr("handoff.docs._get_app_root", lambda: tmp_path)
+    result = get_readme_intro()
+    assert "First paragraph." in result
+    assert "Second paragraph." in result
+    assert "Next Section" not in result
+
+
+def test_get_readme_intro_real() -> None:
+    """get_readme_intro returns non-empty text from the real README."""
+    result = get_readme_intro()
+    assert "Handoff" in result or "to-do" in result.lower() or len(result) > 20

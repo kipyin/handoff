@@ -7,6 +7,7 @@ one place.
 
 from __future__ import annotations
 
+import csv
 import io
 import json
 import platform
@@ -17,7 +18,8 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from handoff.data import get_export_payload
+from handoff.data import get_export_payload, import_payload
+from handoff.docs import get_readme_intro
 from handoff.logging import _get_logs_dir
 from handoff.updater import render_update_panel
 from handoff.version import __version__ as APP_VERSION
@@ -89,27 +91,93 @@ def _render_send_log_section() -> None:
     )
 
 
+def _parse_csv_to_payload(text: str) -> dict[str, Any]:
+    """Build an import payload from a CSV string (todos-only, projects auto-created)."""
+    reader = csv.DictReader(io.StringIO(text))
+    todos_raw: list[dict[str, Any]] = []
+    project_ids: dict[int, bool] = {}
+    for row in reader:
+        pid = int(row["project_id"])
+        project_ids[pid] = row.get("is_archived", "False").lower() in ("true", "1")
+        todos_raw.append(
+            {
+                "id": int(row["id"]),
+                "project_id": pid,
+                "name": row["name"],
+                "status": row.get("status", "handoff"),
+                "deadline": row.get("deadline") or None,
+                "helper": row.get("helper") or None,
+                "notes": row.get("notes") or None,
+                "created_at": row.get("created_at", datetime.now().isoformat()),
+                "completed_at": row.get("completed_at") or None,
+                "is_archived": row.get("is_archived", "False").lower() in ("true", "1"),
+            }
+        )
+    projects_raw = [
+        {
+            "id": pid,
+            "name": f"Project {pid}",
+            "created_at": datetime.now().isoformat(),
+            "is_archived": archived,
+        }
+        for pid, archived in project_ids.items()
+    ]
+    return {"projects": projects_raw, "todos": todos_raw}
+
+
+def _render_data_import_section() -> None:
+    """Render JSON and CSV import controls for restoring data from a backup."""
+    st.markdown("### Data import")
+    st.caption(
+        "Restore from a JSON or CSV backup. **This will overwrite all existing data** "
+        "(projects and todos)."
+    )
+
+    uploaded = st.file_uploader(
+        "Upload a .json or .csv backup file",
+        type=["json", "csv"],
+        key="settings_import_file",
+    )
+    if uploaded is None:
+        return
+
+    try:
+        raw_text = uploaded.getvalue().decode("utf-8")
+        if uploaded.name.endswith(".csv"):
+            payload = _parse_csv_to_payload(raw_text)
+        else:
+            payload = json.loads(raw_text)
+
+        if "projects" not in payload or "todos" not in payload:
+            st.error("Invalid file: expected top-level 'projects' and 'todos' keys.")
+            return
+
+        st.info(
+            f"File contains **{len(payload['projects'])}** projects "
+            f"and **{len(payload['todos'])}** todos."
+        )
+    except Exception as exc:
+        st.error(f"Could not parse file: {exc}")
+        return
+
+    confirm = st.checkbox(
+        "I understand this will replace all existing projects and todos.",
+        key="settings_import_confirm",
+    )
+    if confirm and st.button("Import and overwrite", key="settings_import_apply"):
+        try:
+            import_payload(payload)
+            st.success("Import complete — all data has been replaced.")
+        except Exception as exc:
+            st.error(f"Import failed: {exc}")
+
+
 def _render_about_section() -> None:
     """Render a compact About section at the end of the Settings page."""
     st.markdown("### About Handoff")
     st.caption(f"Version: {APP_VERSION}")
 
-    st.write(
-        "Handoff helps you see who is on the hook across all your projects. It is a local "
-        "to-do app for juggling tasks across different engagements (projects). The app is "
-        "designed for personal use and runs locally with SQLite."
-    )
-
-    st.write(
-        "You get a local, single-user to-do app backed by SQLite, with a unified view across "
-        "projects and helpers, and an in-app update flow."
-    )
-
-    st.write(
-        "Your data lives on this machine in a single SQLite database file; there is no server "
-        "component or automatic sync. You can export JSON/CSV copies of your data from the "
-        "Data export section above."
-    )
+    st.write(get_readme_intro())
 
     system = platform.system()
     release = platform.release()
@@ -126,8 +194,9 @@ def render_settings_page() -> None:
     """Render the settings page with update, backup, and about sections."""
     st.subheader("Settings")
     st.write(
-        "Use this page to apply code updates, restore backups created by updates, and export "
-        "your data. An About section at the end summarises the app and environment."
+        "Use this page to apply code updates, restore backups created by updates, export "
+        "or import your data, and download logs. An About section at the end summarises "
+        "the app and environment."
     )
 
     # App updates and code backups (panel from handoff.updater).
@@ -135,6 +204,9 @@ def render_settings_page() -> None:
 
     st.divider()
     _render_data_export_section()
+
+    st.divider()
+    _render_data_import_section()
 
     st.divider()
     _render_send_log_section()
