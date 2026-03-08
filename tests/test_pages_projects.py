@@ -8,6 +8,8 @@ from handoff.pages.projects import (
     _execute_changes,
     _get_pending_changes,
     _get_projects_to_delete,
+    _reset_projects_table_state,
+    render_projects_page,
 )
 
 
@@ -277,16 +279,15 @@ def test_build_projects_display_rows(mock_projects):
     ]
     rows = _build_projects_display_rows(summary_list)
     assert len(rows) == 2
-    assert rows[0]["__project_id"] == 1
-    assert rows[0]["name"] == "Work"
-    assert rows[0]["is_archived"] is False
-    assert rows[0]["handoff"] == 2
-    assert rows[0]["done"] == 1
-    assert rows[0]["canceled"] == 0
-    assert rows[0]["confirm_delete"] is False
-    assert rows[1]["__project_id"] == 2
-    assert rows[1]["name"] == "Home"
-    assert rows[1]["is_archived"] is False
+    assert rows[0].project_id == 1
+    assert rows[0].name == "Work"
+    assert rows[0].is_archived is False
+    assert rows[0].handoff == 2
+    assert rows[0].done == 1
+    assert rows[0].canceled == 0
+    assert rows[1].project_id == 2
+    assert rows[1].name == "Home"
+    assert rows[1].is_archived is False
 
 
 def test_get_pending_changes_skips_row_with_missing_project_id(mock_projects):
@@ -312,3 +313,125 @@ def test_get_pending_changes_skips_unknown_project_id(mock_projects):
     valid, errors, changes = _get_pending_changes(df, mock_projects)
     assert valid is True
     assert len(changes) == 0
+
+
+def test_render_projects_page_can_include_archived(monkeypatch):
+    """The archived-project toggle passes include_archived=True to the data layer."""
+    seen = {}
+    info_messages = []
+
+    monkeypatch.setattr("handoff.pages.projects._render_create_project_form", lambda: None)
+    monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr("handoff.pages.projects.st.checkbox", lambda *args, **kwargs: True)
+
+    def fake_get_projects_with_todo_summary(*, include_archived):
+        seen["include_archived"] = include_archived
+        return []
+
+    monkeypatch.setattr(
+        "handoff.pages.projects.get_projects_with_todo_summary",
+        fake_get_projects_with_todo_summary,
+    )
+    monkeypatch.setattr("handoff.pages.projects.st.info", info_messages.append)
+
+    render_projects_page()
+
+    assert seen["include_archived"] is True
+    assert info_messages == ["No projects yet. Use the form above to create the first project."]
+
+
+def test_render_projects_page_empty_state_mentions_archived_toggle(monkeypatch):
+    """The empty state hints at archived projects when only active projects are shown."""
+    info_messages = []
+
+    monkeypatch.setattr("handoff.pages.projects._render_create_project_form", lambda: None)
+    monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr("handoff.pages.projects.st.checkbox", lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        "handoff.pages.projects.get_projects_with_todo_summary",
+        lambda *, include_archived: [],
+    )
+    monkeypatch.setattr("handoff.pages.projects.st.info", info_messages.append)
+
+    render_projects_page()
+
+    assert info_messages == [
+        'No active projects yet. Create one above or enable "Show archived projects" to '
+        "manage archived ones."
+    ]
+
+
+def test_reset_projects_table_state_clears_editor_and_pending_delete(monkeypatch):
+    session_state = {
+        "projects_table_active": {"edited_rows": {"0": {"name": "Renamed"}}},
+        "projects_table_all": {"edited_rows": {"1": {"confirm_delete": True}}},
+        "projects_pending_deletion": {"names": ["Work"]},
+        "projects_show_archived": True,
+    }
+    monkeypatch.setattr("streamlit.session_state", session_state)
+
+    _reset_projects_table_state()
+
+    assert "projects_table_active" not in session_state
+    assert "projects_table_all" not in session_state
+    assert "projects_pending_deletion" not in session_state
+    assert session_state["projects_show_archived"] is True
+
+
+@pytest.mark.parametrize(
+    ("show_archived", "expected_key", "expected_caption"),
+    [
+        (
+            False,
+            "projects_table_active",
+            "Edit names and archive state below — changes save automatically. "
+            'Check "Delete" to mark projects for removal.',
+        ),
+        (
+            True,
+            "projects_table_all",
+            "Edit names and archive state below — changes save automatically. "
+            "Archived projects are visible here and can be unarchived. "
+            'Check "Delete" to mark projects for removal.',
+        ),
+    ],
+)
+def test_render_projects_page_uses_toggle_specific_editor_state(
+    monkeypatch, show_archived, expected_key, expected_caption
+):
+    captured = {}
+    project = Project(id=1, name="Work", is_archived=False)
+
+    monkeypatch.setattr("handoff.pages.projects._render_create_project_form", lambda: None)
+    monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
+
+    def fake_checkbox(*args, **kwargs):
+        captured["checkbox_on_change"] = kwargs.get("on_change")
+        return show_archived
+
+    monkeypatch.setattr("handoff.pages.projects.st.checkbox", fake_checkbox)
+    monkeypatch.setattr(
+        "handoff.pages.projects.get_projects_with_todo_summary",
+        lambda *, include_archived: [
+            {"project": project, "handoff": 0, "done": 0, "canceled": 0},
+        ],
+    )
+
+    def fake_caption(message):
+        captured["caption"] = message
+
+    monkeypatch.setattr("handoff.pages.projects.st.caption", fake_caption)
+
+    def fake_autosave_editor(df, *, key, **kwargs):
+        captured["editor_key"] = key
+        return df
+
+    monkeypatch.setattr("handoff.pages.projects.autosave_editor", fake_autosave_editor)
+    monkeypatch.setattr("handoff.pages.projects.st.button", lambda *args, **kwargs: False)
+    monkeypatch.setattr("streamlit.session_state", {})
+
+    render_projects_page()
+
+    assert captured["editor_key"] == expected_key
+    assert captured["caption"] == expected_caption
+    assert captured["checkbox_on_change"] is _reset_projects_table_state

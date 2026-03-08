@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from .updater import _get_app_root
+import re
+
+from .paths import get_app_root
+
+_get_app_root = get_app_root
 
 
 def read_markdown_from_app_root(name: str) -> str:
@@ -24,3 +28,18 @@ def read_markdown_from_app_root(name: str) -> str:
         return f"{name} not found at {path}."
     except OSError:
         return f"{name} could not be read from {path}."
+
+
+def get_readme_intro() -> str:
+    """Return the introductory paragraphs from README.md (before the second ``##`` heading).
+
+    If the README cannot be loaded, the placeholder message from
+    :func:`read_markdown_from_app_root` is returned instead.
+    """
+    content = read_markdown_from_app_root("README.md")
+    parts = re.split(r"^## ", content, maxsplit=2, flags=re.MULTILINE)
+    if len(parts) < 2:
+        return content.strip()
+    intro = parts[1]
+    _, _, body = intro.partition("\n")
+    return body.strip()

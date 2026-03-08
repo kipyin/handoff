@@ -1,16 +1,26 @@
 """Data access helpers for projects/todos and common query workflows."""
 
-from datetime import UTC, date, datetime
+import enum
+from datetime import UTC, date, datetime, time
 from typing import Any
 
 from loguru import logger
 from sqlalchemy.orm import selectinload
 from sqlmodel import or_, select
 
+from handoff.backup_schema import BackupPayload
 from handoff.db import session_context
 from handoff.models import Project, Todo, TodoStatus
+from handoff.page_models import TodoQuery
 
-_UNSET = object()
+
+class _Unset(enum.Enum):
+    """Sentinel distinguishing 'not provided' from None in update functions."""
+
+    UNSET = "UNSET"
+
+
+_UNSET = _Unset.UNSET
 
 
 def _helper_to_db(helper: str | list[str] | None) -> str | None:
@@ -94,7 +104,7 @@ def get_project(project_id: int) -> Project | None:
 def create_todo(
     project_id: int,
     name: str,
-    status: TodoStatus = TodoStatus.DELEGATED,
+    status: TodoStatus = TodoStatus.HANDOFF,
     deadline: date | None = None,
     helper: str | list[str] | None = None,
     notes: str | None = None,
@@ -140,12 +150,12 @@ def create_todo(
 def update_todo(
     todo_id: int,
     *,
-    project_id: int | None | object = _UNSET,
-    name: str | None | object = _UNSET,
-    status: TodoStatus | None | object = _UNSET,
-    deadline: date | None | object = _UNSET,
-    helper: str | list[str] | None | object = _UNSET,
-    notes: str | None | object = _UNSET,
+    project_id: int | None | _Unset = _UNSET,
+    name: str | None | _Unset = _UNSET,
+    status: TodoStatus | None | _Unset = _UNSET,
+    deadline: date | None | _Unset = _UNSET,
+    helper: str | list[str] | None | _Unset = _UNSET,
+    notes: str | None | _Unset = _UNSET,
 ) -> Todo | None:
     """Update a todo by id. Only provided fields are updated.
 
@@ -231,24 +241,55 @@ def delete_todo(todo_id: int) -> bool:
         return True
 
 
+def _to_start_of_day(value: date | datetime) -> datetime:
+    """Promote a bare date to start-of-day datetime; pass datetimes through."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, time.min)
+
+
+def _to_end_of_day(value: date | datetime) -> datetime:
+    """Promote a bare date to end-of-day datetime; pass datetimes through."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, time.max)
+
+
 def query_todos(
     *,
+    query: TodoQuery | None = None,
     project_ids: list[int] | None = None,
     helper_name: str | None = None,
+    helper_names: list[str] | None = None,
     statuses: list[TodoStatus] | None = None,
     start: date | None = None,
     end: date | None = None,
+    completed_start: date | datetime | None = None,
+    completed_end: date | datetime | None = None,
     search_text: str | None = None,
     include_archived: bool = False,
 ) -> list[Todo]:
     """Return todos matching optional unified filters.
 
+    Callers may either provide the individual filter arguments directly or pass a
+    :class:`handoff.page_models.TodoQuery` via ``query``. When ``query`` is provided,
+    its values populate the individual filters for this call.
+
+    ``completed_start`` and ``completed_end`` accept both ``date`` and
+    ``datetime``.  Bare ``date`` values are promoted to start-of-day /
+    end-of-day so the comparison against ``Todo.completed_at`` (a datetime
+    column) includes the full day.
+
     Args:
+        query: Optional typed query contract for project/helper/status/search/deadline filters.
         project_ids: Optional project ids to include.
         helper_name: Optional helper substring filter.
+        helper_names: Optional exact helper names to include.
         statuses: Optional statuses to include.
         start: Optional inclusive deadline lower bound.
         end: Optional inclusive deadline upper bound.
+        completed_start: Optional inclusive completed_at lower bound.
+        completed_end: Optional inclusive completed_at upper bound.
         search_text: Optional free-text search against name/notes/helper.
         include_archived: When True, include archived todos; otherwise exclude them.
 
@@ -256,6 +297,15 @@ def query_todos(
         Matching todos ordered by deadline then created_at.
 
     """
+    if query is not None:
+        project_ids = list(query.project_ids)
+        helper_names = list(query.helper_names)
+        statuses = list(query.statuses)
+        start = query.deadline_start
+        end = query.deadline_end
+        search_text = query.search_text
+        include_archived = query.include_archived
+
     with session_context() as session:
         stmt = select(Todo).options(selectinload(Todo.project))
         if not include_archived:
@@ -267,6 +317,10 @@ def query_todos(
         helper_stripped = (helper_name or "").strip()
         if helper_stripped:
             stmt = stmt.where(Todo.helper.ilike(f"%{helper_stripped}%"))
+        if helper_names:
+            canonical_helper_names = [name.strip() for name in helper_names if name.strip()]
+            if canonical_helper_names:
+                stmt = stmt.where(Todo.helper.in_(canonical_helper_names))
 
         if statuses:
             stmt = stmt.where(Todo.status.in_(statuses))
@@ -276,6 +330,13 @@ def query_todos(
         if end is not None:
             stmt = stmt.where(Todo.deadline.isnot(None)).where(Todo.deadline <= end)
 
+        if completed_start is not None:
+            cs = _to_start_of_day(completed_start)
+            stmt = stmt.where(Todo.completed_at.isnot(None)).where(Todo.completed_at >= cs)
+        if completed_end is not None:
+            ce = _to_end_of_day(completed_end)
+            stmt = stmt.where(Todo.completed_at.isnot(None)).where(Todo.completed_at <= ce)
+
         normalized_search = (search_text or "").strip()
         if normalized_search:
             like_expr = f"%{normalized_search}%"
@@ -284,6 +345,7 @@ def query_todos(
                     Todo.name.ilike(like_expr),
                     Todo.notes.ilike(like_expr),
                     Todo.helper.ilike(like_expr),
+                    Todo.project.has(Project.name.ilike(like_expr)),
                 )
             )
 
@@ -294,9 +356,12 @@ def query_todos(
             [
                 project_ids,
                 bool(helper_stripped),
+                helper_names,
                 statuses,
                 start is not None,
                 end is not None,
+                completed_start is not None,
+                completed_end is not None,
                 normalized_search,
             ]
         )
@@ -306,12 +371,18 @@ def query_todos(
                 parts.append(f"project_ids={project_ids}")
             if helper_stripped:
                 parts.append(f"helper={helper_stripped!r}")
+            if helper_names:
+                parts.append(f"helpers={helper_names!r}")
             if statuses:
                 parts.append(f"statuses={[s.value for s in statuses]}")
             if start is not None:
                 parts.append(f"start={start!s}")
             if end is not None:
                 parts.append(f"end={end!s}")
+            if completed_start is not None:
+                parts.append(f"completed_start={completed_start!s}")
+            if completed_end is not None:
+                parts.append(f"completed_end={completed_end!s}")
             if normalized_search:
                 parts.append(f"search={normalized_search!r}")
             logger.info(
@@ -383,17 +454,13 @@ def delete_project(project_id: int) -> bool:
         if not project:
             logger.warning("Project {project_id} not found for delete", project_id=project_id)
             return False
-
-        todo_stmt = select(Todo).where(Todo.project_id == project_id)
-        todos = list(session.exec(todo_stmt).all())
-        for todo in todos:
-            session.delete(todo)
+        todo_count = len(project.todos)
         session.delete(project)
         session.commit()
         logger.info(
             "Deleted project {project_id} and {todo_count} todos",
             project_id=project_id,
-            todo_count=len(todos),
+            todo_count=todo_count,
         )
         return True
 
@@ -498,6 +565,60 @@ def unarchive_todo(todo_id: int) -> bool:
         return True
 
 
+def import_payload(data_payload: dict[str, Any]) -> None:
+    """Replace all projects and todos with the contents of *data_payload*.
+
+    The payload must match the schema produced by :func:`get_export_payload`
+    (keys ``"projects"`` and ``"todos"``).  The operation runs inside a single
+    transaction: existing rows are deleted, then new rows are inserted.
+
+    Args:
+        data_payload: Dict with ``"projects"`` and ``"todos"`` lists.
+
+    Raises:
+        KeyError: If ``"projects"`` or ``"todos"`` key is missing.
+        ValueError: If a record cannot be parsed.
+
+    """
+    payload = BackupPayload.from_dict(data_payload)
+
+    with session_context() as session:
+        session.exec(select(Todo)).all()  # ensure model is loaded
+        session.execute(Todo.__table__.delete())
+        session.execute(Project.__table__.delete())
+
+        for p in payload.projects:
+            project = Project(
+                id=p.id,
+                name=p.name,
+                created_at=p.created_at,
+                is_archived=p.is_archived,
+            )
+            session.add(project)
+
+        for t in payload.todos:
+            todo = Todo(
+                id=t.id,
+                project_id=t.project_id,
+                name=t.name,
+                status=t.status,
+                deadline=t.deadline,
+                helper=t.helper,
+                notes=t.notes,
+                created_at=t.created_at,
+                completed_at=t.completed_at,
+                is_archived=t.is_archived,
+            )
+            session.add(todo)
+
+        session.commit()
+        logger.info(
+            "Imported {project_count} projects and {todo_count} todos",
+            project_count=len(payload.projects),
+            todo_count=len(payload.todos),
+        )
+
+
 def get_export_payload() -> dict[str, Any]:
     """Return JSON-serializable snapshot of projects and todos.
 
@@ -508,32 +629,7 @@ def get_export_payload() -> dict[str, Any]:
     with session_context() as session:
         projects = list(session.exec(select(Project).order_by(Project.created_at.asc())).all())
         todos = list(session.exec(select(Todo).order_by(Todo.created_at.asc())).all())
-        return {
-            "projects": [
-                {
-                    "id": project.id,
-                    "name": project.name,
-                    "created_at": project.created_at.isoformat(),
-                    "is_archived": project.is_archived,
-                }
-                for project in projects
-            ],
-            "todos": [
-                {
-                    "id": todo.id,
-                    "project_id": todo.project_id,
-                    "name": todo.name,
-                    "status": todo.status.value,
-                    "deadline": todo.deadline.isoformat() if todo.deadline else None,
-                    "helper": todo.helper,
-                    "notes": todo.notes,
-                    "created_at": todo.created_at.isoformat(),
-                    "completed_at": todo.completed_at.isoformat() if todo.completed_at else None,
-                    "is_archived": todo.is_archived,
-                }
-                for todo in todos
-            ],
-        }
+        return BackupPayload.from_models(projects, todos).to_dict()
 
 
 def get_projects_with_todo_summary(*, include_archived: bool = False) -> list[dict[str, Any]]:
@@ -576,7 +672,7 @@ def get_projects_with_todo_summary(*, include_archived: bool = False) -> list[di
         if not item:
             continue
         item["total"] += 1
-        if todo.status == TodoStatus.DELEGATED:
+        if todo.status == TodoStatus.HANDOFF:
             item["handoff"] += 1
         elif todo.status == TodoStatus.DONE:
             item["done"] += 1

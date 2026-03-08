@@ -43,15 +43,6 @@ def test_render_projects_page_calls_impl() -> None:
     mock_impl.assert_called_once()
 
 
-def test_render_calendar_page_calls_impl() -> None:
-    """render_calendar_page delegates to the calendar page implementation."""
-    with patch("handoff.ui._render_calendar_page_impl") as mock_impl:
-        import handoff.ui as ui
-
-        ui.render_calendar_page()
-    mock_impl.assert_called_once()
-
-
 def test_render_analytics_page_calls_impl() -> None:
     """render_analytics_page delegates to the analytics page implementation."""
     with patch("handoff.ui._render_analytics_page_impl") as mock_impl:
