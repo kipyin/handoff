@@ -6,10 +6,9 @@ import ast
 from pathlib import Path
 
 PAGE_FILES = [
-    Path("src/handoff/pages/dashboard.py"),
-    Path("src/handoff/pages/projects.py"),
-    Path("src/handoff/pages/settings.py"),
-    Path("src/handoff/pages/todos.py"),
+    path
+    for path in Path("src/handoff/pages").glob("*.py")
+    if path.name != "__init__.py"
 ]
 
 
