@@ -6,6 +6,7 @@ from datetime import date
 
 import streamlit as st
 
+from handoff.data import get_recent_activity
 from handoff.services.dashboard_service import (
     get_cycle_time_by_project,
     get_dashboard_metrics,
@@ -77,6 +78,22 @@ def render_dashboard_page() -> None:
     if not helper_load.empty:
         st.markdown("#### Current helper load")
         st.bar_chart(helper_load.set_index("helper"))
+
+    # Recent Activity (A7)
+    st.markdown("---")
+    st.markdown("#### Recent activity")
+    activity = get_recent_activity(limit=15)
+    if activity:
+        for entry in activity:
+            ts = entry.get("timestamp", "")
+            entity = entry.get("entity_type", "?")
+            ent_id = entry.get("entity_id", "")
+            action = entry.get("action", "?")
+            details = entry.get("details") or {}
+            name = details.get("name", f"#{ent_id}") if isinstance(details, dict) else str(ent_id)
+            st.caption(f"{ts} — {entity} {name}: {action}")
+    else:
+        st.caption("No recent activity.")
 
     # Export metrics (A6)
     st.markdown("---")

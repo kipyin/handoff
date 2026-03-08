@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pandas as pd
 import pytest
 
@@ -8,6 +10,7 @@ from handoff.pages.projects import (
     _execute_changes,
     _get_pending_changes,
     _get_projects_to_delete,
+    _render_create_project_form,
     _reset_projects_table_state,
     render_projects_page,
 )
@@ -440,3 +443,277 @@ def test_render_projects_page_uses_toggle_specific_editor_state(
     assert captured["editor_key"] == expected_key
     assert captured["caption"] == expected_caption
     assert captured["checkbox_on_change"] is _reset_projects_table_state
+
+
+# --- Additional coverage: _execute_changes errors, _render_create_project_form ---
+
+
+class TestExecuteChangesErrors:
+    """Additional error paths for _execute_changes."""
+
+    def test_archive_exception(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "handoff.pages.projects.archive_project",
+            lambda pid: (_ for _ in ()).throw(RuntimeError("Lock error")),
+        )
+        _, updated, errors = _execute_changes([{"type": "archive", "id": 1, "archive": True}])
+        assert updated == 0
+        assert any("Lock error" in e for e in errors)
+
+    def test_unarchive_exception(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "handoff.pages.projects.unarchive_project",
+            lambda pid: (_ for _ in ()).throw(RuntimeError("Fail")),
+        )
+        _, updated, errors = _execute_changes([{"type": "archive", "id": 1, "archive": False}])
+        assert updated == 0
+        assert len(errors) == 1
+
+    def test_delete_exception(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "handoff.pages.projects.delete_project",
+            lambda pid: (_ for _ in ()).throw(RuntimeError("DB locked")),
+        )
+        deleted, _, errors = _execute_changes([{"type": "delete", "id": 1, "name": "Fail"}])
+        assert deleted == 0
+        assert any("DB locked" in e for e in errors)
+
+
+class TestApplyProjectChangesOrchestration:
+    """Additional _apply_project_changes orchestration cases."""
+
+    def test_execution_errors_propagate(self, mock_projects, monkeypatch) -> None:
+        monkeypatch.setattr(
+            "handoff.pages.projects.rename_project",
+            lambda pid, name: (_ for _ in ()).throw(RuntimeError("nope")),
+        )
+        df = pd.DataFrame(
+            [{"__project_id": 1, "name": "Changed", "is_archived": False, "confirm_delete": False}]
+        )
+        success, errors, deleted, updated = _apply_project_changes(df, mock_projects)
+        assert success is False
+        assert len(errors) > 0
+
+
+class FakeForm:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+class FakeCol:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _make_st_mock(monkeypatch, *, session_state=None):
+    st_mock = MagicMock()
+    st_mock.form.return_value = FakeForm()
+    st_mock.text_input.return_value = ""
+    st_mock.form_submit_button.return_value = False
+    st_mock.button.return_value = False
+    st_mock.session_state = session_state if session_state is not None else {}
+    st_mock.columns.return_value = [FakeCol(), FakeCol(), FakeCol()]
+    monkeypatch.setattr("handoff.pages.projects.st", st_mock)
+    return st_mock
+
+
+def _mock_summary(monkeypatch, projects):
+    summary = [{"project": p, "handoff": 1, "done": 0, "canceled": 0} for p in projects]
+    monkeypatch.setattr(
+        "handoff.pages.projects.get_projects_with_todo_summary",
+        lambda include_archived: summary,
+    )
+    return summary
+
+
+def _mock_autosave_editor(monkeypatch, edited_df):
+    monkeypatch.setattr(
+        "handoff.pages.projects.autosave_editor",
+        lambda *a, **kw: edited_df,
+    )
+
+
+class TestRenderCreateProjectForm:
+    def _patch(self, monkeypatch, *, text_value="", submitted=False):
+        st_mock = MagicMock()
+        st_mock.text_input.return_value = text_value
+        st_mock.form_submit_button.return_value = submitted
+        st_mock.form.return_value = FakeForm()
+        monkeypatch.setattr("handoff.pages.projects.st", st_mock)
+        return st_mock
+
+    def test_empty_name_shows_error(self, monkeypatch) -> None:
+        st_mock = self._patch(monkeypatch, text_value="  ", submitted=True)
+        _render_create_project_form()
+        st_mock.error.assert_called_once_with("Project name cannot be empty.")
+
+    def test_valid_name_creates_project(self, monkeypatch) -> None:
+        st_mock = self._patch(monkeypatch, text_value="New Project", submitted=True)
+        created = {"name": None}
+        monkeypatch.setattr(
+            "handoff.pages.projects.create_project",
+            lambda n: created.__setitem__("name", n),
+        )
+        monkeypatch.setattr("handoff.pages.projects.st.rerun", lambda: None)
+        _render_create_project_form()
+        assert created["name"] == "New Project"
+        st_mock.success.assert_called_once_with("Project created.")
+
+    def test_not_submitted_does_nothing(self, monkeypatch) -> None:
+        st_mock = self._patch(monkeypatch, text_value="Anything", submitted=False)
+        _render_create_project_form()
+        st_mock.error.assert_not_called()
+        st_mock.success.assert_not_called()
+
+
+class TestRenderProjectsPage:
+    def test_no_projects_shows_info(self, monkeypatch) -> None:
+        st_mock = _make_st_mock(monkeypatch)
+        monkeypatch.setattr(
+            "handoff.pages.projects.get_projects_with_todo_summary",
+            lambda include_archived: [],
+        )
+        render_projects_page()
+        st_mock.info.assert_called_once()
+        assert "No projects" in st_mock.info.call_args[0][0]
+
+    def test_no_delete_button_without_deletions(self, monkeypatch) -> None:
+        projects = [Project(id=1, name="Work", is_archived=False)]
+        st_mock = _make_st_mock(monkeypatch)
+        _mock_summary(monkeypatch, projects)
+        edited_df = pd.DataFrame(
+            [
+                {
+                    "__project_id": 1,
+                    "name": "Work",
+                    "is_archived": False,
+                    "handoff": 1,
+                    "done": 0,
+                    "canceled": 0,
+                    "confirm_delete": False,
+                }
+            ]
+        )
+        _mock_autosave_editor(monkeypatch, edited_df)
+        monkeypatch.setattr("handoff.pages.projects._get_projects_to_delete", lambda df, p: [])
+        render_projects_page()
+        st_mock.button.assert_not_called()
+
+    def test_delete_button_triggers_pending(self, monkeypatch) -> None:
+        projects = [Project(id=1, name="Work", is_archived=False)]
+        session_state = {}
+        st_mock = _make_st_mock(monkeypatch, session_state=session_state)
+        _mock_summary(monkeypatch, projects)
+        edited_df = pd.DataFrame(
+            [
+                {
+                    "__project_id": 1,
+                    "name": "Work",
+                    "is_archived": False,
+                    "handoff": 1,
+                    "done": 0,
+                    "canceled": 0,
+                    "confirm_delete": True,
+                }
+            ]
+        )
+        _mock_autosave_editor(monkeypatch, edited_df)
+        st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "projects_delete_button"
+        monkeypatch.setattr(
+            "handoff.pages.projects._get_projects_to_delete", lambda df, p: [(1, "Work")]
+        )
+        render_projects_page()
+        assert "projects_pending_deletion" in session_state
+        st_mock.rerun.assert_called()
+
+    def test_pending_deletion_confirm(self, monkeypatch) -> None:
+        projects = [Project(id=1, name="Work", is_archived=False)]
+        session_state = {"projects_pending_deletion": {"names": ["Work"]}}
+        st_mock = _make_st_mock(monkeypatch, session_state=session_state)
+        _mock_summary(monkeypatch, projects)
+        edited_df = pd.DataFrame(
+            [
+                {
+                    "__project_id": 1,
+                    "name": "Work",
+                    "is_archived": False,
+                    "handoff": 1,
+                    "done": 0,
+                    "canceled": 0,
+                    "confirm_delete": True,
+                }
+            ]
+        )
+        _mock_autosave_editor(monkeypatch, edited_df)
+        st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "projects_confirm_delete_btn"
+        monkeypatch.setattr(
+            "handoff.pages.projects._get_projects_to_delete", lambda df, p: [(1, "Work")]
+        )
+        monkeypatch.setattr(
+            "handoff.pages.projects._apply_project_changes", lambda df, p: (True, [], 1, 0)
+        )
+        render_projects_page()
+        st_mock.success.assert_called()
+        st_mock.rerun.assert_called()
+        assert "projects_pending_deletion" not in session_state
+
+    def test_pending_deletion_cancel(self, monkeypatch) -> None:
+        projects = [Project(id=1, name="Work", is_archived=False)]
+        session_state = {"projects_pending_deletion": {"names": ["Work"]}}
+        st_mock = _make_st_mock(monkeypatch, session_state=session_state)
+        _mock_summary(monkeypatch, projects)
+        edited_df = pd.DataFrame(
+            [
+                {
+                    "__project_id": 1,
+                    "name": "Work",
+                    "is_archived": False,
+                    "handoff": 1,
+                    "done": 0,
+                    "canceled": 0,
+                    "confirm_delete": True,
+                }
+            ]
+        )
+        _mock_autosave_editor(monkeypatch, edited_df)
+        st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "projects_cancel_delete_btn"
+        monkeypatch.setattr("handoff.pages.projects._get_projects_to_delete", lambda df, p: [])
+        render_projects_page()
+        assert "projects_pending_deletion" not in session_state
+        st_mock.rerun.assert_called()
+
+    def test_pending_deletion_with_errors(self, monkeypatch) -> None:
+        projects = [Project(id=1, name="Work", is_archived=False)]
+        session_state = {"projects_pending_deletion": {"names": ["Work"]}}
+        st_mock = _make_st_mock(monkeypatch, session_state=session_state)
+        _mock_summary(monkeypatch, projects)
+        edited_df = pd.DataFrame(
+            [
+                {
+                    "__project_id": 1,
+                    "name": "Work",
+                    "is_archived": False,
+                    "handoff": 1,
+                    "done": 0,
+                    "canceled": 0,
+                    "confirm_delete": True,
+                }
+            ]
+        )
+        _mock_autosave_editor(monkeypatch, edited_df)
+        st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "projects_confirm_delete_btn"
+        monkeypatch.setattr(
+            "handoff.pages.projects._get_projects_to_delete", lambda df, p: [(1, "Work")]
+        )
+        monkeypatch.setattr(
+            "handoff.pages.projects._apply_project_changes",
+            lambda df, p: (False, ["Could not delete"], 0, 0),
+        )
+        render_projects_page()
+        st_mock.error.assert_called_with("Could not delete")
