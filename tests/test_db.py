@@ -56,6 +56,7 @@ def test_init_db_creates_tables_and_completed_at(
     assert {"id", "project_id", "name"}.issubset(todo_columns)
     assert "completed_at" in todo_columns
     assert "is_archived" in todo_columns
+    assert "next_check" in todo_columns
     assert "is_archived" in project_columns
 
 
@@ -100,7 +101,58 @@ def test_init_db_adds_completed_at_to_existing_schema(
     project_columns = _fetch_columns(sqlite_path, "project")
     assert "completed_at" in todo_columns
     assert "is_archived" in todo_columns
+    assert "next_check" in todo_columns
     assert "is_archived" in project_columns
+
+
+def test_init_db_adds_next_check_to_existing_schema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """init_db applies the next_check migration for a todo schema that lacks it."""
+    db_path = tmp_path / "todo.db"
+    db = _reload_db_module(db_path, monkeypatch)
+
+    sqlite_path = _get_sqlite_path(db.get_database_url())
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE todo (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'handoff',
+                deadline DATE NULL,
+                helper TEXT NULL,
+                notes TEXT NULL,
+                created_at TIMESTAMP NOT NULL,
+                completed_at TIMESTAMP NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0
+            )
+            """,
+        )
+        conn.execute(
+            """
+            CREATE TABLE project (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0
+            )
+            """,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    todo_columns_before = _fetch_columns(sqlite_path, "todo")
+    assert "next_check" not in todo_columns_before
+
+    db.init_db()
+
+    todo_columns_after = _fetch_columns(sqlite_path, "todo")
+    assert "next_check" in todo_columns_after
 
 
 def test_init_db_raises_when_engine_creation_fails(

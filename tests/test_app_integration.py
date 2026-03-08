@@ -65,10 +65,10 @@ def _settings_page_entry() -> None:
 def _dashboard_page_entry() -> None:
     """Single-page entrypoint for Dashboard: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.analytics import render_analytics_page
+    from handoff.pages.dashboard import render_dashboard_page
 
     ui.setup("2026.2.24")
-    render_analytics_page()
+    render_dashboard_page()
 
 
 def _docs_page_entry() -> None:

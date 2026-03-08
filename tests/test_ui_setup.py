@@ -43,12 +43,12 @@ def test_render_projects_page_calls_impl() -> None:
     mock_impl.assert_called_once()
 
 
-def test_render_analytics_page_calls_impl() -> None:
-    """render_analytics_page delegates to the analytics page implementation."""
-    with patch("handoff.ui._render_analytics_page_impl") as mock_impl:
+def test_render_dashboard_page_calls_impl() -> None:
+    """render_dashboard_page delegates to the dashboard page implementation."""
+    with patch("handoff.ui._render_dashboard_page_impl") as mock_impl:
         import handoff.ui as ui
 
-        ui.render_analytics_page()
+        ui.render_dashboard_page()
     mock_impl.assert_called_once()
 
 

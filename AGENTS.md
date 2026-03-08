@@ -50,11 +50,11 @@ The navigation in `app.py` exposes six pages:
 | Now | 🎯 | `pages/now.py` (`render_now_page`) |
 | Todos | ✅ | `pages/todos.py` |
 | Projects | 📁 | `pages/projects.py` |
-| Dashboard | 📊 | `pages/analytics.py` (`render_analytics_page`) |
+| Dashboard | 📊 | `pages/dashboard.py` (`render_dashboard_page`) |
 | Settings | ⚙️ | `pages/settings.py` |
 | Docs | 📖 | `pages/docs.py` |
 
-There is no Calendar page. The former Analytics page was rebranded as **Dashboard** in the UI (title and icon), but the module and function names remain `analytics.py` / `render_analytics_page`.
+There is no Calendar page. The Dashboard page uses `pages/dashboard.py` and `render_dashboard_page`.
 
 ### Testing workflows by area
 
@@ -69,7 +69,7 @@ All use an in-memory SQLite fixture — no file-system side effects. When adding
 **Pages / UI** (`pages/`):
 
 ```bash
-uv run pytest tests/test_pages_todos.py tests/test_pages_projects.py tests/test_analytics.py
+uv run pytest tests/test_pages_todos.py tests/test_pages_projects.py tests/test_dashboard.py
 ```
 
 Integration smoke tests use Streamlit's `AppTest` with a real temp-file DB:
@@ -98,7 +98,7 @@ uv run handoff typecheck   # pyright over src/ and scripts/
 uv run handoff test        # pytest with coverage (-x, --ff)
 ```
 
-**pyright exclusions:** `data.py`, `pages/analytics.py`, and `pages/todos.py` are excluded from type checking (heavy SQLModel/Streamlit dynamic usage). Do not remove them from the exclusion list in `pyproject.toml` without understanding the consequences.
+**pyright exclusions:** `data.py`, `pages/dashboard.py`, `pages/todos.py`, and `services/dashboard_service.py` are excluded from type checking (heavy SQLModel/Streamlit/pandas dynamic usage). Do not remove them from the exclusion list in `pyproject.toml` without understanding the consequences.
 
 ### Keeping this file up to date
 

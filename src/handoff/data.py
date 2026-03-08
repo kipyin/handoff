@@ -443,7 +443,8 @@ def query_now_items(
 
     Returns:
         List of (todo, at_risk) tuples. at_risk is True when deadline is near
-        or past. Sorted with at_risk items first, then by next_check, created_at.
+        or past. Sorted with at_risk items first, then by next_check, deadline,
+        created_at.
 
     """
     today = date.today()
@@ -480,11 +481,6 @@ def query_now_items(
         deadline_at_risk = (Todo.deadline.isnot(None)) & (Todo.deadline <= cutoff)
         stmt = stmt.where(next_check_due | deadline_at_risk)
 
-        stmt = stmt.order_by(
-            Todo.deadline.asc().nulls_last(),
-            Todo.next_check.asc().nulls_last(),
-            Todo.created_at.asc(),
-        )
         todos = list(session.exec(stmt).all())
 
     result: list[tuple[Todo, bool]] = []
