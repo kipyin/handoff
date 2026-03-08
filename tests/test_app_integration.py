@@ -169,14 +169,21 @@ def test_projects_create_form_submit_no_error(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    # Fill project name and submit
-    text_inputs = at.text_input
-    if text_inputs:
-        text_inputs[0].input("TestProjectFromForm").run(timeout=5)
-    # Find and click the Create button (form submit)
-    create_btns = [b for b in at.button if b.label == "Create"]
-    if create_btns:
-        create_btns[0].click().run(timeout=5)
+    # Fill project name and submit. The Projects page always renders a project-name
+    # text input and a Create submit button. Target them by label/key so the test
+    # fails if the UI contract breaks.
+    project_name_inputs = [
+        ti
+        for ti in at.text_input
+        if getattr(ti, "key", None) == "projects_new_project_name"
+        or getattr(ti, "label", None) == "Project name"
+    ]
+    assert project_name_inputs, "Expected project-name text input not found on Projects page"
+    project_name_inputs[0].input("TestProjectFromForm").run(timeout=5)
+
+    create_btns = [b for b in at.button if getattr(b, "label", None) == "Create"]
+    assert create_btns, "Expected Create button not found on Projects page"
+    create_btns[0].click().run(timeout=5)
 
     assert len(at.exception) == 0
 
@@ -195,10 +202,15 @@ def test_todos_page_filter_selectbox_interaction_no_error(app_test_db: Path) -> 
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    # Interact with selectbox if present (deadline filter)
+    # Interact with deadline filter selectbox; it should always be present once a
+    # project exists.
     selectboxes = at.selectbox
-    if selectboxes:
-        selectboxes[0].select("Overdue").run(timeout=5)
+    assert selectboxes, "Expected at least one selectbox on Todos page"
+    deadline_box = next(
+        (sb for sb in selectboxes if getattr(sb, "label", None) == "Deadline"),
+        selectboxes[0],
+    )
+    deadline_box.select("Overdue").run(timeout=5)
 
     assert len(at.exception) == 0
 
@@ -209,7 +221,7 @@ def test_docs_page_tab_switch_no_error(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    tabs = at.get("tabs")
-    if len(tabs) >= 2:
-        tabs[1].run(timeout=5)  # Switch to Release notes tab
-        assert len(at.exception) == 0
+    tabs = at.tabs
+    assert len(tabs) == 2, f"Expected exactly 2 tabs on Docs page, got {len(tabs)}"
+    tabs[1].run(timeout=5)  # Switch to Release notes tab
+    assert len(at.exception) == 0

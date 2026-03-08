@@ -1,13 +1,14 @@
 """Runtime health tests: verify the app starts and runs without errors.
 
-These tests spawn the actual Streamlit process (uv run handoff), monitor stdout/stderr
-for error patterns, and optionally use AppTest to programmatically interact with
-the UI. The subprocess never exits on its own, so we run it for a fixed duration
-and check that no Traceback/Error appears in the output.
+These tests spawn the actual app via python -m handoff (same as uv run handoff),
+monitor combined stdout/stderr for error patterns, and optionally use AppTest
+to programmatically interact with the UI. The subprocess never exits on its own,
+so we run it for a fixed duration and check that no Traceback/Error appears.
 """
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -16,7 +17,6 @@ import time
 from pathlib import Path
 
 WORKSPACE = Path(__file__).resolve().parents[1]
-APP_PY = WORKSPACE / "app.py"
 
 # Patterns that indicate startup or runtime failure.
 ERROR_PATTERNS = [
@@ -35,27 +35,22 @@ def _run_app_subprocess(
     db_path: Path,
     duration_seconds: float = 10.0,
     extra_wait_after_ready: float = 3.0,
-) -> tuple[str, str, bool, bool]:
-    """Run the Streamlit app as a subprocess and monitor stdout/stderr.
+) -> tuple[str, bool, bool]:
+    """Run the Handoff app as a subprocess and monitor its combined output.
+
+    Uses the same entrypoint as users (python -m handoff) so handoff.config
+    is loaded before Streamlit starts. stdout and stderr are combined.
 
     Returns:
-        (stdout, stderr, saw_ready, has_errors)
+        (combined_output, saw_ready, has_errors)
     """
     env = {
-        **__import__("os").environ,
+        **os.environ,
         "HANDOFF_DB_PATH": str(db_path),
         "STREAMLIT_SERVER_HEADLESS": "true",
     }
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "streamlit",
-        "run",
-        str(APP_PY),
-        "--server.headless",
-        "true",
-    ]
+    cmd = [sys.executable, "-m", "handoff"]
 
     proc = subprocess.Popen(
         cmd,
@@ -112,20 +107,20 @@ def _run_app_subprocess(
     reader.join(timeout=2)
 
     full_output = "".join(output_lines)
-    return full_output, "", saw_ready, has_errors
+    return full_output, saw_ready, has_errors
 
 
 def test_app_starts_without_errors_and_reports_ready(
     tmp_path: Path,
 ) -> None:
-    """Run uv run handoff in a subprocess and verify no errors in stdout/stderr.
+    """Run python -m handoff in a subprocess and verify no errors in output.
 
     The Streamlit process does not exit on its own. We run it for ~10 seconds,
     monitor output for Traceback/Error patterns, and assert we see the
     'You can now view your Streamlit app' ready message with no errors.
     """
     db_path = tmp_path / "health_check.db"
-    stdout, _stderr, saw_ready, has_errors = _run_app_subprocess(
+    output, saw_ready, has_errors = _run_app_subprocess(
         db_path=db_path,
         duration_seconds=12.0,
         extra_wait_after_ready=3.0,
@@ -133,6 +128,6 @@ def test_app_starts_without_errors_and_reports_ready(
 
     assert saw_ready, (
         "Expected Streamlit ready message in output. "
-        "App may have failed to start. Output:\n" + stdout[-3000:]
+        "App may have failed to start. Output:\n" + output[-3000:]
     )
-    assert not has_errors, "Found error patterns (Traceback, Error, etc.) in app output:\n" + stdout
+    assert not has_errors, "Found error patterns (Traceback, Error, etc.) in app output:\n" + output
