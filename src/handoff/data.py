@@ -1,7 +1,7 @@
 """Data access helpers for projects/todos and common query workflows."""
 
 import enum
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from loguru import logger
@@ -105,6 +105,7 @@ def create_todo(
     project_id: int,
     name: str,
     status: TodoStatus = TodoStatus.HANDOFF,
+    next_check: date | None = None,
     deadline: date | None = None,
     helper: str | list[str] | None = None,
     notes: str | None = None,
@@ -115,6 +116,7 @@ def create_todo(
         project_id: Id of the project.
         name: Todo title/name.
         status: One of handoff, done, canceled.
+        next_check: Optional next follow-up date.
         deadline: Optional due date/time.
         helper: Optional assignee name (single string).
         notes: Optional text (can include links, file paths, etc.).
@@ -128,6 +130,7 @@ def create_todo(
             project_id=project_id,
             name=name,
             status=status,
+            next_check=next_check,
             deadline=deadline,
             helper=_helper_to_db(helper),
             notes=notes or None,
@@ -153,6 +156,7 @@ def update_todo(
     project_id: int | None | _Unset = _UNSET,
     name: str | None | _Unset = _UNSET,
     status: TodoStatus | None | _Unset = _UNSET,
+    next_check: date | None | _Unset = _UNSET,
     deadline: date | None | _Unset = _UNSET,
     helper: str | list[str] | None | _Unset = _UNSET,
     notes: str | None | _Unset = _UNSET,
@@ -164,6 +168,7 @@ def update_todo(
         project_id: Optional new project id.
         name: Optional new name.
         status: Optional new status.
+        next_check: Optional next follow-up date.
         deadline: Optional new deadline.
         helper: Optional new helper (string or list).
         notes: Optional new notes.
@@ -184,6 +189,8 @@ def update_todo(
         previous_status = todo.status
         if status is not _UNSET:
             todo.status = status
+        if next_check is not _UNSET:
+            todo.next_check = next_check
         if deadline is not _UNSET:
             todo.deadline = deadline
         if helper is not _UNSET:
@@ -211,6 +218,33 @@ def update_todo(
             deadline=todo.deadline,
         )
         return todo
+
+
+def snooze_todo(todo_id: int, *, to_date: date) -> Todo | None:
+    """Update a todo's next_check date. Does not change deadline.
+
+    Args:
+        todo_id: Id of the todo to snooze.
+        to_date: New next follow-up date.
+
+    Returns:
+        Updated todo, or None if not found.
+
+    """
+    return update_todo(todo_id, next_check=to_date)
+
+
+def close_todo(todo_id: int) -> Todo | None:
+    """Mark a todo as done and remove it from the Now page.
+
+    Args:
+        todo_id: Id of the todo to close.
+
+    Returns:
+        Updated todo, or None if not found.
+
+    """
+    return update_todo(todo_id, status=TodoStatus.DONE)
 
 
 def delete_todo(todo_id: int) -> bool:
@@ -392,6 +426,83 @@ def query_todos(
             )
 
         return todos
+
+
+def query_now_items(
+    *,
+    project_ids: list[int] | None = None,
+    helper_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 2,
+) -> list[tuple[Todo, bool]]:
+    """Return open items that need attention on the Now page.
+
+    An item needs attention if:
+    - Next check is today or earlier (or null), and/or
+    - Deadline is within deadline_near_days or past due.
+
+    Returns:
+        List of (todo, at_risk) tuples. at_risk is True when deadline is near
+        or past. Sorted with at_risk items first, then by next_check, created_at.
+
+    """
+    today = date.today()
+    cutoff = today + timedelta(days=deadline_near_days)
+
+    with session_context() as session:
+        stmt = (
+            select(Todo)
+            .options(selectinload(Todo.project))
+            .where(Todo.is_archived.is_(False))
+            .where(Todo.status == TodoStatus.HANDOFF)
+        )
+        if project_ids:
+            stmt = stmt.where(Todo.project_id.in_(project_ids))
+        if helper_names:
+            canonical = [n.strip() for n in helper_names if n.strip()]
+            if canonical:
+                stmt = stmt.where(Todo.helper.in_(canonical))
+        normalized_search = (search_text or "").strip()
+        if normalized_search:
+            like_expr = f"%{normalized_search}%"
+            stmt = stmt.where(
+                or_(
+                    Todo.name.ilike(like_expr),
+                    Todo.notes.ilike(like_expr),
+                    Todo.helper.ilike(like_expr),
+                    Todo.project.has(Project.name.ilike(like_expr)),
+                )
+            )
+
+        # Next-check driven: next_check <= today OR next_check IS NULL
+        next_check_due = (Todo.next_check <= today) | (Todo.next_check.is_(None))
+        # Deadline driven: deadline within range or past
+        deadline_at_risk = (Todo.deadline.isnot(None)) & (Todo.deadline <= cutoff)
+        stmt = stmt.where(next_check_due | deadline_at_risk)
+
+        stmt = stmt.order_by(
+            Todo.deadline.asc().nulls_last(),
+            Todo.next_check.asc().nulls_last(),
+            Todo.created_at.asc(),
+        )
+        todos = list(session.exec(stmt).all())
+
+    result: list[tuple[Todo, bool]] = []
+    for todo in todos:
+        at_risk = bool(todo.deadline and todo.deadline <= cutoff)
+        result.append((todo, at_risk))
+
+    # Sort: at_risk first, then by next_check, then deadline, then created_at
+    def _sort_key(item: tuple[Todo, bool]) -> tuple[int, date | None, date | None, datetime]:
+        t, risk = item
+        # Risk items first (0 before 1)
+        risk_order = 0 if risk else 1
+        nc = t.next_check or date.max
+        dl = t.deadline or date.max
+        return (risk_order, nc, dl, t.created_at)
+
+    result.sort(key=_sort_key)
+    return result
 
 
 def list_helpers() -> list[str]:
@@ -602,6 +713,7 @@ def import_payload(data_payload: dict[str, Any]) -> None:
                 project_id=t.project_id,
                 name=t.name,
                 status=t.status,
+                next_check=t.next_check,
                 deadline=t.deadline,
                 helper=t.helper,
                 notes=t.notes,

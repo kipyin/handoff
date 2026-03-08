@@ -54,6 +54,7 @@ if "Todo" not in globals():
         project_id: int = Field(foreign_key="project.id", index=True)
         name: str
         status: TodoStatus = Field(default=TodoStatus.HANDOFF, index=True)
+        next_check: date | None = Field(default=None, index=True)
         deadline: date | None = Field(default=None, index=True)
         helper: str | None = Field(default=None, index=True)
         notes: str | None = Field(default=None)

@@ -43,10 +43,11 @@ Short version:
 
 ### Active pages
 
-The navigation in `app.py` exposes five pages:
+The navigation in `app.py` exposes six pages:
 
 | Page | Icon | Module |
 |---|---|---|
+| Now | 🎯 | `pages/now.py` (`render_now_page`) |
 | Todos | ✅ | `pages/todos.py` |
 | Projects | 📁 | `pages/projects.py` |
 | Dashboard | 📊 | `pages/analytics.py` (`render_analytics_page`) |

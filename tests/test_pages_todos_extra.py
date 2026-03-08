@@ -116,6 +116,7 @@ def test_build_todo_dataframe_populated():
         project_name="Project A",
         name="Task",
         status=TodoStatus.DONE,
+        next_check=date(2024, 1, 2),
         helper="",
         deadline=date(2024, 1, 1),
         notes="",
@@ -127,4 +128,5 @@ def test_build_todo_dataframe_populated():
     assert df.iloc[0]["id"] == 5
     assert df.iloc[0]["project"] == "Project A"
     assert df.iloc[0]["status"] == "done"
+    assert df.iloc[0]["next_check"] == date(2024, 1, 2)
     assert df.iloc[0]["deadline"] == date(2024, 1, 1)
