@@ -37,6 +37,7 @@ class TodoRow:
     project_name: str
     name: str
     status: TodoStatus
+    next_check: date | None
     helper: str
     deadline: date | None
     notes: str
@@ -51,6 +52,7 @@ class TodoRow:
             project_name=todo.project.name if todo.project else "",
             name=todo.name,
             status=todo.status,
+            next_check=todo.next_check,
             helper=(todo.helper or "").strip(),
             deadline=todo.deadline,
             notes=todo.notes or "",
@@ -76,6 +78,7 @@ class TodoUpdateInput:
     project_id: int | None
     name: str | None
     status: TodoStatus | None
+    next_check: date | None
     deadline: date | None
     helper: str | None
     notes: str | None
@@ -88,6 +91,7 @@ class TodoCreateInput:
     project_id: int
     name: str
     status: TodoStatus
+    next_check: date | None
     deadline: date | None
     helper: str | None
     notes: str | None

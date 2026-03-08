@@ -123,6 +123,9 @@ def init_db() -> None:
                 conn.exec_driver_sql(
                     "ALTER TABLE todo ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0"
                 )
+            if "next_check" not in todo_columns:
+                logger.info("Applying migration: adding next_check column to todo table")
+                conn.exec_driver_sql("ALTER TABLE todo ADD COLUMN next_check DATE NULL")
             # Migrate legacy status labels (only if status column exists)
             if "status" in todo_columns:
                 conn.exec_driver_sql(
