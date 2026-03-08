@@ -2,6 +2,34 @@
 
 Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** where applicable. Version headings keep an impact tag: `[Breaking]`, `[Recommended]`, or `[Optional]`.
 
+## 2026.3.7 [Recommended]
+
+- **Fix**
+  - **Autosave stability:** Fixed cursor kick-out and row index parsing in the autosave editor for todos and projects; autosave errors are now surfaced to the user.
+  - **Todos caption:** Fixed incorrect caption display on the todos page.
+  - **Projects archived toggle:** Fixed archived toggle state not persisting correctly in the projects page.
+  - **Dashboard date filter:** Fixed a date-filter bug on the Dashboard page.
+  - **Page name consistency:** Fixed inconsistent page names and logging messages across pages.
+- **Feature**
+  - **Dashboard page:** Redesigned Analytics as a compact, focused Dashboard page.
+  - **Send log button:** Added a "Send log" button to the Settings page for easier diagnostics.
+  - **JSON data import:** Added the ability to restore todos and projects from a JSON backup file.
+  - **macOS build flag:** Added `--platform mac` flag to the build command for macOS standalone distribution.
+- **Improvement**
+  - **Typed page contracts:** Refactored Streamlit pages and core infrastructure around typed contracts for more maintainable code.
+  - **Updater deduplication:** Deduplicated extraction and backup logic in `updater.py`; fixed zip-slip vulnerability and switched to per-file extraction with date normalization.
+  - **Import performance:** Switched `import_payload` to bulk DELETE instead of per-row ORM deletes.
+  - **Partial extraction feedback:** Surfaced partial extraction failures in staging return messages.
+  - **Page feedback:** Improved feedback messages in project and todo pages.
+  - **CLI rename:** Renamed `format()` to `format_()` in CLI to avoid shadowing the Python built-in.
+  - **STYLE.md:** Added shared coding style summary for contributors.
+- **Internal**
+  - **AGENTS.md:** Added AGENTS.md with Cursor Cloud specific instructions and a Cloud agent starter skill.
+  - **Product design docs:** Added product design and architecture plan to `docs/`.
+  - **Test coverage:** Added render-level tests for analytics, projects, and todos pages; coverage tests for todos, settings, updater, and project helpers; tests for backup schema, page models, update UI, and logging.
+  - **Docs fixes:** Fixed stale CLI command names in CONTRIBUTING.md and README.md.
+  - **pyproject.toml:** Removed redundant optional dev dependencies section.
+
 ## 2026.3.6 [Optional]
 
 - **Fix**
@@ -287,3 +315,4 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
 - Switch to CalVer versioning (YYYY.M.MINOR) starting with this release.
 - Move SQLite database to a per-user data directory so updates do not overwrite user data.
 - Add build script for Windows zip distribution with embedded Python (`build_zip.py`).
+
