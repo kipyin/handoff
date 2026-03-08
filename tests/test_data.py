@@ -3,7 +3,9 @@
 import importlib
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
+from pathlib import Path
 
+import pytest
 from sqlmodel import select
 
 import handoff.data as data
@@ -270,6 +272,26 @@ def test_create_project(session, monkeypatch) -> None:
     assert project.id is not None
     assert project.name == "New Project"
     assert session.get(Project, project.id) is not None
+
+
+def test_activity_log_and_get_recent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """log_activity records entries; get_recent_activity returns them."""
+    monkeypatch.setenv("HANDOFF_DB_PATH", str(tmp_path / "activity_test.db"))
+    import handoff.db as db_mod
+
+    db_mod.dispose_db()
+    importlib.reload(db_mod)
+    db_mod.init_db()
+
+    data.create_project("Test Project")
+    activity = data.get_recent_activity(limit=5)
+    assert len(activity) >= 1
+    entry = activity[0]
+    assert entry["entity_type"] == "project"
+    assert entry["action"] == "created"
+    assert entry.get("details", {}).get("name") == "Test Project"
+
+    db_mod.dispose_db()
 
 
 def test_list_projects_excludes_archived_by_default(session, monkeypatch) -> None:

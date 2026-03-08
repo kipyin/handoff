@@ -1,0 +1,21 @@
+# Gitee Go pipeline — runs handoff ci on push.
+# See https://help.gitee.com/gitee-go/pipeline/basic-config
+version: "1.0"
+name: handoff-ci
+displayName: Handoff CI
+
+stages:
+  - stage:
+      name: ci
+      displayName: Lint, typecheck, test
+      strategy: naturally
+      trigger: auto
+      steps:
+        - step: shell@agent
+          name: run_ci
+          displayName: Run handoff ci
+          script: |
+            curl -LsSf https://astral.sh/uv/install.sh | sh
+            export PATH="$HOME/.local/bin:$PATH"
+            uv sync
+            uv run handoff ci
