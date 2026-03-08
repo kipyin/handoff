@@ -1,0 +1,76 @@
+"""Integration tests for build --dry-run (no PyArmor, no downloads, no archive)."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+import scripts.build_full as build_full_module
+import scripts.build_patch as build_patch_module
+
+
+def test_build_full_dry_run_creates_build_structure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """build --full --dry-run runs copy/docs/launcher steps and creates expected files."""
+    # Use a temp dir as project root to avoid polluting the real build/
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(root)
+
+    build_full_module.main(platform="windows", dry_run=True)
+
+    build_root = root / "build"
+    assert build_root.exists()
+
+    # APP_BUILD_DIR is build/handoff-{version}
+    app_dirs = [d for d in build_root.iterdir() if d.is_dir() and d.name.startswith("handoff")]
+    assert len(app_dirs) >= 1
+    app_dir = app_dirs[0]
+
+    assert (app_dir / "app.py").exists()
+    assert (app_dir / "README.md").exists()
+    assert (app_dir / "RELEASE_NOTES.md").exists()
+    assert (app_dir / "src" / "handoff").exists()
+    # Windows dry-run writes handoff.bat
+    assert (app_dir / "handoff.bat").exists()
+
+
+def test_build_full_dry_run_mac_creates_sh_launcher(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """build --full --platform mac --dry-run writes handoff.sh."""
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(root)
+
+    build_full_module.main(platform="mac", dry_run=True)
+
+    build_root = root / "build"
+    app_dirs = [d for d in build_root.iterdir() if d.is_dir() and d.name.startswith("handoff")]
+    assert len(app_dirs) >= 1
+    app_dir = app_dirs[0]
+
+    assert (app_dir / "handoff.sh").exists()
+    content = (app_dir / "handoff.sh").read_text()
+    assert "PYTHONPATH" in content
+    assert "python" in content
+
+
+def test_build_patch_dry_run_completes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """build --patch --dry-run runs copy/obfuscate-stub/docs and returns path."""
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.chdir(root)
+
+    path = build_patch_module.build_patch(dry_run=True)
+
+    assert path is not None
+    assert path.name.endswith("-patch.zip")
+    # Dry run does not create the zip
+    assert not path.exists()
+
+    # Build structure should exist under build/handoff
+    build_app = root / "build" / "handoff"
+    assert (build_app / "src" / "handoff").exists()
+    assert (build_app / "app.py").exists()

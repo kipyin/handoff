@@ -1,13 +1,56 @@
 # AGENTS.md
 
-## Cursor Cloud specific instructions
+Agent and developer instructions for Handoff. Cursor Cloud and GitHub Copilot read this file for project context.
 
-**Handoff** is a single-user local to-do app built with Python 3.13+, Streamlit, and SQLite. No external services or Docker are needed.
+---
 
-### Quick reference
+## Code style
+
+The goal is not maximal abstraction or maximal cleverness. The goal is code that is small, calm, readable, and hard to break.
+
+### Aesthetic
+
+- Prefer **boring code over surprising code**.
+- Keep modules **small in concept count**, even when they are not tiny in line count.
+- Use **clear names** that match the product language. If the UI says "handoff", the code should usually say `handoff` too.
+- Make the **main flow easy to scan**: read input → normalize/validate → perform one clear action → return a simple result.
+- Prefer a **single obvious representation** for a piece of data. Avoid bouncing between ORM models, dicts, DataFrames, widget payloads, and ad hoc tuples unless there is a strong reason.
+- Keep comments sparse. Add them when they explain **why** something exists or a non-obvious constraint, not to narrate obvious code.
+- Avoid "magic helper" sprawl. A helper should either simplify the reader's job, or it should not exist.
+
+### Hygienic
+
+- Keep **boundaries explicit**: models define persisted shape; data-layer functions implement behavior and queries; page/UI modules translate UI state into typed app-level inputs; UI-specific concerns should not leak into core modules.
+- Prefer **typed contracts** for non-trivial flows (query objects, mutation inputs, serialized backup/import payloads).
+- Do not create abstractions just to move code around. A new module or type should reduce ambiguity, coupling, or duplication.
+- Preserve **one source of truth** for important behavior. Filtering, validation, and serialization should not be reimplemented differently in multiple layers.
+- Keep public APIs and docstrings in sync. If behavior changes, update the docs/tests in the same change.
+- When touching old names or legacy compatibility paths, prefer a **clear primary name** plus a compatibility shim rather than letting both concepts coexist indefinitely.
+
+### Robust
+
+- Validate inputs **before destructive actions**.
+- Fail with **clean, actionable messages** for users and **specific logs** for developers.
+- Prefer code that is easy to test with **targeted unit tests** and a few integration/smoke tests over code that only works when driven through the UI.
+- Make hidden global state explicit when practical. Lazy factories or narrow context helpers are preferred to import-time side effects.
+- Handle real edge cases: missing ids on not-yet-persisted models, malformed backup files, path traversal in patch zips, schema drift in lightweight migrations.
+- If a refactor changes behavior in a subtle UI path, add or update a test so the intended behavior is locked in.
+
+### Practical preferences
+
+- Streamlit is the current UI, but the app should stay **portable in shape**. Favor patterns that would still make sense in a future CLI or Textual frontend.
+- SQLite + SQLModel is intentionally simple. Keep migrations lightweight unless complexity truly demands more.
+- **Ruff** is the formatter/linter authority. **Pyright** is the type-checking authority.
+- When in doubt, choose: fewer layers, fewer representations, fewer special cases, more explicit names, more local reasoning.
+
+**One-sentence summary:** Write code that looks calm, says exactly what it means, and keeps behavior in the smallest sensible number of places.
+
+---
+
+## Quick reference
 
 | Task | Command |
-|---|---|
+|------|---------|
 | Install deps | `uv sync` |
 | Run app | `uv run handoff` (Streamlit on port 8501) |
 | Lint + format | `uv run handoff check` (`--fix` to apply Ruff changes) |
@@ -17,92 +60,130 @@
 | Bump version | `uv run handoff bump 2026.M.P` |
 | Build Windows zip | `uv run handoff build --full` |
 | Build patch zip | `uv run handoff build --patch` |
+| Build macOS tar.gz | `uv run handoff build --full --platform mac` |
+| Build dry-run (CI) | `uv run handoff build --full --dry-run` or `--patch --dry-run` |
 
-All commands are documented in `CONTRIBUTING.md`.
+---
 
-### Coding style summary
+## Project overview
 
-Follow the canonical style guide in `STYLE.md`.
+**Handoff** is a single-user local to-do app built with Python 3.13+, Streamlit, and SQLite. No external services or Docker are needed.
 
-Short version:
+### Deployment philosophy
 
-- Keep the code small in concept count and easy to scan.
-- Prefer one clear representation of data over multiple ad hoc ones.
-- Keep boundaries explicit between models, data-layer logic, and UI adapters.
-- Validate inputs before destructive actions and produce clean user-facing errors.
-- Favor patterns that would still make sense in a future CLI or Textual frontend.
+Handoff ships as a self-contained Windows zip (or macOS tar.gz) that bundles an embedded/standalone Python runtime, dependencies, and the app code. The `src/handoff` package is obfuscated with PyArmor, while `app.py` stays readable as a thin entrypoint and launcher target. Patch zips update the obfuscated code in place, with backups taken before each update.
 
-### Non-obvious caveats
+### Prerequisites
 
-- **Python 3.13+ required.** The VM may ship with an older Python. Use `uv python install 3.13` to get the right version; `uv sync` will then use it automatically.
-- **`uv` must be on PATH.** Install via `curl -LsSf https://astral.sh/uv/install.sh | sh` and ensure `~/.local/bin` is on PATH.
-- **Streamlit headless mode.** When starting the app in a cloud/CI context, pass `--server.headless true` to avoid browser-open prompts. The CLI command `uv run handoff run` does not set this automatically — use `uv run python -m streamlit run app.py --server.headless true` directly, or set `STREAMLIT_SERVER_HEADLESS=true`.
-- **SQLite DB location.** By default stored in the platform data dir (via `platformdirs`). Override with `HANDOFF_DB_PATH` env var for testing or isolation.
-- **No login required.** The app is single-user and local-only. No `.env` files, no API keys, no external services.
-- **App starts with a throw-away DB.** For development, run `HANDOFF_DB_PATH=/tmp/handoff-dev.db uv run handoff run` to avoid touching the user's real data directory.
+- Python 3.13+
+- [uv](https://docs.astral.sh/uv/) for dependency and virtualenv management
 
-### Active pages
+### CLI commands
 
-The navigation in `app.py` exposes five pages:
+- `uv run handoff run` – start the app (Streamlit UI).
+- `uv run handoff sync` – sync dependencies.
+- `uv run handoff check` – Ruff format/lint (`--fix` to apply).
+- `uv run handoff typecheck` – pyright over `src/` and `scripts/`.
+- `uv run handoff test` – pytest suite.
+- `uv run handoff ci` – checks + typecheck + tests (`--fix` for Ruff fixes first).
+- `uv run handoff build --full` – Windows embedded zip or macOS tar.gz (`--platform mac`).
+- `uv run handoff build --patch` – patch zip from obfuscated build.
+- `uv run handoff bump 2026.M.P` – bump version in `pyproject.toml` and `handoff.version`.
+
+Version sync: `src/handoff/version.py` and `pyproject.toml` must match; `tests/test_version_sync.py` enforces this.
+
+Project layout: `app.py` (entrypoint), `src/handoff/` (package), `pages/`, `tests/`.
+
+### Branching, commits, and releases
+
+1. Branch from `main`: `git checkout -b release/YYYY.M.MINOR`.
+2. Make focused commits.
+3. Bump CalVer when shipping user-visible changes (use `bump`).
+4. Add `## YYYY.M.MINOR [Tag]` to `RELEASE_NOTES.md` — use **Fix**, **Feature**, **Improvement**, **Internal** bullets.
+5. Impact tags: `[Breaking]`, `[Recommended]`, `[Optional]`.
+
+### Release workflow checklist
+
+1. Branch from `main`.
+2. `uv sync` (if deps changed).
+3. `uv run handoff bump 2026.M.P`.
+4. Update `RELEASE_NOTES.md`.
+5. Update README if user-visible behavior changed.
+6. `uv run handoff ci`.
+7. `uv run handoff build --full` and `uv run handoff build --patch` (for distribution).
+8. Merge to `main` when passing.
+
+### Code tools
+
+- **Ruff**: `uv run handoff check` / `uv run handoff check --fix`.
+- **Docstrings**: Google style.
+- **Pyright**: `uv run handoff typecheck` over `src/` and `scripts/`.
+
+### macOS build
+
+macOS builds produce a `.tar.gz` with python-build-standalone:
+
+```bash
+uv run handoff build --full --platform mac
+```
+
+Extract and run `./handoff.sh`. Future work may add a signed `.app` bundle.
+
+---
+
+## Non-obvious caveats
+
+- **Python 3.13+ required.** Use `uv python install 3.13` if needed; `uv sync` will use it.
+- **`uv` must be on PATH.** Install via `curl -LsSf https://astral.sh/uv/install.sh | sh` and ensure `~/.local/bin` on PATH.
+- **Streamlit headless mode.** In cloud/CI: `--server.headless true` or `STREAMLIT_SERVER_HEADLESS=true`.
+- **SQLite DB location.** Via `platformdirs`; override with `HANDOFF_DB_PATH` for testing.
+- **No login required.** Single-user, local-only. No `.env`, no API keys.
+- **Throw-away DB for dev.** `HANDOFF_DB_PATH=/tmp/handoff-dev.db uv run handoff run`.
+
+---
+
+## Active pages
 
 | Page | Icon | Module |
-|---|---|---|
+|------|------|--------|
 | Todos | ✅ | `pages/todos.py` |
 | Projects | 📁 | `pages/projects.py` |
 | Dashboard | 📊 | `pages/dashboard.py` (`render_dashboard_page`) |
 | Settings | ⚙️ | `pages/settings.py` |
 | Docs | 📖 | `pages/docs.py` |
 
-There is no Calendar page. The Dashboard page uses `pages/dashboard.py` and `render_dashboard_page`.
+There is no Calendar page.
 
-### Testing workflows by area
+---
 
-**Data layer** (`models.py`, `db.py`, `data.py`):
+## Testing workflows by area
 
-```bash
-uv run pytest tests/test_models.py tests/test_db.py tests/test_data.py
-```
+**Data layer:** `uv run pytest tests/test_models.py tests/test_db.py tests/test_data.py` — in-memory SQLite. When adding a column, add inline migration in `db.py:init_db()` and a migration test.
 
-All use an in-memory SQLite fixture — no file-system side effects. When adding a column, also add an inline migration in `db.py:init_db()` via `PRAGMA table_info` checks, and a test that confirms migration on an old schema.
+**Pages / UI:** `uv run pytest tests/test_pages_todos.py tests/test_pages_projects.py tests/test_dashboard.py`
 
-**Pages / UI** (`pages/`):
+**Integration:** `cd /workspace && uv run pytest tests/test_app_integration.py` (from project root).
 
-```bash
-uv run pytest tests/test_pages_todos.py tests/test_pages_projects.py tests/test_dashboard.py
-```
+**Build:** `tests/test_build_artifacts.py` and `tests/test_launchers.py` require PyArmor and Windows embed — not expected to pass on Linux. Use `--dry-run` for CI.
 
-Integration smoke tests use Streamlit's `AppTest` with a real temp-file DB:
+**Version sync:** `uv run pytest tests/test_version_sync.py`
 
-```bash
-# Always run from the project root to avoid FileNotFoundError in docs.py
-cd /workspace && uv run pytest tests/test_app_integration.py
-```
+---
 
-**Runtime health** (`tests/test_application_runtime_health.py`): Spawns the real Streamlit process, monitors stdout for error patterns (Traceback, Error), and asserts the "You can now view" ready message appears. The subprocess does not exit on its own—it runs ~10 seconds then is terminated. Included in `uv run handoff test`.
-
-**UI helpers, dates, updater:**
+## Full CI
 
 ```bash
-uv run pytest tests/test_ui.py tests/test_ui_setup.py tests/test_updater.py
+uv run handoff ci          # format/lint + typecheck + pytest
+uv run handoff ci --fix    # apply Ruff fixes first
+uv run handoff check       # Ruff only
+uv run handoff typecheck   # pyright only
+uv run handoff test        # pytest only
 ```
 
-**Build scripts** (`scripts/`): `tests/test_build_artifacts.py` and `tests/test_launchers.py` require PyArmor and a Windows Python embed zip — **not expected to pass on Linux**. Skip if they fail.
+**pyright exclusions:** `data.py`, `pages/dashboard.py`, `pages/todos.py`, `services/dashboard_service.py` — do not remove without understanding the consequences.
 
-**Version sync:** `uv run pytest tests/test_version_sync.py` — enforces `pyproject.toml` and `src/handoff/version.py` stay in sync. Use `uv run handoff bump <version>` to update both atomically.
+---
 
-### Full CI
+## Keeping this file up to date
 
-```bash
-uv run handoff ci          # format/lint checks + typecheck + pytest
-uv run handoff ci --fix    # apply Ruff fixes, then typecheck + pytest
-uv run handoff check       # Ruff format/lint checks (non-mutating)
-uv run handoff check --fix # apply Ruff format + lint fixes
-uv run handoff typecheck   # pyright over src/ and scripts/
-uv run handoff test        # pytest with coverage (-x, --ff)
-```
-
-**pyright exclusions:** `data.py`, `pages/dashboard.py`, `pages/todos.py`, and `services/dashboard_service.py` are excluded from type checking (heavy SQLModel/Streamlit/pandas dynamic usage). Do not remove them from the exclusion list in `pyproject.toml` without understanding the consequences.
-
-### Keeping this file up to date
-
-When you discover a new testing trick, environment quirk, or runbook step, add it here before ending your session. Prefer concrete commands over prose, note any platform-specific limitations, and remove stale entries when the codebase changes.
+When you discover a new testing trick, environment quirk, or runbook step, add it here. Prefer concrete commands over prose, note platform-specific limitations, and remove stale entries when the codebase changes.
