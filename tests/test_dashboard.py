@@ -1,4 +1,4 @@
-"""Tests for dashboard/analytics page helpers."""
+"""Tests for dashboard service helpers."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ from datetime import date, datetime
 from types import SimpleNamespace
 
 from handoff.dates import week_bounds
-from handoff.pages.analytics import (
-    _compute_cycle_time_stats,
-    _compute_helper_load,
-    _compute_overdue_rate,
-    _compute_weekly_counts,
+from handoff.services.dashboard_service import (
+    compute_cycle_time_stats,
+    compute_helper_load,
+    compute_overdue_rate,
+    compute_weekly_counts,
 )
 
 
@@ -51,7 +51,7 @@ def test_week_bounds_on_sunday() -> None:
     assert sun == date(2026, 3, 8)
 
 
-# --- _compute_cycle_time_stats ---
+# --- compute_cycle_time_stats ---
 
 
 def test_cycle_time_stats_returns_mean_median_p90() -> None:
@@ -61,7 +61,7 @@ def test_cycle_time_stats_returns_mean_median_p90() -> None:
         _make_todo(created_at=datetime(2026, 1, 7), completed_at=datetime(2026, 1, 10)),
         _make_todo(created_at=datetime(2026, 1, 5), completed_at=datetime(2026, 1, 10)),
     ]
-    result = _compute_cycle_time_stats(todos)
+    result = compute_cycle_time_stats(todos)
     assert result is not None
     avg, p50, p90 = result
     assert avg == 2.75
@@ -70,15 +70,15 @@ def test_cycle_time_stats_returns_mean_median_p90() -> None:
 
 
 def test_cycle_time_stats_returns_none_when_empty() -> None:
-    assert _compute_cycle_time_stats([]) is None
+    assert compute_cycle_time_stats([]) is None
 
 
 def test_cycle_time_stats_skips_missing_completed_at() -> None:
     todos = [_make_todo(completed_at=None)]
-    assert _compute_cycle_time_stats(todos) is None
+    assert compute_cycle_time_stats(todos) is None
 
 
-# --- _compute_overdue_rate ---
+# --- compute_overdue_rate ---
 
 
 def test_overdue_rate_all_on_time() -> None:
@@ -86,7 +86,7 @@ def test_overdue_rate_all_on_time() -> None:
         _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 9)),
         _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 10)),
     ]
-    assert _compute_overdue_rate(todos) == 0.0
+    assert compute_overdue_rate(todos) == 0.0
 
 
 def test_overdue_rate_half_overdue() -> None:
@@ -94,19 +94,19 @@ def test_overdue_rate_half_overdue() -> None:
         _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 10)),
         _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 12)),
     ]
-    assert _compute_overdue_rate(todos) == 0.5
+    assert compute_overdue_rate(todos) == 0.5
 
 
 def test_overdue_rate_none_when_no_deadlines() -> None:
     todos = [_make_todo(completed_at=datetime(2026, 1, 10))]
-    assert _compute_overdue_rate(todos) is None
+    assert compute_overdue_rate(todos) is None
 
 
 def test_overdue_rate_none_when_empty() -> None:
-    assert _compute_overdue_rate([]) is None
+    assert compute_overdue_rate([]) is None
 
 
-# --- _compute_weekly_counts ---
+# --- compute_weekly_counts ---
 
 
 def test_weekly_counts_aggregates_by_week() -> None:
@@ -115,7 +115,7 @@ def test_weekly_counts_aggregates_by_week() -> None:
         _make_todo(id=2, completed_at=datetime(2026, 1, 7)),
         _make_todo(id=3, completed_at=datetime(2026, 1, 14)),
     ]
-    result = _compute_weekly_counts(todos)
+    result = compute_weekly_counts(todos)
     assert "week_label" in result.columns
     assert "completed" in result.columns
     assert len(result) == 2
@@ -124,11 +124,11 @@ def test_weekly_counts_aggregates_by_week() -> None:
 
 
 def test_weekly_counts_empty_input() -> None:
-    result = _compute_weekly_counts([])
+    result = compute_weekly_counts([])
     assert result.empty
 
 
-# --- _compute_helper_load ---
+# --- compute_helper_load ---
 
 
 def test_helper_load_aggregates_and_sorts() -> None:
@@ -138,7 +138,7 @@ def test_helper_load_aggregates_and_sorts() -> None:
         _make_todo(id=3, helper="Bob"),
         _make_todo(id=4, helper=None),
     ]
-    result = _compute_helper_load(todos)
+    result = compute_helper_load(todos)
     assert set(result["helper"]) == {"Alice", "Bob", "(unassigned)"}
     counts = result.set_index("helper")["handoff"]
     assert counts["Alice"] == 2
@@ -148,9 +148,5 @@ def test_helper_load_aggregates_and_sorts() -> None:
 
 
 def test_helper_load_empty_input() -> None:
-    result = _compute_helper_load([])
+    result = compute_helper_load([])
     assert result.empty
-
-
-# --- _count_open_handoffs and _completed_in_range are thin wrappers
-# around query_todos; covered by the AppTest integration test.
