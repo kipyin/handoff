@@ -78,6 +78,8 @@ Integration smoke tests use Streamlit's `AppTest` with a real temp-file DB:
 cd /workspace && uv run pytest tests/test_app_integration.py
 ```
 
+**Runtime health** (`tests/test_application_runtime_health.py`): Spawns the real Streamlit process, monitors stdout for error patterns (Traceback, Error), and asserts the "You can now view" ready message appears. The subprocess does not exit on its own—it runs ~10 seconds then is terminated. Included in `uv run handoff test`.
+
 **UI helpers, dates, updater:**
 
 ```bash
