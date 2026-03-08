@@ -7,10 +7,237 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
+from handoff.autosave import autosave_editor
 from handoff.models import TodoStatus
 from handoff.page_models import TodoMutationDefaults
 from handoff.pages.projects import _persist_project_edits
 from handoff.pages.todos import _make_todos_persist_fn
+
+# ---------------------------------------------------------------------------
+# autosave_editor
+# ---------------------------------------------------------------------------
+
+
+class TestAutosaveEditor:
+    """Test the shared autosave data_editor wrapper."""
+
+    def test_registers_callback_and_stores_context_copy(self, monkeypatch):
+        session: dict = {}
+        monkeypatch.setattr("streamlit.session_state", session)
+        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+
+        captured: dict = {}
+        returned_df = pd.DataFrame([{"name": "edited"}])
+
+        def fake_data_editor(df, *, key, on_change, **kwargs):
+            captured["df"] = df
+            captured["key"] = key
+            captured["on_change"] = on_change
+            captured["kwargs"] = kwargs
+            return returned_df
+
+        monkeypatch.setattr("handoff.autosave.st.data_editor", fake_data_editor)
+        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+
+        display_df = pd.DataFrame([{"name": "original"}])
+        result = autosave_editor(
+            display_df,
+            key="todos_table",
+            persist_fn=lambda state, prev_df: False,
+            num_rows="dynamic",
+        )
+
+        assert result is returned_df
+        assert captured["key"] == "todos_table"
+        assert captured["kwargs"]["num_rows"] == "dynamic"
+        assert callable(captured["on_change"])
+
+        ctx_df = session["__todos_table_autosave_ctx"]["display_df"]
+        assert ctx_df.equals(display_df)
+        assert ctx_df is not display_df
+
+    def test_on_change_persists_edit_state_with_snapshot(self, monkeypatch):
+        session = {
+            "todos_table": {
+                "edited_rows": {"0": {"name": "new"}},
+                "added_rows": [],
+                "deleted_rows": [],
+            }
+        }
+        monkeypatch.setattr("streamlit.session_state", session)
+        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+
+        captured: dict = {}
+
+        def fake_data_editor(df, *, key, on_change, **kwargs):
+            captured["on_change"] = on_change
+            return df
+
+        monkeypatch.setattr("handoff.autosave.st.data_editor", fake_data_editor)
+        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+
+        calls: list[pd.DataFrame] = []
+
+        def persist_fn(state, prev_df):
+            calls.append(prev_df.copy())
+            return False
+
+        display_df = pd.DataFrame([{"name": "original"}])
+        autosave_editor(display_df, key="todos_table", persist_fn=persist_fn)
+        display_df.loc[0, "name"] = "mutated-after-render"
+
+        captured["on_change"]()
+
+        assert len(calls) == 1
+        assert calls[0].iloc[0]["name"] == "original"
+        assert "__todos_table_needs_rerun" not in session
+
+    def test_on_change_skips_empty_editor_state(self, monkeypatch):
+        session = {
+            "todos_table": {
+                "edited_rows": {},
+                "added_rows": [],
+                "deleted_rows": [],
+            }
+        }
+        monkeypatch.setattr("streamlit.session_state", session)
+        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+
+        captured: dict = {}
+
+        def fake_data_editor(df, *, key, on_change, **kwargs):
+            captured["on_change"] = on_change
+            return df
+
+        monkeypatch.setattr(
+            "handoff.autosave.st.data_editor",
+            fake_data_editor,
+        )
+        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+
+        called = {"persist": 0}
+
+        def persist_fn(state, prev_df):
+            called["persist"] += 1
+            return False
+
+        autosave_editor(pd.DataFrame([{"name": "x"}]), key="todos_table", persist_fn=persist_fn)
+        captured["on_change"]()
+
+        assert called["persist"] == 0
+
+    def test_on_change_skips_when_widget_state_is_missing(self, monkeypatch):
+        session: dict = {}
+        monkeypatch.setattr("streamlit.session_state", session)
+        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+
+        captured: dict = {}
+
+        def fake_data_editor(df, *, key, on_change, **kwargs):
+            captured["on_change"] = on_change
+            return df
+
+        monkeypatch.setattr("handoff.autosave.st.data_editor", fake_data_editor)
+        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+
+        called = {"persist": 0}
+
+        def persist_fn(state, prev_df):
+            called["persist"] += 1
+            return False
+
+        autosave_editor(pd.DataFrame([{"name": "x"}]), key="todos_table", persist_fn=persist_fn)
+        captured["on_change"]()
+
+        assert called["persist"] == 0
+
+    def test_on_change_sets_deferred_rerun_flag(self, monkeypatch):
+        session = {"todos_table": {"edited_rows": {"0": {"name": "x"}}}}
+        monkeypatch.setattr("streamlit.session_state", session)
+        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+
+        captured: dict = {}
+
+        def fake_data_editor(df, *, key, on_change, **kwargs):
+            captured["on_change"] = on_change
+            return df
+
+        monkeypatch.setattr(
+            "handoff.autosave.st.data_editor",
+            fake_data_editor,
+        )
+        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+
+        autosave_editor(
+            pd.DataFrame([{"name": "x"}]),
+            key="todos_table",
+            persist_fn=lambda state, prev_df: True,
+        )
+        captured["on_change"]()
+
+        assert session["__todos_table_needs_rerun"] is True
+
+    def test_next_render_consumes_rerun_flag(self, monkeypatch):
+        session = {"__todos_table_needs_rerun": True}
+        monkeypatch.setattr("streamlit.session_state", session)
+        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+
+        def fake_data_editor(df, *, key, on_change, **kwargs):
+            return df
+
+        monkeypatch.setattr("handoff.autosave.st.data_editor", fake_data_editor)
+        rerun_calls: list[str] = []
+        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: rerun_calls.append("rerun"))
+
+        autosave_editor(
+            pd.DataFrame([{"name": "x"}]),
+            key="todos_table",
+            persist_fn=lambda state, prev_df: False,
+        )
+
+        assert rerun_calls == ["rerun"]
+        assert "__todos_table_needs_rerun" not in session
+
+    def test_on_change_with_missing_context_logs_warning(self, monkeypatch):
+        session = {"todos_table": {"edited_rows": {"0": {"name": "x"}}}}
+        monkeypatch.setattr("streamlit.session_state", session)
+        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+
+        captured: dict = {}
+
+        def fake_data_editor(df, *, key, on_change, **kwargs):
+            captured["on_change"] = on_change
+            return df
+
+        monkeypatch.setattr(
+            "handoff.autosave.st.data_editor",
+            fake_data_editor,
+        )
+        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+
+        warnings: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            "handoff.autosave.logger.warning",
+            lambda message, key: warnings.append((message, key)),
+        )
+
+        persist_calls = {"count": 0}
+
+        def persist_fn(state, prev_df):
+            persist_calls["count"] += 1
+            return False
+
+        autosave_editor(
+            pd.DataFrame([{"name": "x"}]),
+            key="todos_table",
+            persist_fn=persist_fn,
+        )
+        session.pop("__todos_table_autosave_ctx", None)
+        captured["on_change"]()
+
+        assert persist_calls["count"] == 0
+        assert warnings == [("autosave_editor: missing context for key={}", "todos_table")]
+
 
 # ---------------------------------------------------------------------------
 # _make_todos_persist_fn

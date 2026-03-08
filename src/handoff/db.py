@@ -110,7 +110,8 @@ def init_db() -> None:
         SQLModel.metadata.create_all(engine)
 
         # Lightweight migrations: ensure newer columns exist on existing tables.
-        with engine.connect() as conn:
+        # Use begin() so changes commit on exit; connect() would roll back.
+        with engine.begin() as conn:
             # Todo table migrations.
             result = conn.exec_driver_sql("PRAGMA table_info('todo')")
             todo_columns = {row[1] for row in result}  # row[1] = column name
@@ -122,10 +123,14 @@ def init_db() -> None:
                 conn.exec_driver_sql(
                     "ALTER TABLE todo ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0"
                 )
-            # Migrate legacy status label: delegated -> handoff (only if status column exists)
+            # Migrate legacy status labels (only if status column exists)
             if "status" in todo_columns:
                 conn.exec_driver_sql(
                     "UPDATE todo SET status = 'handoff' WHERE status = 'delegated'"
+                )
+                # DELEGATED was an enum-name alias for HANDOFF; SQLAlchemy expects HANDOFF.
+                conn.exec_driver_sql(
+                    "UPDATE todo SET status = 'HANDOFF' WHERE status = 'DELEGATED'"
                 )
 
             # Project table migrations.
