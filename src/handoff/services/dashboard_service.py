@@ -12,9 +12,18 @@ from typing import Any
 
 import pandas as pd
 
+from handoff.data import get_recent_activity as _get_recent_activity
 from handoff.data import query_todos
 from handoff.dates import week_bounds
 from handoff.models import Todo, TodoStatus
+
+
+def get_recent_activity(limit: int = 20) -> list[dict[str, Any]]:
+    """Return recent activity log entries for the dashboard.
+
+    Delegates to data layer; kept in service so dashboard uses one entry point.
+    """
+    return _get_recent_activity(limit=limit)
 
 
 def _project_name(todo: Todo) -> str:

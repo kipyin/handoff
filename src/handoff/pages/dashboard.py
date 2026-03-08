@@ -6,7 +6,6 @@ from datetime import date
 
 import streamlit as st
 
-from handoff.data import get_recent_activity
 from handoff.services.dashboard_service import (
     get_cycle_time_by_project,
     get_dashboard_metrics,
@@ -15,6 +14,7 @@ from handoff.services.dashboard_service import (
     get_helper_load,
     get_per_helper_throughput,
     get_per_project_throughput,
+    get_recent_activity,
     get_weekly_throughput,
 )
 
