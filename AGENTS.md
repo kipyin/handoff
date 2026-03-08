@@ -10,10 +10,10 @@
 |---|---|
 | Install deps | `uv sync` |
 | Run app | `uv run handoff` (Streamlit on port 8501) |
-| Lint + format | `uv run handoff check` |
+| Lint + format | `uv run handoff check` (`--fix` to apply Ruff changes) |
 | Type check | `uv run handoff typecheck` |
 | Tests | `uv run handoff test` |
-| Full CI suite | `uv run handoff ci` |
+| Full CI suite | `uv run handoff ci` (`--fix` to apply Ruff changes first) |
 | Bump version | `uv run handoff bump 2026.M.P` |
 | Build Windows zip | `uv run handoff build --full` |
 | Build patch zip | `uv run handoff build --patch` |
@@ -93,8 +93,10 @@ uv run pytest tests/test_ui.py tests/test_ui_setup.py tests/test_updater.py
 ### Full CI
 
 ```bash
-uv run handoff ci          # lint + format + typecheck + pytest
-uv run handoff check       # Ruff format + lint (auto-fixes in place)
+uv run handoff ci          # format/lint checks + typecheck + pytest
+uv run handoff ci --fix    # apply Ruff fixes, then typecheck + pytest
+uv run handoff check       # Ruff format/lint checks (non-mutating)
+uv run handoff check --fix # apply Ruff format + lint fixes
 uv run handoff typecheck   # pyright over src/ and scripts/
 uv run handoff test        # pytest with coverage (-x, --ff)
 ```

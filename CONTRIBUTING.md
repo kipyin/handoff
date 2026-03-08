@@ -43,10 +43,10 @@ are the canonical day-to-day commands for local development and CI:
 
 - `uv run handoff run` – start the app (Streamlit UI).
 - `uv run handoff sync` – sync dependencies with [uv](https://docs.astral.sh/uv/).
-- `uv run handoff check` – run Ruff linting and formatting.
+- `uv run handoff check` – run Ruff format/lint checks (`--fix` to apply changes).
 - `uv run handoff typecheck` – run type checking with pyright over `src/` and `scripts/`.
 - `uv run handoff test` – run the pytest suite.
-- `uv run handoff ci` – run lint, format, type checking, and tests together.
+- `uv run handoff ci` – run checks, type checking, and tests together (`--fix` to apply Ruff changes first).
 - `uv run handoff build --full` – build the embedded Windows zip (obfuscates `src/handoff` with PyArmor).
 - `uv run handoff build --patch` – build a patch zip from the obfuscated build (run after `build --full`).
 - `uv run handoff bump 2026.M.P` – bump version in `pyproject.toml` and `handoff.version`.
@@ -102,7 +102,8 @@ This project follows a small set of conventions so the codebase stays
 consistent:
 
 - **Ruff** is the single source of truth for linting and formatting. Run
-  `uv run handoff check` to apply it.
+  `uv run handoff check` to verify formatting/lint, or
+  `uv run handoff check --fix` to apply Ruff changes.
 - **Docstrings** for public modules, classes, and functions use Google style.
 - **Type checking** is done with pyright over `src/` and `scripts/`. Run
   `uv run handoff typecheck` (or `uv run pyright src scripts`).
