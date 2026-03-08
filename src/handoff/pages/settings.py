@@ -19,9 +19,9 @@ import streamlit as st
 from loguru import logger
 
 from handoff.backup_schema import BackupPayload
-from handoff.data import get_export_payload, import_payload
 from handoff.docs import get_readme_intro
 from handoff.logging import _get_logs_dir
+from handoff.services.settings_service import get_export_payload, import_payload
 from handoff.update_ui import render_update_panel
 from handoff.version import __version__ as APP_VERSION
 
