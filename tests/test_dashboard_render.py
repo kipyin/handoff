@@ -2,32 +2,10 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
 from unittest.mock import MagicMock
 
-from handoff.models import Todo, TodoStatus
 from handoff.pages.dashboard import render_dashboard_page
 from handoff.services.dashboard_service import DashboardMetrics
-
-
-def _make_todo(
-    *,
-    status: TodoStatus = TodoStatus.DONE,
-    created_at: datetime | None = None,
-    completed_at: datetime | None = None,
-    deadline: date | None = None,
-    helper: str | None = None,
-) -> Todo:
-    return Todo(
-        id=1,
-        project_id=1,
-        name="Task",
-        status=status,
-        created_at=created_at or datetime(2026, 3, 1),
-        completed_at=completed_at,
-        deadline=deadline,
-        helper=helper,
-    )
 
 
 class TestRenderDashboardPage:

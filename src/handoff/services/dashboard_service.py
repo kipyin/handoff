@@ -125,7 +125,7 @@ def compute_per_project_throughput(
     return weekly.sort_values(["week_label", "project"])
 
 
-def compute_per_helper_throughput(todos: list[Todo]) -> pd.DataFrame:
+def compute_per_helper_throughput(todos: list[Todo], *, today: date) -> pd.DataFrame:
     """Return completed-per-helper with trend (this week vs last week).
 
     Columns: helper, completed, last_week, trend (up/down/same).
@@ -133,7 +133,6 @@ def compute_per_helper_throughput(todos: list[Todo]) -> pd.DataFrame:
     """
     if not todos:
         return pd.DataFrame(columns=["helper", "completed", "last_week", "trend"])
-    today = date.today()
     this_mon, this_sun = week_bounds(today)
     last_mon = this_mon - timedelta(days=7)
     last_sun = this_mon - timedelta(days=1)
@@ -195,10 +194,13 @@ def compute_cycle_time_by_project(todos: list[Todo]) -> pd.DataFrame:
 
 
 def compute_deadline_adherence_trend(todos: list[Todo], weeks: int = 8) -> pd.DataFrame:
-    """Return on-time rate per week over time (not just last 28 days).
+    """Return on-time rate per week over time.
 
-    Columns: week_label, on_time_rate, total. Sorted by week.
+    The weeks parameter limits the result to the most recent N ISO weeks present
+    in the data. Columns: week_label, on_time_rate, total. Sorted by week.
     """
+    if weeks <= 0:
+        return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
     with_deadline = [t for t in todos if t.deadline and t.completed_at]
     if not with_deadline:
         return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
@@ -208,8 +210,10 @@ def compute_deadline_adherence_trend(todos: list[Todo], weeks: int = 8) -> pd.Da
         week_label = f"{iso[0]}-W{iso[1]:02d}"
         on_time = t.completed_at.date() <= t.deadline
         by_week.setdefault(week_label, []).append(on_time)
+    sorted_weeks = sorted(by_week)
+    sorted_weeks = sorted_weeks[-weeks:]
     rows = []
-    for week_label in sorted(by_week):
+    for week_label in sorted_weeks:
         vals = by_week[week_label]
         rate = sum(1 for v in vals if v) / len(vals)
         rows.append({"week_label": week_label, "on_time_rate": rate, "total": len(vals)})
@@ -272,7 +276,7 @@ def get_per_project_throughput(
 def get_per_helper_throughput(today: date, *, weeks: int = 8) -> pd.DataFrame:
     """Return per-helper throughput with trend (this week vs last week)."""
     done = completed_in_range(today - timedelta(weeks=weeks), today)
-    return compute_per_helper_throughput(done)
+    return compute_per_helper_throughput(done, today=today)
 
 
 def get_cycle_time_by_project(

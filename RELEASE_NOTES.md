@@ -100,7 +100,7 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
   - **Restore from backup:** "Restore and Restart" now stages the selected backup into `./update/` (same as a patch) and exits; handoff.bat then applies it on the next start. No Python process performs the restore copy, so locked files can be replaced. handoff.bat is unchanged and treats restore like an update.
 - **Feature**
   - **Calendar:** The today column is visually highlighted with a light background so the current day stands out in the week view.
-  - **Analytics ideas:** A short brainstorm of future analytics (throughput by helper/project, cycle time, load, deadline adherence, export) is in `docs/dashboard-ideas.md`.
+  - **Dashboard ideas:** A short brainstorm of future analytics (throughput by helper/project, cycle time, load, deadline adherence, export) is in `docs/dashboard-ideas.md`.
 - **Improvement**
   - **build-patch regenerates obfuscated code:** `uv run handoff build-patch` now runs the same copy-and-obfuscate steps as build-zip (copy app code, PyArmor obfuscation, copy docs) before creating the patch zip. No prior `build-zip` run is required; the patch always reflects the current source. This ensures patches applied via Settings → Update contain the latest code (e.g. staged restore flow) and avoid stale obfuscated builds.
   - **Release notes:** Entries are organized into Fix / Feature / Improvement / Internal; CONTRIBUTING.md documents when and how to add version blocks and categories.
