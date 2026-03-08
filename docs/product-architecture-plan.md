@@ -69,9 +69,9 @@ The current table supports single-row edits. For triage workflows:
 Streamlit's `data_editor` has limited multi-select support, so this may require custom
 components or architecture changes (see Section B).
 
-### A.6 Enhanced Dashboard Analytics
+### A.6 Enhanced Dashboard
 
-`docs/analytics-ideas.md` already lists some of these — here's a prioritized plan:
+`docs/dashboard-ideas.md` already lists some of these — here's a prioritized plan:
 
 - **Per-project throughput breakdown** — completed per week, filterable by project.
 - **Per-helper throughput** — who is completing the most, trending up or down.
@@ -145,10 +145,10 @@ works for simple additions but doesn't scale:
 
 ### B.4 Fix Pyright Coverage Gaps
 
-Three modules are excluded from type checking: `data.py`, `pages/analytics.py`,
+Three modules are excluded from type checking: `data.py`, `pages/dashboard.py`,
 `pages/todos.py`. A phased approach:
 
-- **`pages/analytics.py`** — likely easiest; mostly read-only queries and metric
+- **`pages/dashboard.py`** — likely easiest; mostly read-only queries and metric
   computation. Add type annotations and remove from exclusion list.
 - **`data.py`** — the core data layer. Annotating this properly would catch bugs early.
   May require some `TYPE_CHECKING` imports and explicit `Session` typing.
@@ -222,7 +222,7 @@ There is noticeable overlap between test files (`test_pages_todos.py`,
 
 ## D. Suggested Sequencing
 
-### Milestone 1 — Foundation & Analytics (v2026.4.x)
+### Milestone 1 — Foundation & Dashboard (v2026.4.x)
 
 - Formalize migration framework (B.3)
 - Add CI/CD pipeline (B.5)

@@ -258,7 +258,12 @@ def test_apply_project_changes_returns_deleted_count_on_partial_failure(mock_pro
     df = pd.DataFrame(
         [
             {"__project_id": 2, "name": "Home", "is_archived": False, "confirm_delete": True},
-            {"__project_id": 1, "name": "Renamed Work", "is_archived": False, "confirm_delete": False},
+            {
+                "__project_id": 1,
+                "name": "Renamed Work",
+                "is_archived": False,
+                "confirm_delete": False,
+            },
         ]
     )
 
