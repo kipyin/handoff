@@ -155,6 +155,156 @@ def test_init_db_adds_next_check_to_existing_schema(
     assert "next_check" in todo_columns_after
 
 
+def test_init_db_is_idempotent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Running init_db twice on an already-migrated DB does not fail or corrupt."""
+    db_path = tmp_path / "todo.db"
+    db = _reload_db_module(db_path, monkeypatch)
+
+    db.init_db()
+    todo_columns_first = _fetch_columns(_get_sqlite_path(db.get_database_url()), "todo")
+
+    db.init_db()
+    todo_columns_second = _fetch_columns(_get_sqlite_path(db.get_database_url()), "todo")
+
+    assert todo_columns_first == todo_columns_second
+    assert "next_check" in todo_columns_second
+    assert "completed_at" in todo_columns_second
+    assert "is_archived" in todo_columns_second
+
+
+def test_init_db_migrates_legacy_status(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """init_db migrates legacy status values: delegated→handoff, DELEGATED→HANDOFF."""
+    db_path = tmp_path / "todo.db"
+    db = _reload_db_module(db_path, monkeypatch)
+
+    sqlite_path = _get_sqlite_path(db.get_database_url())
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE todo (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                deadline DATE NULL,
+                helper TEXT NULL,
+                notes TEXT NULL,
+                created_at TIMESTAMP NOT NULL,
+                completed_at TIMESTAMP NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0,
+                next_check DATE NULL
+            )
+            """,
+        )
+        conn.execute(
+            """
+            CREATE TABLE project (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0
+            )
+            """,
+        )
+        conn.execute("INSERT INTO project (id, name, created_at, is_archived) VALUES (1, 'P', '2026-01-01 00:00:00', 0)")
+        conn.execute(
+            "INSERT INTO todo (id, project_id, name, status, created_at, is_archived) "
+            "VALUES (1, 1, 'Old', 'delegated', '2026-01-01 00:00:00', 0)"
+        )
+        conn.execute(
+            "INSERT INTO todo (id, project_id, name, status, created_at, is_archived) "
+            "VALUES (2, 1, 'New', 'DELEGATED', '2026-01-01 00:00:00', 0)"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    db.init_db()
+
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        rows = conn.execute("SELECT id, status FROM todo ORDER BY id").fetchall()
+    finally:
+        conn.close()
+    status_by_id = {r[0]: r[1] for r in rows}
+    assert status_by_id[1] == "handoff"
+    assert status_by_id[2] == "HANDOFF"
+
+
+def test_init_db_preserves_data_through_migration(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Migrating from older schema (no next_check) preserves existing project and todo data."""
+    db_path = tmp_path / "todo.db"
+    db = _reload_db_module(db_path, monkeypatch)
+
+    sqlite_path = _get_sqlite_path(db.get_database_url())
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        conn.execute(
+            """
+            CREATE TABLE todo (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'handoff',
+                deadline DATE NULL,
+                helper TEXT NULL,
+                notes TEXT NULL,
+                created_at TIMESTAMP NOT NULL,
+                completed_at TIMESTAMP NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0
+            )
+            """,
+        )
+        conn.execute(
+            """
+            CREATE TABLE project (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0
+            )
+            """,
+        )
+        conn.execute(
+            "INSERT INTO project (id, name, created_at, is_archived) VALUES (1, 'My Project', '2026-01-01 00:00:00', 0)"
+        )
+        conn.execute(
+            "INSERT INTO todo (id, project_id, name, status, created_at, is_archived) "
+            "VALUES (1, 1, 'Existing todo', 'handoff', '2026-01-01 00:00:00', 0)"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    db.init_db()
+
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        projects = conn.execute("SELECT id, name FROM project").fetchall()
+        todos = conn.execute(
+            "SELECT id, project_id, name, next_check FROM todo"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    assert len(projects) == 1
+    assert projects[0][1] == "My Project"
+    assert len(todos) == 1
+    assert todos[0][2] == "Existing todo"
+    assert todos[0][3] is None
+    assert todos[0][1] == 1
+
+
 def test_init_db_raises_when_engine_creation_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
