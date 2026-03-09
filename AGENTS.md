@@ -144,15 +144,15 @@ Extract and run `./handoff.sh`. Future work may add a signed `.app` bundle.
 
 ## Active pages
 
-The navigation in `app.py` exposes five pages:
+The navigation in `app.py` exposes five pages: Now and Dashboard in the first (unlabeled) group, and Projects, About, and System Settings under the "Settings" group.
 
 | Page | Icon | Module |
 |------|------|--------|
 | Now | 🎯 | `pages/now.py` (`render_now_page`) |
 | Projects | 📁 | `pages/projects.py` |
 | Dashboard | 📊 | `pages/dashboard.py` (`render_dashboard_page`) |
-| Settings | ⚙️ | `pages/settings.py` |
-| Docs | 📖 | `pages/docs.py` |
+| About | 📖 | `pages/about.py` (`render_about_page`) |
+| System Settings | ⚙️ | `pages/system_settings.py` (`render_system_settings_page`) |
 
 There is no Calendar page.
 
@@ -162,7 +162,7 @@ There is no Calendar page.
 
 **Data layer:** `uv run pytest tests/test_models.py tests/test_db.py tests/test_data.py` — in-memory SQLite. When adding a column, add inline migration in `db.py:init_db()` and a migration test.
 
-**Pages / UI:** `uv run pytest tests/test_pages_todos.py tests/test_pages_projects.py tests/test_pages_now.py tests/test_dashboard.py`
+**Pages / UI:** `uv run pytest tests/test_pages_projects.py tests/test_pages_now.py tests/test_dashboard.py`
 
 **Services:** `uv run pytest tests/test_todo_service.py tests/test_services_architecture.py`
 
@@ -184,7 +184,7 @@ uv run handoff typecheck   # pyright only
 uv run handoff test        # pytest only
 ```
 
-**pyright exclusions:** `data.py`, `pages/dashboard.py`, `pages/todos.py`, `services/dashboard_service.py` — do not remove without understanding the consequences.
+**pyright exclusions:** `data.py`, `pages/dashboard.py`, `services/dashboard_service.py` — do not remove without understanding the consequences.
 
 ---
 

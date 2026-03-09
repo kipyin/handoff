@@ -25,15 +25,6 @@ def test_setup_calls_st_error_and_st_stop_when_init_db_raises() -> None:
     st_mock.stop.assert_called_once()
 
 
-def test_render_todos_page_calls_impl() -> None:
-    """render_todos_page delegates to the todos page implementation."""
-    with patch("handoff.ui._render_todos_page_impl") as mock_impl:
-        import handoff.ui as ui
-
-        ui.render_todos_page()
-    mock_impl.assert_called_once()
-
-
 def test_render_projects_page_calls_impl() -> None:
     """render_projects_page delegates to the projects page implementation."""
     with patch("handoff.ui._render_projects_page_impl") as mock_impl:
@@ -52,19 +43,19 @@ def test_render_dashboard_page_calls_impl() -> None:
     mock_impl.assert_called_once()
 
 
-def test_render_settings_page_calls_impl() -> None:
-    """render_settings_page delegates to the settings page implementation."""
-    with patch("handoff.ui._render_settings_page_impl") as mock_impl:
+def test_render_system_settings_page_calls_impl() -> None:
+    """render_system_settings_page delegates to the System Settings page implementation."""
+    with patch("handoff.ui._render_system_settings_page_impl") as mock_impl:
         import handoff.ui as ui
 
-        ui.render_settings_page()
+        ui.render_system_settings_page()
     mock_impl.assert_called_once()
 
 
-def test_render_docs_page_calls_impl() -> None:
-    """render_docs_page delegates to the docs page implementation."""
-    with patch("handoff.ui._render_docs_page_impl") as mock_impl:
+def test_render_about_page_calls_impl() -> None:
+    """render_about_page delegates to the About page implementation."""
+    with patch("handoff.ui._render_about_page_impl") as mock_impl:
         import handoff.ui as ui
 
-        ui.render_docs_page()
+        ui.render_about_page()
     mock_impl.assert_called_once()

@@ -11,24 +11,30 @@ Apply tags in this order. Use the first tag that matches.
   - Python runtime version bump (e.g. 3.13 → 3.14)
   - New or upgraded runtime dependencies in `pyproject.toml`
   - Structural changes to the build layout (e.g. embedded Python path, app root logic)
-
   If any of the above apply, users must do a full reinstall; a patch zip cannot update these.
-
 - **`[Recommended]`** — Use when this release includes changes that **users will notice** and that **can** be applied via patch:
   - Bug fixes (autosave, filters, updater, etc.)
   - New features or UI changes
   - Improvements to existing behavior (performance, UX, feedback messages)
-
   Rule of thumb: Would a typical user care? Can it ship in a patch? → [Recommended].
-
 - **`[Optional]`** — Use when this release contains **only** changes that users do not see and that do not require a full reinstall:
   - Refactoring, code reorg, type hints
   - New or expanded tests
   - Build script or CI changes (other than launcher/runtime)
   - Doc updates (README, AGENTS.md, in-code comments)
   - Ruff/formatting cleanup, pyright fixes
-
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
+
+## 2026.3.9 [Recommended]
+
+- **Feature**
+  - **Closed handoffs on Now page:** "Closed >" expander below Upcoming shows all closed handoffs (done/canceled) in a dataframe. Respects Project, Who, and Search filters. "Reopen selected" button restores selected closed items to handoff status.
+- **Improvement**
+  - **Now page search:** Natural-language date filters in the search box (e.g. "next week", "tomorrow"); parsed bounds filter handoffs by date.
+  - **Now page Who filter:** "Who" dropdown limited to helpers who have at least one open handoff.
+- **Internal**
+  - **Nav and page renames:** Docs → About, Settings → System Settings, "More" nav group → Settings. Page modules renamed to match: `pages/about.py`, `pages/system_settings.py`.
+  - **Todo page removal:** Removed deprecated Todos page code: `pages/todos.py`, `render_todos_page`, TodoRow/TodoMutationDefaults/TodoUpdateInput/TodoCreateInput from page_models, and related tests. Handoffs managed via Now (add, edit, snooze, close).
 
 ## 2026.3.8 [Recommended]
 
@@ -115,19 +121,19 @@ Apply tags in this order. Use the first tag that matches.
 
 - **Improvement**
   - **Docs polish and contributor workflow:** README and CONTRIBUTING complete the
-    planned 2026.3.3 documentation work with clearer Quickstart and feature
-    descriptions, an explicit "Who is this for?" / limitations section, and
-    refined explanations of where your data lives and how updates/backups work.
+  planned 2026.3.3 documentation work with clearer Quickstart and feature
+  descriptions, an explicit "Who is this for?" / limitations section, and
+  refined explanations of where your data lives and how updates/backups work.
   - **Deployment philosophy and release checklist:** CONTRIBUTING now opens with
-    a short deployment philosophy for the embedded-Python + obfuscated-source
-    model and adds a concise release workflow checklist that covers branching
-    from `main`, bumping the CalVer version with the CLI helper, updating
-    release notes, running checks/tests, and building Windows artefacts.
+  a short deployment philosophy for the embedded-Python + obfuscated-source
+  model and adds a concise release workflow checklist that covers branching
+  from `main`, bumping the CalVer version with the CLI helper, updating
+  release notes, running checks/tests, and building Windows artefacts.
   - **Style, testing, and Cursor rules summary:** CONTRIBUTING summarizes Ruff,
-    Google-style docstrings, and pyright expectations in one place, adds a
-    dedicated Testing section with explicit `uv run handoff` commands, and
-    clarifies that `.cursor/rules/` contains optional, deeper guidance for
-    automation. There are no functional behavior changes in this release.
+  Google-style docstrings, and pyright expectations in one place, adds a
+  dedicated Testing section with explicit `uv run handoff` commands, and
+  clarifies that `.cursor/rules/` contains optional, deeper guidance for
+  automation. There are no functional behavior changes in this release.
 
 ## 2026.3.3 [Recommended]
 
@@ -137,7 +143,7 @@ Apply tags in this order. Use the first tag that matches.
   - **Build command rename:** The Windows embedded zip build command has been renamed from `build-zip` to `build-full` in the `handoff` CLI. Use `uv run handoff build-full` to create the full embedded zip; patch builds still use `uv run handoff build-patch`.
   - **Windows launcher wording:** Docs and updater messages clarify that `handoff.bat` is the launcher for embedded builds.
   - **Docs polish:** README and CONTRIBUTING have been refreshed with clearer quickstart, deployment philosophy, macOS planning notes, hyperlinks (including the Gitee repository), and a more explicit release workflow.
-  - **macOS planning:** CONTRIBUTING documents the current \"run from source\" story on macOS and outlines a future signed/notarized bundle approach.
+  - **macOS planning:** CONTRIBUTING documents the current run from source story on macOS and outlines a future signed/notarized bundle approach.
   - **Style guidance in one place:** CONTRIBUTING now inlines key code-style expectations (Ruff, Google-style docstrings, pyright) so human contributors do not need to read separate Cursor rule files.
   - **Distribution philosophy:** CONTRIBUTING emphasises the embedded-Python + obfuscated source + thin `app.py` entrypoint model that underpins how Handoff is deployed.
   - **Gaps filled:** README now calls out who the app is for, current limitations/non-goals, and where your data lives; CONTRIBUTING adds a short testing section and consolidates the release checklist.
@@ -176,7 +182,7 @@ Apply tags in this order. Use the first tag that matches.
   - **Streamlit config launcher:** The app is started via `python -m handoff` so Streamlit options take effect. The launcher applies env vars from `handoff.config` (showErrorDetails, toolbarMode, showSidebarNavigation, showErrorLinks, gatherUsageStats) before starting Streamlit. Both `uv run handoff run` and the embedded build's `handoff.bat` use this launcher; there is no user-editable config file, and the package is obfuscated with PyArmor at deploy.
 - **Internal**
   - **Docstrings:** Standardized all module and function docstrings to Google style across the codebase. Summary lines, optional extended descriptions, and consistent Args/Returns/Raises (and Yields where relevant) are used in handoff, app, scripts, and tests. Sphinx/reST markup (:mod:, :func:, inline literals) has been removed in favour of plain prose so documentation is tooling-agnostic and readable in source.
-  - **Code quality:** Removed unused code (`get_session`, no-op `_init_session_state`), fixed package `__version__` to re-export from `handoff.version`, re-enabled Analytics in the nav, and corrected `_clear_pycache` to only clear `app_root` and `app_root/src` (removed non-existent `pages` path).
+  - **Code quality:** Removed unused code (`get_session`, no-op `_init_session_state`), fixed package `__version_`_ to re-export from `handoff.version`, re-enabled Analytics in the nav, and corrected `_clear_pycache` to only clear `app_root` and `app_root/src` (removed non-existent `pages` path).
   - **Test:** Calendar smoke test no longer expects a `date_input` widget (date picker is commented out in the UI).
 
 ## 2026.3.0 [Recommended]
@@ -277,7 +283,7 @@ Apply tags in this order. Use the first tag that matches.
  so you can browse timestamped backup snapshots, restore a selected snapshot, and have the
  app restart automatically into the restored state.
 - **Updater tests:** Add unit tests for the updater's patch application, backup handling,
- `__pycache_`_ cleanup, and the new backup-restore helper.
+ `__pycache`__ cleanup, and the new backup-restore helper.
 
 ## 2026.2.12 [Recommended]
 
@@ -287,7 +293,7 @@ Apply tags in this order. Use the first tag that matches.
 
 ## 2026.2.11 [Optional]
 
-- **Updater cache cleanup:** After applying a code-only patch, the app now removes `__pycache__`
+- **Updater cache cleanup:** After applying a code-only patch, the app now removes `__pycache_`_
  directories under the application root (including `src/` and `pages/`) so that Python regenerates
  fresh bytecode for the updated sources on next start.
 - **Internal cleanup:** Modernise models and data access to use `UTC`/`StrEnum` and tidy imports and

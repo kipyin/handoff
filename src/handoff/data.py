@@ -513,12 +513,18 @@ def query_now_items(
     helper_names: list[str] | None = None,
     search_text: str | None = None,
     deadline_near_days: int = 1,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
 ) -> list[tuple[Todo, bool]]:
     """Return open items that need attention on the Now page.
 
     An item needs attention if:
     - Next check is today or earlier (or null), and/or
     - Deadline is within deadline_near_days or past due.
+
+    Optional date filters from natural-language search narrow the result set.
 
     Returns:
         List of (todo, at_risk) tuples. at_risk is True when deadline is near
@@ -552,6 +558,23 @@ def query_now_items(
                     Todo.helper.ilike(like_expr),
                     Todo.project.has(Project.name.ilike(like_expr)),
                 )
+            )
+        if next_check_min is not None:
+            stmt = stmt.where(
+                Todo.next_check.isnot(None),
+                Todo.next_check >= next_check_min,
+            )
+        if next_check_max is not None:
+            stmt = stmt.where((Todo.next_check.is_(None)) | (Todo.next_check <= next_check_max))
+        if deadline_min is not None:
+            stmt = stmt.where(
+                Todo.deadline.isnot(None),
+                Todo.deadline >= deadline_min,
+            )
+        if deadline_max is not None:
+            stmt = stmt.where(
+                Todo.deadline.isnot(None),
+                Todo.deadline <= deadline_max,
             )
 
         # Next-check driven: next_check <= today OR next_check IS NULL
@@ -587,11 +610,17 @@ def query_upcoming_handoffs(
     search_text: str | None = None,
     deadline_near_days: int = 1,
     limit: int = 20,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
 ) -> list[Todo]:
     """Return handoff items that are not yet action-required (upcoming).
 
     An item is upcoming if next_check is in the future and deadline is not
     at risk (within deadline_near_days). Sorted by next_check asc.
+
+    Optional date filters from natural-language search narrow the result set.
 
     Args:
         project_ids: Optional filter by project ids.
@@ -599,6 +628,10 @@ def query_upcoming_handoffs(
         search_text: Optional search in name, notes, helper, project name.
         deadline_near_days: Cutoff for "at risk" (deadline > today + N is safe).
         limit: Maximum number of results.
+        next_check_min: Optional minimum next_check date.
+        next_check_max: Optional maximum next_check date.
+        deadline_min: Optional minimum deadline.
+        deadline_max: Optional maximum deadline.
 
     Returns:
         List of Todo models with project loaded, ordered by next_check.
@@ -634,6 +667,20 @@ def query_upcoming_handoffs(
                     Todo.project.has(Project.name.ilike(like_expr)),
                 )
             )
+        if next_check_min is not None:
+            stmt = stmt.where(Todo.next_check >= next_check_min)
+        if next_check_max is not None:
+            stmt = stmt.where(Todo.next_check <= next_check_max)
+        if deadline_min is not None:
+            stmt = stmt.where(
+                Todo.deadline.isnot(None),
+                Todo.deadline >= deadline_min,
+            )
+        if deadline_max is not None:
+            stmt = stmt.where(
+                Todo.deadline.isnot(None),
+                Todo.deadline <= deadline_max,
+            )
 
         stmt = stmt.order_by(Todo.next_check.asc()).limit(limit)
         todos = list(session.exec(stmt).all())
@@ -650,6 +697,34 @@ def list_helpers() -> list[str]:
     """
     with session_context() as session:
         stmt = select(Todo.helper).where(Todo.helper.isnot(None))
+        raw_values = session.exec(stmt).all()
+        canonical_by_lower: dict[str, str] = {}
+        for raw in raw_values:
+            name = (raw or "").strip()
+            if not name:
+                continue
+            lowered = name.lower()
+            if lowered not in canonical_by_lower:
+                canonical_by_lower[lowered] = name
+        return sorted(canonical_by_lower.values(), key=str.lower)
+
+
+def list_helpers_with_open_handoffs() -> list[str]:
+    """Return distinct helper names who have at least one open handoff.
+
+    Open handoffs are status HANDOFF and not archived. Use for Now page Who
+    filter so the dropdown shows only relevant people.
+
+    Returns:
+        Sorted list of unique non-empty helper names.
+    """
+    with session_context() as session:
+        stmt = (
+            select(Todo.helper)
+            .where(Todo.helper.isnot(None))
+            .where(Todo.status == TodoStatus.HANDOFF)
+            .where(Todo.is_archived.is_(False))
+        )
         raw_values = session.exec(stmt).all()
         canonical_by_lower: dict[str, str] = {}
         for raw in raw_values:

@@ -1,4 +1,4 @@
-"""Additional tests for pages/settings.py to improve coverage.
+"""Additional tests for pages/system_settings.py to improve coverage.
 
 Covers: _render_send_log_section, _render_about_section, import happy path.
 """
@@ -10,7 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from handoff.pages.settings import (
+from handoff.pages.system_settings import (
     _render_about_section,
     _render_data_export_section,
     _render_data_import_section,
@@ -27,7 +27,7 @@ def _patch_streamlit(monkeypatch, **st_overrides) -> MagicMock:
     st_mock.session_state = {}
     for k, v in st_overrides.items():
         setattr(st_mock, k, v)
-    monkeypatch.setattr("handoff.pages.settings.st", st_mock)
+    monkeypatch.setattr("handoff.pages.system_settings.st", st_mock)
     return st_mock
 
 
@@ -36,7 +36,7 @@ class TestRenderSendLogSection:
         """When no log files exist, shows 'No log files found' caption."""
         logs_dir = tmp_path / "logs"
         logs_dir.mkdir()
-        monkeypatch.setattr("handoff.pages.settings._get_logs_dir", lambda: logs_dir)
+        monkeypatch.setattr("handoff.pages.system_settings._get_logs_dir", lambda: logs_dir)
         st_mock = _patch_streamlit(monkeypatch)
 
         _render_send_log_section()
@@ -48,7 +48,7 @@ class TestRenderSendLogSection:
         logs_dir = tmp_path / "logs"
         logs_dir.mkdir()
         (logs_dir / "handoff.log").write_text("log content", encoding="utf-8")
-        monkeypatch.setattr("handoff.pages.settings._get_logs_dir", lambda: logs_dir)
+        monkeypatch.setattr("handoff.pages.system_settings._get_logs_dir", lambda: logs_dir)
         st_mock = _patch_streamlit(monkeypatch)
 
         _render_send_log_section()
@@ -64,7 +64,9 @@ class TestRenderAboutSection:
     def test_renders_version_and_environment(self, monkeypatch) -> None:
         """About section shows version and environment info."""
         st_mock = _patch_streamlit(monkeypatch)
-        monkeypatch.setattr("handoff.pages.settings.get_readme_intro", lambda: "Handoff helps you.")
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_readme_intro", lambda: "Handoff helps you."
+        )
 
         _render_about_section()
 
@@ -80,7 +82,7 @@ class TestRenderDataExportSection:
         """Export section creates JSON and CSV download buttons."""
         st_mock = _patch_streamlit(monkeypatch)
         monkeypatch.setattr(
-            "handoff.pages.settings.get_export_payload",
+            "handoff.pages.system_settings.get_export_payload",
             lambda: {"projects": [], "todos": []},
         )
 
@@ -115,7 +117,7 @@ class TestRenderDataImportSection:
         def mock_import(p):
             imported["called"] = True
 
-        monkeypatch.setattr("handoff.pages.settings.import_payload", mock_import)
+        monkeypatch.setattr("handoff.pages.system_settings.import_payload", mock_import)
 
         _render_data_import_section()
 
@@ -143,7 +145,7 @@ class TestRenderDataImportSection:
         st_mock.button.return_value = True
 
         monkeypatch.setattr(
-            "handoff.pages.settings.import_payload",
+            "handoff.pages.system_settings.import_payload",
             lambda p: (_ for _ in ()).throw(RuntimeError("DB broke")),
         )
 
