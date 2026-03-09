@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import contextlib
 import runpy
 import sys
 from unittest.mock import MagicMock, patch
 
 
 def test_main_runs_streamlit_with_app_py() -> None:
-    """Running python -m handoff calls subprocess with streamlit run app.py and exits with its returncode."""
+    """python -m handoff runs streamlit run app.py via subprocess and exits with its returncode."""
     subprocess_run = MagicMock(return_value=MagicMock(returncode=0))
     exit_calls: list[int] = []
 
@@ -20,11 +21,9 @@ def test_main_runs_streamlit_with_app_py() -> None:
     with (
         patch("subprocess.run", subprocess_run),
         patch("sys.exit", side_effect=capture_exit),
+        contextlib.suppress(SystemExit),
     ):
-        try:
-            runpy.run_module("handoff", run_name="__main__")
-        except SystemExit:
-            pass  # expected
+        runpy.run_module("handoff", run_name="__main__")
 
     assert len(exit_calls) == 1
     assert exit_calls[0] == 0

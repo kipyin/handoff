@@ -107,9 +107,9 @@ def test_render_now_page_with_action_required_items_renders_expanders_and_button
     render_now_page()
     assert st_mock.expander.call_count >= 2
     button_labels = [c[0][0] for c in st_mock.button.call_args_list if c[0]]
-    assert any(l == "Snooze" for l in button_labels)
-    assert any(l == "Edit" for l in button_labels)
-    assert any(l == "✓ Close" for l in button_labels)
+    assert any(label == "Snooze" for label in button_labels)
+    assert any(label == "Edit" for label in button_labels)
+    assert any(label == "✓ Close" for label in button_labels)
 
 
 def test_render_now_page_with_editing_shows_form(monkeypatch: pytest.MonkeyPatch) -> None:
