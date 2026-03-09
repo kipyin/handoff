@@ -12,6 +12,7 @@ from typing import Any
 
 import pandas as pd
 
+from handoff.data import count_open_handoffs as _count_open_handoffs
 from handoff.data import get_handoff_close_date, query_handoffs
 from handoff.data import get_recent_activity as _get_recent_activity
 from handoff.dates import week_bounds
@@ -37,7 +38,7 @@ def _pitchman_display(pitchman: str | None) -> str:
 
 def count_open_handoffs() -> int:
     """Return the number of currently open handoffs."""
-    return len(query_handoffs(include_concluded=False, include_archived_projects=False))
+    return _count_open_handoffs()
 
 
 def completed_in_range(start: date, end: date) -> list[Handoff]:

@@ -6,7 +6,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from loguru import logger
-from sqlalchemy import exists, text
+from sqlalchemy import exists, func, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import or_, select
 
@@ -439,7 +439,7 @@ def create_check_in(
     check_in_date: date,
     note: str | None = None,
 ) -> CheckIn:
-    """Insert a check-in entry and optionally update the handoff's next_check.
+    """Insert a check-in entry for a handoff.
 
     Args:
         handoff_id: Id of the handoff.
@@ -520,6 +520,21 @@ def _concluded_subquery():
         .where(CheckIn.handoff_id == Handoff.id, CheckIn.check_in_type == CheckInType.CONCLUDED)
         .correlate(Handoff)
     )
+
+
+def count_open_handoffs() -> int:
+    """Return the number of open handoffs (no concluded check-in, non-archived project).
+
+    Uses a SQL COUNT query to avoid materializing full rows.
+    """
+    with session_context() as session:
+        stmt = (
+            select(func.count())
+            .select_from(Handoff)
+            .where(Handoff.project.has(Project.is_archived.is_(False)))
+            .where(~exists(_concluded_subquery()))
+        )
+        return session.exec(stmt).one()
 
 
 # ---------------------------------------------------------------------------
@@ -883,8 +898,13 @@ def query_concluded_handoffs(
                     Handoff.project.has(Project.name.ilike(like_expr)),
                 )
             )
-        stmt = stmt.order_by(Handoff.created_at.desc())
-        return list(session.exec(stmt).unique().all())
+        handoffs = list(session.exec(stmt).unique().all())
+
+    handoffs.sort(
+        key=lambda h: get_handoff_close_date(h) or date.min,
+        reverse=True,
+    )
+    return handoffs
 
 
 # ---------------------------------------------------------------------------
