@@ -162,7 +162,7 @@ There is no Calendar page.
 
 **Data layer:** `uv run pytest tests/test_models.py tests/test_db.py tests/test_data.py` — in-memory SQLite. When adding a column, add inline migration in `db.py:init_db()` and a migration test.
 
-**Pages / UI:** `uv run pytest tests/test_pages_todos.py tests/test_pages_projects.py tests/test_pages_now.py tests/test_dashboard.py`
+**Pages / UI:** `uv run pytest tests/test_pages_projects.py tests/test_pages_now.py tests/test_dashboard.py`
 
 **Services:** `uv run pytest tests/test_todo_service.py tests/test_services_architecture.py`
 
