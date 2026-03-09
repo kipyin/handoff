@@ -162,6 +162,27 @@ def test_list_pitchmen_with_open_handoffs(session, monkeypatch) -> None:
     assert "Bob" not in pitchmen
 
 
+def test_list_pitchmen_with_open_handoffs_include_archived_projects(session, monkeypatch) -> None:
+    """Optional include_archived_projects toggle includes archived-project handoffs."""
+    _patch_session_context(monkeypatch, session)
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    session.add(Handoff(project_id=active.id, need_back="a", pitchman="Alice"))
+    session.add(Handoff(project_id=archived.id, need_back="b", pitchman="Bob"))
+    session.commit()
+
+    default_pitchmen = data.list_pitchmen_with_open_handoffs()
+    assert "Alice" in default_pitchmen
+    assert "Bob" not in default_pitchmen
+
+    all_pitchmen = data.list_pitchmen_with_open_handoffs(include_archived_projects=True)
+    assert "Alice" in all_pitchmen
+    assert "Bob" in all_pitchmen
+
+
 def test_query_handoffs_filters(session, monkeypatch) -> None:
     """Verify query_handoffs with multiple filter combinations."""
     _patch_session_context(monkeypatch, session)
@@ -615,6 +636,80 @@ def test_query_action_handoffs(session, monkeypatch) -> None:
     assert "Due but risk" not in names
     assert "Future" not in names
     assert "Done" not in names
+
+
+def test_query_action_handoffs_include_archived_projects(session, monkeypatch) -> None:
+    """query_action_handoffs can include archived projects when requested."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    session.add(Handoff(project_id=active.id, need_back="Active due", next_check=date(2026, 3, 9)))
+    session.add(
+        Handoff(project_id=archived.id, need_back="Archived due", next_check=date(2026, 3, 9))
+    )
+    session.commit()
+
+    default_results = data.query_action_handoffs()
+    default_names = [h.need_back for h in default_results]
+    assert "Active due" in default_names
+    assert "Archived due" not in default_names
+
+    all_results = data.query_action_handoffs(include_archived_projects=True)
+    all_names = [h.need_back for h in all_results]
+    assert "Active due" in all_names
+    assert "Archived due" in all_names
+
+
+def test_query_action_handoffs_search_includes_check_in_notes(session, monkeypatch) -> None:
+    """query_action_handoffs search text matches check-in note content."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    h = Handoff(
+        project_id=p.id,
+        need_back="Unrelated title",
+        next_check=date(2026, 3, 9),
+        notes="none",
+    )
+    session.add(h)
+    session.commit()
+    session.refresh(h)
+
+    session.add(
+        CheckIn(
+            handoff_id=h.id,
+            check_in_date=date(2026, 3, 9),
+            check_in_type=CheckInType.ON_TRACK,
+            note="Need assumption doc X before proceeding",
+        )
+    )
+    session.commit()
+
+    results = data.query_action_handoffs(search_text="assumption doc X")
+    assert len(results) == 1
+    assert results[0].id == h.id
 
 
 def test_query_risk_handoffs(session, monkeypatch) -> None:
