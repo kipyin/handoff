@@ -75,9 +75,9 @@ To keep the app simple and robust, some things are intentionally out of scope:
    - Notes (text; you can paste links, file paths, etc.)
 3. **Now page** — Control-tower view for action-required handoffs. Shows items
    that need attention (next check due today or earlier, or deadline at risk).
-   Add new handoffs, edit existing ones, Snooze (+1d, +3d, +1w, or custom) to
-   follow up later, or Close when done. Upcoming section lists handoffs not yet
-   due. Filter by project, helper, or search.
+   Add new handoffs, edit existing ones, Snooze to a specific follow-up date
+   using a date picker, or Close when done. Upcoming section lists handoffs not
+   yet due. Filter by project, helper, or search.
 4. **Dashboard** — At-a-glance metrics: open handoffs, completed this week vs
    last, median cycle time, and on-time rate. Plus a weekly throughput chart
    and current helper load.

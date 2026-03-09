@@ -13,7 +13,7 @@ def format_risk_reason(deadline: date | None) -> str:
 
     Returns:
         Empty string if no deadline; otherwise 'Overdue', 'Due today', 'Due tomorrow',
-        or 'in N days' for future dates within the risk window.
+        or 'in N days' for future dates.
     """
     if deadline is None:
         return ""
@@ -54,10 +54,10 @@ def _ordinal(n: int) -> str:
 
 
 def format_date_smart(d: date | None) -> str:
-    """Mixed relative/absolute: today, tomorrow, this Wed, next Fri, or Tue, Mar. 10th.
+    """Mixed relative/absolute: today, tomorrow, this Wed, next Fri, or Tue, Mar 10th.
 
     Closer dates use distance: today, tomorrow, this {Weekday}, next {Weekday}.
-    Further dates (14+ days) use absolute: {Weekday}, {Mon}. {Ordinal}.
+    Further dates (14+ days) use absolute: {Weekday}, {Mon} {Ordinal}.
     Past dates return absolute format.
     """
     if d is None:

@@ -37,7 +37,7 @@ Apply tags in this order. Use the first tag that matches.
   - **Upcoming section:** Now page shows handoffs not yet due (next_check in future, deadline not at risk).
   - **Deadline-at-risk setting:** Settings page "Now page" section lets you set how many days before a deadline an item is shown as at risk (default 1); value persisted in `handoff_settings.json` next to the DB.
   - **Now page expander:** Header reordered: urgency first, then **Need back** (bold), who, dates, project last. Next-check icon 👀; when at risk, deadline omitted from trailing segment. Risk label shows "Overdue", "Due today", "Due tomorrow", or "in N days".
-  - **Now page risk window:** Default "deadline at risk" is 1 day (only overdue or due today unless changed in Settings).
+  - **Now page risk window:** Default "deadline at risk" window is 1 day (shows items overdue, due today, or due tomorrow unless changed in Settings).
   - **Now page layout:** Expanders collapsed by default; actions compacted (Edit, Close, then date picker + Snooze); separator removed from Actions dropdown.
 - **Fix**
   - **Actions popover:** Date picker no longer auto-opens when opening Actions (Edit/Close shown first).

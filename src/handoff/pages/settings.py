@@ -38,7 +38,7 @@ def _render_now_settings_section() -> None:
     st.markdown("### Now page")
     st.caption(
         "Control how many days before a deadline an item is shown as at risk on the Now page. "
-        "Default is 1 (only overdue or due today)."
+        "Default is 1 (items overdue, due today, or due tomorrow)."
     )
     current = get_deadline_near_days()
     new_value = st.number_input(

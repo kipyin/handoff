@@ -38,6 +38,7 @@ def test_render_now_page_no_projects_shows_info(monkeypatch: pytest.MonkeyPatch)
     st_mock = MagicMock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     render_now_page()
     st_mock.info.assert_called_once()
     assert "No projects" in st_mock.info.call_args[0][0]
@@ -53,6 +54,7 @@ def test_render_now_page_with_projects_queries_items(monkeypatch: pytest.MonkeyP
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_helpers", lambda: ["Alice"])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     query_calls: list[dict] = []
 
     def capture_query(**kwargs):
@@ -94,6 +96,7 @@ def test_render_now_page_with_action_required_items_renders_expanders_and_button
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_helpers", lambda: ["Alice"])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     todo_action = _make_fake_todo(todo_id=1, name="Action item")
     todo_upcoming = _make_fake_todo(todo_id=2, name="Upcoming item")
     monkeypatch.setattr(
@@ -138,6 +141,7 @@ def test_render_now_page_with_editing_shows_form(monkeypatch: pytest.MonkeyPatch
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_helpers", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     todo_action = _make_fake_todo(todo_id=1, name="Edit me")
     monkeypatch.setattr(
         "handoff.pages.now.query_now_items",
