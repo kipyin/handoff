@@ -11,7 +11,7 @@ no errors when clicking around different elements.
 from __future__ import annotations
 
 import importlib
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -19,6 +19,7 @@ from streamlit.testing.v1 import AppTest
 
 import handoff.data as data
 import handoff.db as db
+from handoff.models import TodoStatus
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 
@@ -192,6 +193,66 @@ def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None
     assert len(at.exception) == 0
     assert len(at.get("subheader")) >= 1
     assert len(at.get("expander")) >= 1
+
+
+def test_now_page_close_button_marks_todo_done(app_test_db: Path) -> None:
+    """Clicking Close on a Now item marks it done."""
+    db.init_db()
+    project = data.create_project("Now Close Test")
+    assert project.id is not None
+    todo = data.create_todo(
+        project_id=project.id,
+        name="Close this handoff",
+        next_check=date(2000, 1, 1),
+        helper="Alex",
+    )
+    assert todo.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    close_buttons = [b for b in at.button if getattr(b, "label", None) == "✓ Close"]
+    assert close_buttons, "Expected Close button not found on Now page"
+    close_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    todos = data.query_todos(project_ids=[project.id])
+    updated = next((t for t in todos if t.id == todo.id), None)
+    assert updated is not None
+    assert updated.status == TodoStatus.DONE
+    assert updated.completed_at is not None
+
+
+def test_now_page_snooze_plus_one_day_updates_next_check(app_test_db: Path) -> None:
+    """Clicking +1d snooze updates the todo next_check date."""
+    db.init_db()
+    project = data.create_project("Now Snooze Test")
+    assert project.id is not None
+    todo = data.create_todo(
+        project_id=project.id,
+        name="Snooze this handoff",
+        next_check=date(2000, 1, 1),
+        helper="Riley",
+    )
+    assert todo.id is not None
+    start_today = date.today()
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    plus_one_buttons = [b for b in at.button if getattr(b, "label", None) == "+1d"]
+    assert plus_one_buttons, "Expected +1d snooze button not found on Now page"
+    plus_one_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    todos = data.query_todos(project_ids=[project.id])
+    updated = next((t for t in todos if t.id == todo.id), None)
+    assert updated is not None
+    expected_dates = {start_today + timedelta(days=1), date.today() + timedelta(days=1)}
+    assert updated.next_check in expected_dates
+    assert updated.status == TodoStatus.HANDOFF
 
 
 def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
