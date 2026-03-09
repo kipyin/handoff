@@ -14,7 +14,7 @@ def format_next_check(d: date | None) -> str:
         return "Today"
     if d == today + timedelta(days=1):
         return "Tomorrow"
-    return f"{d:%b} {d.day}" if hasattr(d, "strftime") else str(d)
+    return f"{d:%b} {d.day}"
 
 
 def week_bounds(reference: date) -> tuple[date, date]:
