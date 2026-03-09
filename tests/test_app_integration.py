@@ -172,7 +172,8 @@ def test_now_page_renders_with_app_test(app_test_db: Path) -> None:
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=5)
     assert len(at.get("subheader")) >= 1
-    assert len(at.get("info")) >= 1 or len(at.get("expander")) >= 0
+    assert len(at.get("info")) >= 1
+    assert len(at.get("expander")) == 0
 
 
 def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None:
