@@ -12,121 +12,117 @@ from typing import Any
 
 import pandas as pd
 
+from handoff.data import get_handoff_close_date, query_handoffs
 from handoff.data import get_recent_activity as _get_recent_activity
-from handoff.data import query_todos
 from handoff.dates import week_bounds
-from handoff.models import Todo, TodoStatus
+from handoff.models import Handoff
 
 
 def get_recent_activity(limit: int = 20) -> list[dict[str, Any]]:
-    """Return recent activity log entries for the dashboard.
-
-    Delegates to data layer; kept in service so dashboard uses one entry point.
-    """
+    """Return recent activity log entries for the dashboard."""
     return _get_recent_activity(limit=limit)
 
 
-def _project_name(todo: Todo) -> str:
-    """Return display name for a todo's project."""
-    if todo.project:
-        return todo.project.name
-    return f"Project {todo.project_id}"
+def _project_name(handoff: Handoff) -> str:
+    """Return display name for a handoff's project."""
+    if handoff.project:
+        return handoff.project.name
+    return f"Project {handoff.project_id}"
 
 
-def _helper_display(helper: str | None) -> str:
-    """Return display string for helper, handling unassigned."""
-    return (helper or "").strip() or "(unassigned)"
+def _pitchman_display(pitchman: str | None) -> str:
+    """Return display string for pitchman, handling unassigned."""
+    return (pitchman or "").strip() or "(unassigned)"
 
 
 def count_open_handoffs() -> int:
-    """Return the number of currently open (delegated) todos."""
-    return len(query_todos(statuses=[TodoStatus.HANDOFF], include_archived=False))
+    """Return the number of currently open handoffs."""
+    return len(query_handoffs(include_concluded=False, include_archived_projects=False))
 
 
-def completed_in_range(start: date, end: date) -> list[Todo]:
-    """Return todos completed between *start* and *end* (inclusive)."""
-    return query_todos(
-        statuses=[TodoStatus.DONE],
-        completed_start=datetime.combine(start, time.min),
-        completed_end=datetime.combine(end, time.max),
-        include_archived=False,
+def completed_in_range(start: date, end: date) -> list[Handoff]:
+    """Return handoffs concluded between *start* and *end* (inclusive)."""
+    return query_handoffs(
+        concluded_start=start,
+        concluded_end=end,
+        include_concluded=True,
+        include_archived_projects=False,
     )
 
 
-def compute_cycle_time_stats(todos: list[Todo]) -> tuple[float, float, float] | None:
+def compute_cycle_time_stats(handoffs: list[Handoff]) -> tuple[float, float, float] | None:
     """Return (mean, median, p90) cycle-time in days, or None if empty.
 
-    Skips todos that have no created_at or completed_at.
+    Cycle time is created_at to close date (last concluded check-in).
     """
     days = []
-    for t in todos:
-        if t.created_at and t.completed_at:
-            delta = (t.completed_at - t.created_at).total_seconds() / 86400
-            days.append(delta)
+    for h in handoffs:
+        close = get_handoff_close_date(h)
+        if h.created_at and close:
+            delta = (
+                datetime.combine(close, time.min) - h.created_at.replace(tzinfo=None)
+            ).total_seconds() / 86400
+            days.append(max(delta, 0))
     if not days:
         return None
     s = pd.Series(days)
     return float(s.mean()), float(s.median()), float(s.quantile(0.9))
 
 
-def compute_overdue_rate(todos: list[Todo]) -> float | None:
-    """Fraction of completed todos that were finished after their deadline.
+def compute_overdue_rate(handoffs: list[Handoff]) -> float | None:
+    """Fraction of concluded handoffs finished after their deadline.
 
-    Only considers todos that have both a deadline and a completed_at.
-    Returns None when no qualifying todos exist.
+    Only considers handoffs that have both a deadline and a close date.
+    Returns None when no qualifying handoffs exist.
     """
-    with_deadline = [t for t in todos if t.deadline and t.completed_at]
+    with_deadline = [h for h in handoffs if h.deadline and get_handoff_close_date(h)]
     if not with_deadline:
         return None
-    overdue = sum(1 for t in with_deadline if t.completed_at.date() > t.deadline)
+    overdue = sum(1 for h in with_deadline if get_handoff_close_date(h) > h.deadline)
     return overdue / len(with_deadline)
 
 
-def compute_weekly_counts(todos: list[Todo]) -> pd.DataFrame:
+def compute_weekly_counts(handoffs: list[Handoff]) -> pd.DataFrame:
     """Return a DataFrame with columns (week_label, completed) sorted by week."""
     rows = []
-    for t in todos:
-        if t.completed_at:
-            rows.append({"completed_at": t.completed_at, "id": t.id})
+    for h in handoffs:
+        close = get_handoff_close_date(h)
+        if close:
+            rows.append({"close_date": close, "id": h.id})
     if not rows:
         return pd.DataFrame(columns=["week_label", "completed"])
     df = pd.DataFrame(rows)
-    iso = pd.to_datetime(df["completed_at"]).dt.isocalendar()
+    iso = pd.to_datetime(df["close_date"]).dt.isocalendar()
     df["week_label"] = iso["year"].astype(str) + "-W" + iso["week"].astype(str).str.zfill(2)
     weekly = df.groupby("week_label")["id"].count().reset_index(name="completed")
     return weekly.sort_values("week_label")
 
 
-def compute_helper_load(todos: list[Todo]) -> pd.DataFrame:
-    """Return a DataFrame with columns (helper, handoff) sorted desc."""
+def compute_pitchman_load(handoffs: list[Handoff]) -> pd.DataFrame:
+    """Return a DataFrame with columns (pitchman, handoff) sorted desc."""
     rows = []
-    for t in todos:
-        helper = _helper_display(t.helper)
-        rows.append({"helper": helper, "id": t.id})
+    for h in handoffs:
+        pitchman = _pitchman_display(h.pitchman)
+        rows.append({"pitchman": pitchman, "id": h.id})
     if not rows:
-        return pd.DataFrame(columns=["helper", "handoff"])
+        return pd.DataFrame(columns=["pitchman", "handoff"])
     df = pd.DataFrame(rows)
-    counts = df.groupby("helper")["id"].count().reset_index(name="handoff")
+    counts = df.groupby("pitchman")["id"].count().reset_index(name="handoff")
     return counts.sort_values("handoff", ascending=False)
 
 
-# --- A6: Enhanced Dashboard Analytics ---
-
-
 def compute_per_project_throughput(
-    todos: list[Todo], *, project_ids: list[int] | None = None
+    handoffs: list[Handoff], *, project_ids: list[int] | None = None
 ) -> pd.DataFrame:
-    """Return completed-per-week by project, filterable by project_ids.
-
-    Columns: week_label, project, completed. Sorted by week then project.
-    """
+    """Return concluded-per-week by project, filterable by project_ids."""
     rows = []
-    for t in todos:
-        if t.completed_at and (project_ids is None or t.project_id in project_ids):
-            proj = _project_name(t)
-            iso = t.completed_at.isocalendar()
+    for h in handoffs:
+        close = get_handoff_close_date(h)
+        if close and (project_ids is None or h.project_id in project_ids):
+            proj = _project_name(h)
+            iso = close.isocalendar()
             week_label = f"{iso[0]}-W{iso[1]:02d}"
-            rows.append({"week_label": week_label, "project": proj, "id": t.id})
+            rows.append({"week_label": week_label, "project": proj, "id": h.id})
     if not rows:
         return pd.DataFrame(columns=["week_label", "project", "completed"])
     df = pd.DataFrame(rows)
@@ -134,64 +130,58 @@ def compute_per_project_throughput(
     return weekly.sort_values(["week_label", "project"])
 
 
-def compute_per_helper_throughput(todos: list[Todo], *, today: date) -> pd.DataFrame:
-    """Return completed-per-helper with trend (this week vs last week).
-
-    Columns: helper, completed, last_week, trend (up/down/same).
-    Sorted by completed desc.
-    """
-    if not todos:
-        return pd.DataFrame(columns=["helper", "completed", "last_week", "trend"])
+def compute_per_pitchman_throughput(handoffs: list[Handoff], *, today: date) -> pd.DataFrame:
+    """Return concluded-per-pitchman with trend (this week vs last week)."""
+    if not handoffs:
+        return pd.DataFrame(columns=["pitchman", "completed", "last_week", "trend"])
     this_mon, this_sun = week_bounds(today)
     last_mon = this_mon - timedelta(days=7)
     last_sun = this_mon - timedelta(days=1)
 
-    def in_range(t: Todo, start: date, end: date) -> bool:
-        if not t.completed_at:
-            return False
-        d = t.completed_at.date()
-        return start <= d <= end
+    def in_range(h: Handoff, start: date, end: date) -> bool:
+        close = get_handoff_close_date(h)
+        return close is not None and start <= close <= end
 
-    this_week = [t for t in todos if in_range(t, this_mon, this_sun)]
-    last_week = [t for t in todos if in_range(t, last_mon, last_sun)]
+    this_week = [h for h in handoffs if in_range(h, this_mon, this_sun)]
+    last_week = [h for h in handoffs if in_range(h, last_mon, last_sun)]
 
-    def count_by_helper(items: list[Todo]) -> dict[str, int]:
+    def count_by_pitchman(items: list[Handoff]) -> dict[str, int]:
         out: dict[str, int] = {}
-        for t in items:
-            h = _helper_display(t.helper)
-            out[h] = out.get(h, 0) + 1
+        for h in items:
+            p = _pitchman_display(h.pitchman)
+            out[p] = out.get(p, 0) + 1
         return out
 
-    this_counts = count_by_helper(this_week)
-    last_counts = count_by_helper(last_week)
-    all_helpers = set(this_counts) | set(last_counts)
+    this_counts = count_by_pitchman(this_week)
+    last_counts = count_by_pitchman(last_week)
+    all_pitchmen = set(this_counts) | set(last_counts)
 
     rows = []
-    for h in sorted(all_helpers, key=str.lower):
-        tc = this_counts.get(h, 0)
-        lc = last_counts.get(h, 0)
+    for p in sorted(all_pitchmen, key=str.lower):
+        tc = this_counts.get(p, 0)
+        lc = last_counts.get(p, 0)
         if tc > lc:
             trend = "up"
         elif tc < lc:
             trend = "down"
         else:
             trend = "same"
-        rows.append({"helper": h, "completed": tc, "last_week": lc, "trend": trend})
+        rows.append({"pitchman": p, "completed": tc, "last_week": lc, "trend": trend})
     df = pd.DataFrame(rows)
     return df.sort_values("completed", ascending=False)
 
 
-def compute_cycle_time_by_project(todos: list[Todo]) -> pd.DataFrame:
-    """Return median cycle time (days) per project. Identifies slow-turnaround projects.
-
-    Columns: project, median_days, count. Sorted by median_days desc (slowest first).
-    """
+def compute_cycle_time_by_project(handoffs: list[Handoff]) -> pd.DataFrame:
+    """Return median cycle time (days) per project."""
     by_project: dict[str, list[float]] = {}
-    for t in todos:
-        if t.created_at and t.completed_at:
-            delta = (t.completed_at - t.created_at).total_seconds() / 86400
-            proj = _project_name(t)
-            by_project.setdefault(proj, []).append(delta)
+    for h in handoffs:
+        close = get_handoff_close_date(h)
+        if h.created_at and close:
+            delta = (
+                datetime.combine(close, time.min) - h.created_at.replace(tzinfo=None)
+            ).total_seconds() / 86400
+            proj = _project_name(h)
+            by_project.setdefault(proj, []).append(max(delta, 0))
     if not by_project:
         return pd.DataFrame(columns=["project", "median_days", "count"])
     rows = []
@@ -202,22 +192,20 @@ def compute_cycle_time_by_project(todos: list[Todo]) -> pd.DataFrame:
     return df.sort_values("median_days", ascending=False)
 
 
-def compute_deadline_adherence_trend(todos: list[Todo], weeks: int = 8) -> pd.DataFrame:
-    """Return on-time rate per week over time.
-
-    The weeks parameter limits the result to the most recent N ISO weeks present
-    in the data. Columns: week_label, on_time_rate, total. Sorted by week.
-    """
+def compute_deadline_adherence_trend(handoffs: list[Handoff], weeks: int = 8) -> pd.DataFrame:
+    """Return on-time rate per week over time."""
     if weeks <= 0:
         return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
-    with_deadline = [t for t in todos if t.deadline and t.completed_at]
+    with_deadline = [h for h in handoffs if h.deadline and get_handoff_close_date(h)]
     if not with_deadline:
         return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
     by_week: dict[str, list[bool]] = {}
-    for t in with_deadline:
-        iso = t.completed_at.date().isocalendar()
+    for h in with_deadline:
+        close = get_handoff_close_date(h)
+        assert close is not None
+        iso = close.isocalendar()
         week_label = f"{iso[0]}-W{iso[1]:02d}"
-        on_time = t.completed_at.date() <= t.deadline
+        on_time = close <= h.deadline
         by_week.setdefault(week_label, []).append(on_time)
     sorted_weeks = sorted(by_week)
     sorted_weeks = sorted_weeks[-weeks:]
@@ -266,7 +254,7 @@ def get_dashboard_metrics(today: date) -> DashboardMetrics:
 
 
 def get_weekly_throughput(today: date, *, weeks: int = 8) -> pd.DataFrame:
-    """Return completed-per-week for the last N weeks."""
+    """Return concluded-per-week for the last N weeks."""
     done = completed_in_range(today - timedelta(weeks=weeks), today)
     return compute_weekly_counts(done)
 
@@ -277,15 +265,15 @@ def get_per_project_throughput(
     weeks: int = 8,
     project_ids: list[int] | None = None,
 ) -> pd.DataFrame:
-    """Return completed-per-week by project for the last N weeks."""
+    """Return concluded-per-week by project for the last N weeks."""
     done = completed_in_range(today - timedelta(weeks=weeks), today)
     return compute_per_project_throughput(done, project_ids=project_ids)
 
 
-def get_per_helper_throughput(today: date, *, weeks: int = 8) -> pd.DataFrame:
-    """Return per-helper throughput with trend (this week vs last week)."""
+def get_per_pitchman_throughput(today: date, *, weeks: int = 8) -> pd.DataFrame:
+    """Return per-pitchman throughput with trend (this week vs last week)."""
     done = completed_in_range(today - timedelta(weeks=weeks), today)
-    return compute_per_helper_throughput(done, today=today)
+    return compute_per_pitchman_throughput(done, today=today)
 
 
 def get_cycle_time_by_project(
@@ -297,7 +285,7 @@ def get_cycle_time_by_project(
     """Return median cycle time per project for the last N days."""
     done = completed_in_range(today - timedelta(days=days), today)
     if project_ids:
-        done = [t for t in done if t.project_id in project_ids]
+        done = [h for h in done if h.project_id in project_ids]
     return compute_cycle_time_by_project(done)
 
 
@@ -310,33 +298,32 @@ def get_deadline_adherence_trend(
     """Return on-time rate per week over the last N weeks."""
     done = completed_in_range(today - timedelta(weeks=weeks), today)
     if project_ids:
-        done = [t for t in done if t.project_id in project_ids]
+        done = [h for h in done if h.project_id in project_ids]
     return compute_deadline_adherence_trend(done, weeks=weeks)
 
 
-def get_helper_load() -> pd.DataFrame:
-    """Return current open handoff count by helper."""
-    handoffs = query_todos(statuses=[TodoStatus.HANDOFF], include_archived=False)
-    return compute_helper_load(handoffs)
+def get_pitchman_load() -> pd.DataFrame:
+    """Return current open handoff count by pitchman."""
+    handoffs = query_handoffs(include_concluded=False, include_archived_projects=False)
+    return compute_pitchman_load(handoffs)
 
 
-def _build_export_rows(todos: list[Todo], weeks: int = 12) -> list[dict[str, Any]]:
-    """Return aggregated weekly stats for external reporting (CSV/JSON).
-
-    Each dict has: week_label, completed, on_time_rate, median_cycle_days.
-    """
-    if not todos:
+def _build_export_rows(handoffs: list[Handoff], weeks: int = 12) -> list[dict[str, Any]]:
+    """Return aggregated weekly stats for external reporting (CSV/JSON)."""
+    if not handoffs:
         return []
-    weekly = compute_weekly_counts(todos)
-    adherence = compute_deadline_adherence_trend(todos, weeks=weeks)
+    weekly = compute_weekly_counts(handoffs)
+    adherence = compute_deadline_adherence_trend(handoffs, weeks=weeks)
     adherence_by_week = adherence.set_index("week_label").to_dict("index")
 
     rows = []
     for _, row in weekly.iterrows():
         wl = row["week_label"]
         completed = int(row["completed"])
-        week_todos = [t for t in todos if t.completed_at and _week_label(t.completed_at) == wl]
-        cycle = compute_cycle_time_stats(week_todos)
+        week_handoffs = [
+            h for h in handoffs if get_handoff_close_date(h) and _week_label_for(h) == wl
+        ]
+        cycle = compute_cycle_time_stats(week_handoffs)
         median_cycle = float(cycle[1]) if cycle else None
         adj = adherence_by_week.get(wl, {})
         on_time = adj.get("on_time_rate")
@@ -351,9 +338,12 @@ def _build_export_rows(todos: list[Todo], weeks: int = 12) -> list[dict[str, Any
     return rows
 
 
-def _week_label(dt: datetime) -> str:
-    """Return ISO week label for a datetime."""
-    iso = dt.date().isocalendar()
+def _week_label_for(handoff: Handoff) -> str | None:
+    """Return ISO week label for a handoff's close date."""
+    close = get_handoff_close_date(handoff)
+    if not close:
+        return None
+    iso = close.isocalendar()
     return f"{iso[0]}-W{iso[1]:02d}"
 
 
@@ -363,15 +353,12 @@ def get_exportable_metrics(
     weeks: int = 12,
     project_ids: list[int] | None = None,
 ) -> dict[str, str]:
-    """Return CSV and JSON strings for download buttons.
-
-    Keys: "csv", "json". Empty strings when no data.
-    """
+    """Return CSV and JSON strings for download buttons."""
     import json
 
     done = completed_in_range(today - timedelta(weeks=weeks), today)
     if project_ids:
-        done = [t for t in done if t.project_id in project_ids]
+        done = [h for h in done if h.project_id in project_ids]
     rows = _build_export_rows(done, weeks=weeks)
     if not rows:
         return {"csv": "", "json": ""}

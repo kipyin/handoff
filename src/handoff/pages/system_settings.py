@@ -148,16 +148,17 @@ def _render_data_import_section() -> None:
     except (KeyError, ValueError) as exc:
         logger.warning("Invalid backup upload: {}", exc)
         st.error(
-            "Invalid backup file. Expected a Handoff backup with 'projects' and 'todos' lists."
+            "Invalid backup file. Expected a Handoff backup with 'projects' and 'handoffs' lists."
         )
         return
 
     st.info(
-        f"File contains **{len(payload.projects)}** projects and **{len(payload.todos)}** todos."
+        f"File contains **{len(payload.projects)}** projects and "
+        f"**{len(payload.handoffs)}** handoffs."
     )
 
     confirm = st.checkbox(
-        "I understand this will replace all existing projects and todos.",
+        "I understand this will replace all existing projects and handoffs.",
         key="settings_import_confirm",
     )
     if confirm and st.button("Import and overwrite", key="settings_import_apply"):

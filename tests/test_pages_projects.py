@@ -282,17 +282,16 @@ def test_apply_project_changes_returns_deleted_count_on_partial_failure(mock_pro
 def test_build_projects_display_rows(mock_projects):
     """_build_projects_display_rows returns one row per summary item with expected keys."""
     summary_list = [
-        {"project": mock_projects[0], "handoff": 2, "done": 1, "canceled": 0},
-        {"project": mock_projects[1], "handoff": 0, "done": 0, "canceled": 1},
+        {"project": mock_projects[0], "open": 2, "concluded": 1},
+        {"project": mock_projects[1], "open": 0, "concluded": 1},
     ]
     rows = _build_projects_display_rows(summary_list)
     assert len(rows) == 2
     assert rows[0].project_id == 1
     assert rows[0].name == "Work"
     assert rows[0].is_archived is False
-    assert rows[0].handoff == 2
-    assert rows[0].done == 1
-    assert rows[0].canceled == 0
+    assert rows[0].open == 2
+    assert rows[0].concluded == 1
     assert rows[1].project_id == 2
     assert rows[1].name == "Home"
     assert rows[1].is_archived is False
@@ -332,13 +331,13 @@ def test_render_projects_page_can_include_archived(monkeypatch):
     monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
     monkeypatch.setattr("handoff.pages.projects.st.checkbox", lambda *args, **kwargs: True)
 
-    def fake_get_projects_with_todo_summary(*, include_archived):
+    def fake_get_projects_with_handoff_summary(*, include_archived):
         seen["include_archived"] = include_archived
         return []
 
     monkeypatch.setattr(
-        "handoff.pages.projects.get_projects_with_todo_summary",
-        fake_get_projects_with_todo_summary,
+        "handoff.pages.projects.get_projects_with_handoff_summary",
+        fake_get_projects_with_handoff_summary,
     )
     monkeypatch.setattr("handoff.pages.projects.st.info", info_messages.append)
 
@@ -356,7 +355,7 @@ def test_render_projects_page_empty_state_mentions_archived_toggle(monkeypatch):
     monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
     monkeypatch.setattr("handoff.pages.projects.st.checkbox", lambda *args, **kwargs: False)
     monkeypatch.setattr(
-        "handoff.pages.projects.get_projects_with_todo_summary",
+        "handoff.pages.projects.get_projects_with_handoff_summary",
         lambda *, include_archived: [],
     )
     monkeypatch.setattr("handoff.pages.projects.st.info", info_messages.append)
@@ -419,9 +418,9 @@ def test_render_projects_page_uses_toggle_specific_editor_state(
 
     monkeypatch.setattr("handoff.pages.projects.st.checkbox", fake_checkbox)
     monkeypatch.setattr(
-        "handoff.pages.projects.get_projects_with_todo_summary",
+        "handoff.pages.projects.get_projects_with_handoff_summary",
         lambda *, include_archived: [
-            {"project": project, "handoff": 0, "done": 0, "canceled": 0},
+            {"project": project, "open": 0, "concluded": 0},
         ],
     )
 
@@ -524,9 +523,9 @@ def _make_st_mock(monkeypatch, *, session_state=None):
 
 
 def _mock_summary(monkeypatch, projects):
-    summary = [{"project": p, "handoff": 1, "done": 0, "canceled": 0} for p in projects]
+    summary = [{"project": p, "open": 1, "concluded": 0} for p in projects]
     monkeypatch.setattr(
-        "handoff.pages.projects.get_projects_with_todo_summary",
+        "handoff.pages.projects.get_projects_with_handoff_summary",
         lambda include_archived: summary,
     )
     return summary
@@ -576,7 +575,7 @@ class TestRenderProjectsPage:
     def test_no_projects_shows_info(self, monkeypatch) -> None:
         st_mock = _make_st_mock(monkeypatch)
         monkeypatch.setattr(
-            "handoff.pages.projects.get_projects_with_todo_summary",
+            "handoff.pages.projects.get_projects_with_handoff_summary",
             lambda include_archived: [],
         )
         render_projects_page()
@@ -593,9 +592,8 @@ class TestRenderProjectsPage:
                     "__project_id": 1,
                     "name": "Work",
                     "is_archived": False,
-                    "handoff": 1,
-                    "done": 0,
-                    "canceled": 0,
+                    "open": 1,
+                    "concluded": 0,
                     "confirm_delete": False,
                 }
             ]
@@ -616,9 +614,8 @@ class TestRenderProjectsPage:
                     "__project_id": 1,
                     "name": "Work",
                     "is_archived": False,
-                    "handoff": 1,
-                    "done": 0,
-                    "canceled": 0,
+                    "open": 1,
+                    "concluded": 0,
                     "confirm_delete": True,
                 }
             ]
@@ -643,9 +640,8 @@ class TestRenderProjectsPage:
                     "__project_id": 1,
                     "name": "Work",
                     "is_archived": False,
-                    "handoff": 1,
-                    "done": 0,
-                    "canceled": 0,
+                    "open": 1,
+                    "concluded": 0,
                     "confirm_delete": True,
                 }
             ]
@@ -674,9 +670,8 @@ class TestRenderProjectsPage:
                     "__project_id": 1,
                     "name": "Work",
                     "is_archived": False,
-                    "handoff": 1,
-                    "done": 0,
-                    "canceled": 0,
+                    "open": 1,
+                    "concluded": 0,
                     "confirm_delete": True,
                 }
             ]
@@ -699,9 +694,8 @@ class TestRenderProjectsPage:
                     "__project_id": 1,
                     "name": "Work",
                     "is_archived": False,
-                    "handoff": 1,
-                    "done": 0,
-                    "canceled": 0,
+                    "open": 1,
+                    "concluded": 0,
                     "confirm_delete": True,
                 }
             ]

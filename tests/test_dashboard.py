@@ -8,44 +8,55 @@ from types import SimpleNamespace
 import pytest
 
 from handoff.dates import week_bounds
+from handoff.models import CheckInType
 from handoff.services.dashboard_service import (
     compute_cycle_time_by_project,
     compute_cycle_time_stats,
     compute_deadline_adherence_trend,
-    compute_helper_load,
     compute_overdue_rate,
-    compute_per_helper_throughput,
+    compute_per_pitchman_throughput,
     compute_per_project_throughput,
+    compute_pitchman_load,
     compute_weekly_counts,
     get_cycle_time_by_project,
     get_dashboard_metrics,
     get_deadline_adherence_trend,
     get_exportable_metrics,
-    get_helper_load,
-    get_per_helper_throughput,
+    get_per_pitchman_throughput,
     get_per_project_throughput,
+    get_pitchman_load,
     get_weekly_throughput,
 )
 
 
-def _make_todo(
+def _make_check_in(check_in_date: date, check_in_type: str = "concluded"):
+    return SimpleNamespace(
+        check_in_date=check_in_date,
+        check_in_type=CheckInType(check_in_type),
+    )
+
+
+def _make_handoff(
     id: int = 1,
-    helper: str | None = None,
+    pitchman: str | None = None,
     deadline: date | None = None,
     created_at: datetime | None = None,
-    completed_at: datetime | None = None,
+    close_date: date | None = None,
     project_id: int = 1,
     project_name: str | None = "Project",
 ) -> SimpleNamespace:
     proj = SimpleNamespace(name=project_name) if project_name else None
+    check_ins = []
+    if close_date:
+        check_ins.append(_make_check_in(close_date, "concluded"))
     return SimpleNamespace(
         id=id,
-        helper=helper,
+        pitchman=pitchman,
         deadline=deadline,
         created_at=created_at or datetime(2026, 1, 1),
-        completed_at=completed_at,
         project_id=project_id,
         project=proj,
+        check_ins=check_ins,
     )
 
 
@@ -74,13 +85,13 @@ def test_week_bounds_on_sunday() -> None:
 
 
 def test_cycle_time_stats_returns_mean_median_p90() -> None:
-    todos = [
-        _make_todo(created_at=datetime(2026, 1, 8), completed_at=datetime(2026, 1, 10)),
-        _make_todo(created_at=datetime(2026, 1, 9), completed_at=datetime(2026, 1, 10)),
-        _make_todo(created_at=datetime(2026, 1, 7), completed_at=datetime(2026, 1, 10)),
-        _make_todo(created_at=datetime(2026, 1, 5), completed_at=datetime(2026, 1, 10)),
+    handoffs = [
+        _make_handoff(created_at=datetime(2026, 1, 8), close_date=date(2026, 1, 10)),
+        _make_handoff(created_at=datetime(2026, 1, 9), close_date=date(2026, 1, 10)),
+        _make_handoff(created_at=datetime(2026, 1, 7), close_date=date(2026, 1, 10)),
+        _make_handoff(created_at=datetime(2026, 1, 5), close_date=date(2026, 1, 10)),
     ]
-    result = compute_cycle_time_stats(todos)
+    result = compute_cycle_time_stats(handoffs)
     assert result is not None
     avg, p50, p90 = result
     assert avg == 2.75
@@ -92,33 +103,33 @@ def test_cycle_time_stats_returns_none_when_empty() -> None:
     assert compute_cycle_time_stats([]) is None
 
 
-def test_cycle_time_stats_skips_missing_completed_at() -> None:
-    todos = [_make_todo(completed_at=None)]
-    assert compute_cycle_time_stats(todos) is None
+def test_cycle_time_stats_skips_missing_close_date() -> None:
+    handoffs = [_make_handoff(close_date=None)]
+    assert compute_cycle_time_stats(handoffs) is None
 
 
 # --- compute_overdue_rate ---
 
 
 def test_overdue_rate_all_on_time() -> None:
-    todos = [
-        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 9)),
-        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 10)),
+    handoffs = [
+        _make_handoff(deadline=date(2026, 1, 10), close_date=date(2026, 1, 9)),
+        _make_handoff(deadline=date(2026, 1, 10), close_date=date(2026, 1, 10)),
     ]
-    assert compute_overdue_rate(todos) == 0.0
+    assert compute_overdue_rate(handoffs) == 0.0
 
 
 def test_overdue_rate_half_overdue() -> None:
-    todos = [
-        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 10)),
-        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 12)),
+    handoffs = [
+        _make_handoff(deadline=date(2026, 1, 10), close_date=date(2026, 1, 10)),
+        _make_handoff(deadline=date(2026, 1, 10), close_date=date(2026, 1, 12)),
     ]
-    assert compute_overdue_rate(todos) == 0.5
+    assert compute_overdue_rate(handoffs) == 0.5
 
 
 def test_overdue_rate_none_when_no_deadlines() -> None:
-    todos = [_make_todo(completed_at=datetime(2026, 1, 10))]
-    assert compute_overdue_rate(todos) is None
+    handoffs = [_make_handoff(close_date=date(2026, 1, 10))]
+    assert compute_overdue_rate(handoffs) is None
 
 
 def test_overdue_rate_none_when_empty() -> None:
@@ -129,12 +140,12 @@ def test_overdue_rate_none_when_empty() -> None:
 
 
 def test_weekly_counts_aggregates_by_week() -> None:
-    todos = [
-        _make_todo(id=1, completed_at=datetime(2026, 1, 6)),
-        _make_todo(id=2, completed_at=datetime(2026, 1, 7)),
-        _make_todo(id=3, completed_at=datetime(2026, 1, 14)),
+    handoffs = [
+        _make_handoff(id=1, close_date=date(2026, 1, 6)),
+        _make_handoff(id=2, close_date=date(2026, 1, 7)),
+        _make_handoff(id=3, close_date=date(2026, 1, 14)),
     ]
-    result = compute_weekly_counts(todos)
+    result = compute_weekly_counts(handoffs)
     assert "week_label" in result.columns
     assert "completed" in result.columns
     assert len(result) == 2
@@ -147,27 +158,27 @@ def test_weekly_counts_empty_input() -> None:
     assert result.empty
 
 
-# --- compute_helper_load ---
+# --- compute_pitchman_load ---
 
 
-def test_helper_load_aggregates_and_sorts() -> None:
-    todos = [
-        _make_todo(id=1, helper="Alice"),
-        _make_todo(id=2, helper="Alice"),
-        _make_todo(id=3, helper="Bob"),
-        _make_todo(id=4, helper=None),
+def test_pitchman_load_aggregates_and_sorts() -> None:
+    handoffs = [
+        _make_handoff(id=1, pitchman="Alice"),
+        _make_handoff(id=2, pitchman="Alice"),
+        _make_handoff(id=3, pitchman="Bob"),
+        _make_handoff(id=4, pitchman=None),
     ]
-    result = compute_helper_load(todos)
-    assert set(result["helper"]) == {"Alice", "Bob", "(unassigned)"}
-    counts = result.set_index("helper")["handoff"]
+    result = compute_pitchman_load(handoffs)
+    assert set(result["pitchman"]) == {"Alice", "Bob", "(unassigned)"}
+    counts = result.set_index("pitchman")["handoff"]
     assert counts["Alice"] == 2
     assert counts["Bob"] == 1
     assert counts["(unassigned)"] == 1
-    assert result.iloc[0]["helper"] == "Alice"
+    assert result.iloc[0]["pitchman"] == "Alice"
 
 
-def test_helper_load_empty_input() -> None:
-    result = compute_helper_load([])
+def test_pitchman_load_empty_input() -> None:
+    result = compute_pitchman_load([])
     assert result.empty
 
 
@@ -175,31 +186,30 @@ def test_helper_load_empty_input() -> None:
 
 
 def test_per_project_throughput_aggregates_by_week_and_project() -> None:
-    todos = [
-        _make_todo(
+    handoffs = [
+        _make_handoff(
             id=1,
             project_id=1,
             project_name="Alpha",
-            completed_at=datetime(2026, 1, 6),
+            close_date=date(2026, 1, 6),
         ),
-        _make_todo(
+        _make_handoff(
             id=2,
             project_id=1,
             project_name="Alpha",
-            completed_at=datetime(2026, 1, 7),
+            close_date=date(2026, 1, 7),
         ),
-        _make_todo(
+        _make_handoff(
             id=3,
             project_id=2,
             project_name="Beta",
-            completed_at=datetime(2026, 1, 14),
+            close_date=date(2026, 1, 14),
         ),
     ]
-    result = compute_per_project_throughput(todos)
+    result = compute_per_project_throughput(handoffs)
     assert "week_label" in result.columns
     assert "project" in result.columns
     assert "completed" in result.columns
-    # Jan 6-7 are in 2026-W02, Jan 14 is in 2026-W03
     alpha_w02 = result[(result["week_label"] == "2026-W02") & (result["project"] == "Alpha")]
     beta_w03 = result[(result["week_label"] == "2026-W03") & (result["project"] == "Beta")]
     assert len(alpha_w02) == 1
@@ -209,12 +219,12 @@ def test_per_project_throughput_aggregates_by_week_and_project() -> None:
 
 
 def test_per_project_throughput_filters_by_project_ids() -> None:
-    todos = [
-        _make_todo(id=1, project_id=1, project_name="A", completed_at=datetime(2026, 1, 6)),
-        _make_todo(id=2, project_id=2, project_name="B", completed_at=datetime(2026, 1, 6)),
-        _make_todo(id=3, project_id=3, project_name="C", completed_at=datetime(2026, 1, 6)),
+    handoffs = [
+        _make_handoff(id=1, project_id=1, project_name="A", close_date=date(2026, 1, 6)),
+        _make_handoff(id=2, project_id=2, project_name="B", close_date=date(2026, 1, 6)),
+        _make_handoff(id=3, project_id=3, project_name="C", close_date=date(2026, 1, 6)),
     ]
-    result = compute_per_project_throughput(todos, project_ids=[1, 3])
+    result = compute_per_project_throughput(handoffs, project_ids=[1, 3])
     assert set(result["project"]) == {"A", "C"}
     assert "B" not in result["project"].values
 
@@ -225,37 +235,35 @@ def test_per_project_throughput_empty_input() -> None:
     assert list(result.columns) == ["week_label", "project", "completed"]
 
 
-# --- compute_per_helper_throughput ---
+# --- compute_per_pitchman_throughput ---
 
 
-def test_per_helper_throughput_shows_trend_up_down_same() -> None:
-    # Week of 2026-03-02: Mon 2nd - Sun 8th
-    # This week: March 3–8; Last week: Feb 24 – March 1
-    today = date(2026, 3, 5)  # Thursday in that week
-    todos = [
-        _make_todo(helper="Alice", completed_at=datetime(2026, 3, 4)),  # this week
-        _make_todo(helper="Alice", completed_at=datetime(2026, 3, 5)),  # this week
-        _make_todo(helper="Bob", completed_at=datetime(2026, 2, 25)),  # last week only
-        _make_todo(helper="Carol", completed_at=datetime(2026, 3, 3)),  # this week
-        _make_todo(helper="Carol", completed_at=datetime(2026, 2, 26)),  # last week
+def test_per_pitchman_throughput_shows_trend_up_down_same() -> None:
+    today = date(2026, 3, 5)
+    handoffs = [
+        _make_handoff(pitchman="Alice", close_date=date(2026, 3, 4)),
+        _make_handoff(pitchman="Alice", close_date=date(2026, 3, 5)),
+        _make_handoff(pitchman="Bob", close_date=date(2026, 2, 25)),
+        _make_handoff(pitchman="Carol", close_date=date(2026, 3, 3)),
+        _make_handoff(pitchman="Carol", close_date=date(2026, 2, 26)),
     ]
-    result = compute_per_helper_throughput(todos, today=today)
-    assert "helper" in result.columns
+    result = compute_per_pitchman_throughput(handoffs, today=today)
+    assert "pitchman" in result.columns
     assert "completed" in result.columns
     assert "last_week" in result.columns
     assert "trend" in result.columns
-    alice = result[result["helper"] == "Alice"].iloc[0]
+    alice = result[result["pitchman"] == "Alice"].iloc[0]
     assert alice["completed"] == 2
     assert alice["last_week"] == 0
     assert alice["trend"] == "up"
-    bob = result[result["helper"] == "Bob"].iloc[0]
+    bob = result[result["pitchman"] == "Bob"].iloc[0]
     assert bob["trend"] == "down"
-    carol = result[result["helper"] == "Carol"].iloc[0]
+    carol = result[result["pitchman"] == "Carol"].iloc[0]
     assert carol["trend"] == "same"
 
 
-def test_per_helper_throughput_empty_input() -> None:
-    result = compute_per_helper_throughput([], today=date(2026, 3, 5))
+def test_per_pitchman_throughput_empty_input() -> None:
+    result = compute_per_pitchman_throughput([], today=date(2026, 3, 5))
     assert result.empty
 
 
@@ -263,27 +271,27 @@ def test_per_helper_throughput_empty_input() -> None:
 
 
 def test_cycle_time_by_project_aggregates_and_sorts_slowest_first() -> None:
-    todos = [
-        _make_todo(
+    handoffs = [
+        _make_handoff(
             project_name="Slow",
             project_id=1,
             created_at=datetime(2026, 1, 1),
-            completed_at=datetime(2026, 1, 10),
+            close_date=date(2026, 1, 10),
         ),
-        _make_todo(
+        _make_handoff(
             project_name="Slow",
             project_id=1,
             created_at=datetime(2026, 1, 5),
-            completed_at=datetime(2026, 1, 11),
+            close_date=date(2026, 1, 11),
         ),
-        _make_todo(
+        _make_handoff(
             project_name="Fast",
             project_id=2,
             created_at=datetime(2026, 1, 1),
-            completed_at=datetime(2026, 1, 2),
+            close_date=date(2026, 1, 2),
         ),
     ]
-    result = compute_cycle_time_by_project(todos)
+    result = compute_cycle_time_by_project(handoffs)
     assert "project" in result.columns
     assert "median_days" in result.columns
     assert "count" in result.columns
@@ -302,23 +310,23 @@ def test_cycle_time_by_project_empty_input() -> None:
 
 
 def test_deadline_adherence_trend_weeks_limit() -> None:
-    todos = [
-        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 8)),
-        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 12)),
-        _make_todo(deadline=date(2026, 1, 17), completed_at=datetime(2026, 1, 15)),
-        _make_todo(deadline=date(2026, 1, 24), completed_at=datetime(2026, 1, 25)),
+    handoffs = [
+        _make_handoff(deadline=date(2026, 1, 10), close_date=date(2026, 1, 8)),
+        _make_handoff(deadline=date(2026, 1, 10), close_date=date(2026, 1, 12)),
+        _make_handoff(deadline=date(2026, 1, 17), close_date=date(2026, 1, 15)),
+        _make_handoff(deadline=date(2026, 1, 24), close_date=date(2026, 1, 25)),
     ]
-    result = compute_deadline_adherence_trend(todos, weeks=2)
+    result = compute_deadline_adherence_trend(handoffs, weeks=2)
     assert len(result) == 2
     assert "week_label" in result.columns
     assert "on_time_rate" in result.columns
 
 
 def test_deadline_adherence_trend_weeks_zero_returns_empty() -> None:
-    todos = [
-        _make_todo(deadline=date(2026, 1, 10), completed_at=datetime(2026, 1, 8)),
+    handoffs = [
+        _make_handoff(deadline=date(2026, 1, 10), close_date=date(2026, 1, 8)),
     ]
-    result = compute_deadline_adherence_trend(todos, weeks=0)
+    result = compute_deadline_adherence_trend(handoffs, weeks=0)
     assert result.empty
     assert list(result.columns) == ["week_label", "on_time_rate", "total"]
 
@@ -334,39 +342,35 @@ def test_deadline_adherence_trend_empty_input() -> None:
 def test_get_dashboard_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
     today = date(2026, 3, 5)
     done_this_week = [
-        _make_todo(completed_at=datetime(2026, 3, 4)),
-        _make_todo(completed_at=datetime(2026, 3, 5)),
+        _make_handoff(close_date=date(2026, 3, 4)),
+        _make_handoff(close_date=date(2026, 3, 5)),
     ]
-    done_last_week = [_make_todo(completed_at=datetime(2026, 2, 26))]
+    done_last_week = [_make_handoff(close_date=date(2026, 2, 26))]
     done_recent = done_this_week + [
-        _make_todo(
+        _make_handoff(
             created_at=datetime(2026, 2, 20),
-            completed_at=datetime(2026, 2, 25),
+            close_date=date(2026, 2, 25),
             deadline=date(2026, 2, 24),
         ),
     ]
 
-    def fake_query(
-        *, statuses=None, completed_start=None, completed_end=None, include_archived=False, **kwargs
-    ):
-        if statuses and any(s.value == "handoff" for s in statuses):
-            return []
-        if completed_start is not None and completed_end is not None:
-            start_d = (
-                completed_start.date() if hasattr(completed_start, "date") else completed_start
-            )
-            end_d = completed_end.date() if hasattr(completed_end, "date") else completed_end
-            if start_d <= date(2026, 3, 2) and end_d >= date(2026, 3, 8):
-                return done_this_week
-            if start_d <= date(2026, 2, 24) and end_d >= date(2026, 3, 1):
-                return done_last_week
-            if start_d <= date(2026, 2, 6) and end_d >= date(2026, 3, 5):
-                return done_recent
+    monkeypatch.setattr(
+        "handoff.services.dashboard_service.count_open_handoffs",
+        lambda: 0,
+    )
+
+    def fake_completed(start, end):
+        if start <= date(2026, 3, 2) and end >= date(2026, 3, 8):
+            return done_this_week
+        if start <= date(2026, 2, 24) and end >= date(2026, 3, 1):
+            return done_last_week
+        if start <= date(2026, 2, 6) and end >= date(2026, 3, 5):
+            return done_recent
         return []
 
     monkeypatch.setattr(
-        "handoff.services.dashboard_service.query_todos",
-        fake_query,
+        "handoff.services.dashboard_service.completed_in_range",
+        fake_completed,
     )
     metrics = get_dashboard_metrics(today)
     assert metrics.open_count == 0
@@ -379,8 +383,8 @@ def test_get_dashboard_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_get_weekly_throughput(monkeypatch: pytest.MonkeyPatch) -> None:
     today = date(2026, 3, 10)
     done = [
-        _make_todo(id=1, completed_at=datetime(2026, 2, 10)),
-        _make_todo(id=2, completed_at=datetime(2026, 2, 11)),
+        _make_handoff(id=1, close_date=date(2026, 2, 10)),
+        _make_handoff(id=2, close_date=date(2026, 2, 11)),
     ]
 
     def fake_completed(start, end):
@@ -399,7 +403,7 @@ def test_get_weekly_throughput(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_get_per_project_throughput(monkeypatch: pytest.MonkeyPatch) -> None:
     today = date(2026, 3, 10)
     done = [
-        _make_todo(id=1, project_id=1, project_name="A", completed_at=datetime(2026, 2, 10)),
+        _make_handoff(id=1, project_id=1, project_name="A", close_date=date(2026, 2, 10)),
     ]
 
     def fake_completed(start, end):
@@ -415,10 +419,10 @@ def test_get_per_project_throughput(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "completed" in result.columns
 
 
-def test_get_per_helper_throughput(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_per_pitchman_throughput(monkeypatch: pytest.MonkeyPatch) -> None:
     today = date(2026, 3, 10)
     done = [
-        _make_todo(helper="Alice", completed_at=datetime(2026, 3, 5)),
+        _make_handoff(pitchman="Alice", close_date=date(2026, 3, 5)),
     ]
 
     def fake_completed(start, end):
@@ -428,8 +432,8 @@ def test_get_per_helper_throughput(monkeypatch: pytest.MonkeyPatch) -> None:
         "handoff.services.dashboard_service.completed_in_range",
         fake_completed,
     )
-    result = get_per_helper_throughput(today, weeks=8)
-    assert "helper" in result.columns
+    result = get_per_pitchman_throughput(today, weeks=8)
+    assert "pitchman" in result.columns
     assert "completed" in result.columns
     assert "trend" in result.columns
 
@@ -437,11 +441,11 @@ def test_get_per_helper_throughput(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_get_cycle_time_by_project(monkeypatch: pytest.MonkeyPatch) -> None:
     today = date(2026, 3, 10)
     done = [
-        _make_todo(
+        _make_handoff(
             project_id=1,
             project_name="P",
             created_at=datetime(2026, 2, 1),
-            completed_at=datetime(2026, 2, 5),
+            close_date=date(2026, 2, 5),
         ),
     ]
 
@@ -460,7 +464,7 @@ def test_get_cycle_time_by_project(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_get_deadline_adherence_trend(monkeypatch: pytest.MonkeyPatch) -> None:
     today = date(2026, 3, 10)
     done = [
-        _make_todo(deadline=date(2026, 2, 10), completed_at=datetime(2026, 2, 9)),
+        _make_handoff(deadline=date(2026, 2, 10), close_date=date(2026, 2, 9)),
     ]
 
     def fake_completed(start, end):
@@ -475,23 +479,18 @@ def test_get_deadline_adherence_trend(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "on_time_rate" in result.columns
 
 
-def test_get_helper_load(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_get_pitchman_load(monkeypatch: pytest.MonkeyPatch) -> None:
     handoffs = [
-        _make_todo(helper="Alice", completed_at=None),
-        _make_todo(helper="Alice", completed_at=None),
+        _make_handoff(pitchman="Alice"),
+        _make_handoff(pitchman="Alice"),
     ]
 
-    def fake_query(*, statuses, include_archived, **kwargs):
-        if statuses and "handoff" in [s.value for s in statuses]:
-            return handoffs
-        return []
-
     monkeypatch.setattr(
-        "handoff.services.dashboard_service.query_todos",
-        fake_query,
+        "handoff.services.dashboard_service.query_handoffs",
+        lambda **kwargs: handoffs,
     )
-    result = get_helper_load()
-    assert "helper" in result.columns
+    result = get_pitchman_load()
+    assert "pitchman" in result.columns
     assert "handoff" in result.columns
     assert result["handoff"].sum() == 2
 
@@ -499,11 +498,11 @@ def test_get_helper_load(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_get_exportable_metrics_with_data(monkeypatch: pytest.MonkeyPatch) -> None:
     today = date(2026, 3, 10)
     done = [
-        _make_todo(
+        _make_handoff(
             id=1,
             project_id=1,
             project_name="P",
-            completed_at=datetime(2026, 2, 10),
+            close_date=date(2026, 2, 10),
             created_at=datetime(2026, 2, 8),
             deadline=date(2026, 2, 12),
         ),

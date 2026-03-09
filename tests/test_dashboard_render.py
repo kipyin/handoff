@@ -18,8 +18,8 @@ def _nonempty_project_throughput() -> pd.DataFrame:
     return pd.DataFrame({"project": ["P1"], "completed": [3]})
 
 
-def _nonempty_helper_throughput() -> pd.DataFrame:
-    return pd.DataFrame({"helper": ["Alice"], "completed": [2]})
+def _nonempty_pitchman_throughput() -> pd.DataFrame:
+    return pd.DataFrame({"pitchman": ["Alice"], "completed": [2]})
 
 
 def _nonempty_cycle_by_project() -> pd.DataFrame:
@@ -37,9 +37,9 @@ class TestRenderDashboardPage:
         *,
         metrics=None,
         weekly_empty=True,
-        helper_load_empty=True,
+        pitchman_load_empty=True,
         project_throughput_empty=True,
-        helper_throughput_empty=True,
+        pitchman_throughput_empty=True,
         cycle_empty=True,
         adherence_empty=True,
         recent_activity=None,
@@ -83,9 +83,9 @@ class TestRenderDashboardPage:
             ),
         )
         monkeypatch.setattr(
-            "handoff.pages.dashboard.get_per_helper_throughput",
+            "handoff.pages.dashboard.get_per_pitchman_throughput",
             lambda *a, **kw: (
-                pd.DataFrame() if helper_throughput_empty else _nonempty_helper_throughput()
+                pd.DataFrame() if pitchman_throughput_empty else _nonempty_pitchman_throughput()
             ),
         )
         monkeypatch.setattr(
@@ -97,11 +97,11 @@ class TestRenderDashboardPage:
             lambda *a, **kw: pd.DataFrame() if adherence_empty else _nonempty_adherence_trend(),
         )
         monkeypatch.setattr(
-            "handoff.pages.dashboard.get_helper_load",
+            "handoff.pages.dashboard.get_pitchman_load",
             lambda: (
                 pd.DataFrame()
-                if helper_load_empty
-                else pd.DataFrame({"helper": ["Alice"], "handoff": [2]})
+                if pitchman_load_empty
+                else pd.DataFrame({"pitchman": ["Alice"], "handoff": [2]})
             ),
         )
         monkeypatch.setattr(
@@ -143,31 +143,31 @@ class TestRenderDashboardPage:
         cycle_call = next(c for c in metric_calls if c[0][0] == "Median cycle time")
         assert "d" in str(cycle_call[0][1])
 
-    def test_with_handoff_todos(self, monkeypatch) -> None:
-        """Dashboard with open handoff todos shows helper load chart."""
-        st_mock = self._patch(monkeypatch, helper_load_empty=False)
+    def test_with_open_handoffs(self, monkeypatch) -> None:
+        """Dashboard with open handoffs shows pitchman load chart."""
+        st_mock = self._patch(monkeypatch, pitchman_load_empty=False)
         render_dashboard_page()
 
-        st_mock.markdown.assert_any_call("#### Current helper load")
+        st_mock.markdown.assert_any_call("#### Current pitchman load")
         assert st_mock.bar_chart.called
 
     def test_with_weekly_throughput(self, monkeypatch) -> None:
         """Dashboard with weekly throughput shows bar chart."""
         st_mock = self._patch(monkeypatch, weekly_empty=False)
         render_dashboard_page()
-        st_mock.markdown.assert_any_call("#### Completed per week (last 8 weeks)")
+        st_mock.markdown.assert_any_call("#### Concluded per week (last 8 weeks)")
         assert st_mock.bar_chart.called
 
-    def test_with_project_and_helper_throughput(self, monkeypatch) -> None:
-        """Dashboard with per-project and per-helper throughput shows dataframe and chart."""
+    def test_with_project_and_pitchman_throughput(self, monkeypatch) -> None:
+        """Dashboard with per-project and per-pitchman throughput shows dataframe and chart."""
         st_mock = self._patch(
             monkeypatch,
             project_throughput_empty=False,
-            helper_throughput_empty=False,
+            pitchman_throughput_empty=False,
         )
         render_dashboard_page()
         st_mock.markdown.assert_any_call("#### Per-project throughput (last 8 weeks)")
-        st_mock.markdown.assert_any_call("#### Per-helper throughput (last 8 weeks)")
+        st_mock.markdown.assert_any_call("#### Per-pitchman throughput (last 8 weeks)")
         assert st_mock.dataframe.called
         assert st_mock.bar_chart.called
 

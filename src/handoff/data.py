@@ -1,19 +1,19 @@
-"""Data access helpers for projects/todos and common query workflows."""
+"""Data access helpers for projects, handoffs, check-ins and query workflows."""
 
 import enum
 import json
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from loguru import logger
-from sqlalchemy import text
+from sqlalchemy import exists, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import or_, select
 
 from handoff.backup_schema import BackupPayload
 from handoff.db import session_context
-from handoff.models import Project, Todo, TodoStatus
-from handoff.page_models import TodoQuery
+from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.page_models import HandoffQuery
 
 
 def log_activity(
@@ -25,9 +25,9 @@ def log_activity(
     """Record an activity log entry for the audit trail.
 
     Args:
-        entity_type: One of "project", "todo".
+        entity_type: One of "project", "handoff".
         entity_id: Id of the entity, or None for bulk operations.
-        action: One of created, updated, completed, deleted, archived, unarchived.
+        action: One of created, updated, concluded, deleted, archived, unarchived.
         details: Optional JSON-serializable dict with extra context.
     """
     try:
@@ -97,25 +97,29 @@ class _Unset(enum.Enum):
 _UNSET = _Unset.UNSET
 
 
-def _helper_to_db(helper: str | list[str] | None) -> str | None:
-    """Coerce helper to a single trimmed string for DB storage.
+def _pitchman_to_db(pitchman: str | list[str] | None) -> str | None:
+    """Coerce pitchman to a single trimmed string for DB storage.
 
     Args:
-        helper: A single string, list of strings, or None.
+        pitchman: A single string, list of strings, or None.
 
     Returns:
         Trimmed string, or None if empty or not provided.
-
     """
-    if helper is None:
+    if pitchman is None:
         return None
-    if isinstance(helper, list):
-        for h in helper:
+    if isinstance(pitchman, list):
+        for h in pitchman:
             if h and str(h).strip():
                 return str(h).strip()
         return None
-    cleaned = str(helper).strip()
+    cleaned = str(pitchman).strip()
     return cleaned or None
+
+
+# ---------------------------------------------------------------------------
+# Projects
+# ---------------------------------------------------------------------------
 
 
 def create_project(name: str) -> Project:
@@ -126,7 +130,6 @@ def create_project(name: str) -> Project:
 
     Returns:
         The created Project.
-
     """
     with session_context() as session:
         project = Project(name=name)
@@ -144,12 +147,10 @@ def list_projects(*, include_archived: bool = False) -> list[Project]:
     """Return all projects ordered by creation (newest first).
 
     Args:
-        include_archived: When True, include archived projects; otherwise only
-            active projects are returned.
+        include_archived: When True, include archived projects.
 
     Returns:
         List of projects, newest first.
-
     """
     with session_context() as session:
         stmt = select(Project).order_by(Project.created_at.desc())
@@ -159,582 +160,19 @@ def list_projects(*, include_archived: bool = False) -> list[Project]:
 
 
 def get_project(project_id: int) -> Project | None:
-    """Return a project by id with its todos loaded.
+    """Return a project by id with its handoffs loaded.
 
     Args:
         project_id: Id of the project.
 
     Returns:
-        The project with todos eagerly loaded, or None if not found.
-
+        The project with handoffs eagerly loaded, or None if not found.
     """
     with session_context() as session:
         project = session.get(Project, project_id)
         if project:
-            # Eager load todos
-            _ = project.todos
+            _ = project.handoffs
         return project
-
-
-def create_todo(
-    project_id: int,
-    name: str,
-    status: TodoStatus = TodoStatus.HANDOFF,
-    next_check: date | None = None,
-    deadline: date | None = None,
-    helper: str | list[str] | None = None,
-    notes: str | None = None,
-) -> Todo:
-    """Create a new todo in a project.
-
-    Args:
-        project_id: Id of the project.
-        name: Todo title/name.
-        status: One of handoff, done, canceled.
-        next_check: Optional next follow-up date.
-        deadline: Optional due date/time.
-        helper: Optional assignee name (single string).
-        notes: Optional text (can include links, file paths, etc.).
-
-    Returns:
-        The created Todo.
-
-    """
-    with session_context() as session:
-        todo = Todo(
-            project_id=project_id,
-            name=name,
-            status=status,
-            next_check=next_check,
-            deadline=deadline,
-            helper=_helper_to_db(helper),
-            notes=notes or None,
-        )
-        session.add(todo)
-        session.commit()
-        session.refresh(todo)
-        logger.info(
-            "Created todo {todo_id} in project {project_id}: {name} "
-            "(status={status}, helper={helper})",
-            todo_id=todo.id,
-            project_id=todo.project_id,
-            name=todo.name,
-            status=todo.status.value,
-            helper=todo.helper,
-        )
-        log_activity("todo", todo.id, "created", {"name": todo.name, "project_id": todo.project_id})
-        return todo
-
-
-def update_todo(
-    todo_id: int,
-    *,
-    project_id: int | None | _Unset = _UNSET,
-    name: str | None | _Unset = _UNSET,
-    status: TodoStatus | None | _Unset = _UNSET,
-    next_check: date | None | _Unset = _UNSET,
-    deadline: date | None | _Unset = _UNSET,
-    helper: str | list[str] | None | _Unset = _UNSET,
-    notes: str | None | _Unset = _UNSET,
-) -> Todo | None:
-    """Update a todo by id. Only provided fields are updated.
-
-    Args:
-        todo_id: Id of the todo to update.
-        project_id: Optional new project id.
-        name: Optional new name.
-        status: Optional new status.
-        next_check: Optional next follow-up date.
-        deadline: Optional new deadline.
-        helper: Optional new helper (string or list).
-        notes: Optional new notes.
-
-    Returns:
-        Updated todo, or None if not found.
-
-    """
-    with session_context() as session:
-        todo = session.get(Todo, todo_id)
-        if not todo:
-            logger.warning("Todo {todo_id} not found for update", todo_id=todo_id)
-            return None
-        if project_id is not _UNSET:
-            todo.project_id = project_id
-        if name is not _UNSET:
-            todo.name = name
-        previous_status = todo.status
-        if status is not _UNSET:
-            todo.status = status
-        if next_check is not _UNSET:
-            todo.next_check = next_check
-        if deadline is not _UNSET:
-            todo.deadline = deadline
-        if helper is not _UNSET:
-            todo.helper = _helper_to_db(helper)
-        if notes is not _UNSET:
-            todo.notes = notes
-        # Track when a todo is marked as done.
-        is_newly_done = previous_status != todo.status and todo.status == TodoStatus.DONE
-        if is_newly_done:
-            todo.completed_at = datetime.now(UTC)
-
-        session.add(todo)
-        session.commit()
-        session.refresh(todo)
-
-        completion_msg = " [MARKED DONE]" if is_newly_done else ""
-        logger.info(
-            "Updated todo {todo_id} in project {project_id}{completion} "
-            "(status={status}, helper={helper}, deadline={deadline})",
-            todo_id=todo.id,
-            project_id=todo.project_id,
-            completion=completion_msg,
-            status=todo.status.value,
-            helper=todo.helper,
-            deadline=todo.deadline,
-        )
-        action = "completed" if is_newly_done else "updated"
-        log_activity("todo", todo.id, action, {"name": todo.name})
-        return todo
-
-
-def snooze_todo(todo_id: int, *, to_date: date) -> Todo | None:
-    """Update a todo's next_check date. Does not change deadline.
-
-    Args:
-        todo_id: Id of the todo to snooze.
-        to_date: New next follow-up date.
-
-    Returns:
-        Updated todo, or None if not found.
-
-    """
-    return update_todo(todo_id, next_check=to_date)
-
-
-def close_todo(todo_id: int) -> Todo | None:
-    """Mark a todo as done and remove it from the Now page.
-
-    Args:
-        todo_id: Id of the todo to close.
-
-    Returns:
-        Updated todo, or None if not found.
-
-    """
-    return update_todo(todo_id, status=TodoStatus.DONE)
-
-
-def delete_todo(todo_id: int) -> bool:
-    """Delete a todo by id.
-
-    Args:
-        todo_id: Id of the todo to delete.
-
-    Returns:
-        True when deleted, otherwise False.
-
-    """
-    with session_context() as session:
-        todo = session.get(Todo, todo_id)
-        if not todo:
-            logger.warning("Todo {todo_id} not found for delete", todo_id=todo_id)
-            return False
-        name = todo.name
-        project_id = todo.project_id
-        session.delete(todo)
-        session.commit()
-        logger.info(
-            "Deleted todo {todo_id} ({name}) from project {project_id}",
-            todo_id=todo_id,
-            name=name,
-            project_id=project_id,
-        )
-        log_activity("todo", todo_id, "deleted", {"name": name, "project_id": project_id})
-        return True
-
-
-def _to_start_of_day(value: date | datetime) -> datetime:
-    """Promote a bare date to start-of-day datetime; pass datetimes through."""
-    if isinstance(value, datetime):
-        return value
-    return datetime.combine(value, time.min)
-
-
-def _to_end_of_day(value: date | datetime) -> datetime:
-    """Promote a bare date to end-of-day datetime; pass datetimes through."""
-    if isinstance(value, datetime):
-        return value
-    return datetime.combine(value, time.max)
-
-
-def query_todos(
-    *,
-    query: TodoQuery | None = None,
-    project_ids: list[int] | None = None,
-    helper_name: str | None = None,
-    helper_names: list[str] | None = None,
-    statuses: list[TodoStatus] | None = None,
-    start: date | None = None,
-    end: date | None = None,
-    completed_start: date | datetime | None = None,
-    completed_end: date | datetime | None = None,
-    search_text: str | None = None,
-    include_archived: bool = False,
-) -> list[Todo]:
-    """Return todos matching optional unified filters.
-
-    Callers may either provide the individual filter arguments directly or pass a
-    :class:`handoff.page_models.TodoQuery` via ``query``. When ``query`` is provided,
-    its values populate the individual filters for this call.
-
-    ``completed_start`` and ``completed_end`` accept both ``date`` and
-    ``datetime``.  Bare ``date`` values are promoted to start-of-day /
-    end-of-day so the comparison against ``Todo.completed_at`` (a datetime
-    column) includes the full day.
-
-    Args:
-        query: Optional typed query contract for project/helper/status/search/deadline filters.
-        project_ids: Optional project ids to include.
-        helper_name: Optional helper substring filter.
-        helper_names: Optional exact helper names to include.
-        statuses: Optional statuses to include.
-        start: Optional inclusive deadline lower bound.
-        end: Optional inclusive deadline upper bound.
-        completed_start: Optional inclusive completed_at lower bound.
-        completed_end: Optional inclusive completed_at upper bound.
-        search_text: Optional free-text search against name/notes/helper.
-        include_archived: When True, include archived todos; otherwise exclude them.
-
-    Returns:
-        Matching todos ordered by deadline then created_at.
-
-    """
-    if query is not None:
-        project_ids = list(query.project_ids)
-        helper_names = list(query.helper_names)
-        statuses = list(query.statuses)
-        start = query.deadline_start
-        end = query.deadline_end
-        search_text = query.search_text
-        include_archived = query.include_archived
-
-    with session_context() as session:
-        stmt = select(Todo).options(selectinload(Todo.project))
-        if not include_archived:
-            stmt = stmt.where(Todo.is_archived.is_(False))
-
-        if project_ids:
-            stmt = stmt.where(Todo.project_id.in_(project_ids))
-
-        helper_stripped = (helper_name or "").strip()
-        if helper_stripped:
-            stmt = stmt.where(Todo.helper.ilike(f"%{helper_stripped}%"))
-        if helper_names:
-            canonical_helper_names = [name.strip() for name in helper_names if name.strip()]
-            if canonical_helper_names:
-                stmt = stmt.where(Todo.helper.in_(canonical_helper_names))
-
-        if statuses:
-            stmt = stmt.where(Todo.status.in_(statuses))
-
-        if start is not None:
-            stmt = stmt.where(Todo.deadline.isnot(None)).where(Todo.deadline >= start)
-        if end is not None:
-            stmt = stmt.where(Todo.deadline.isnot(None)).where(Todo.deadline <= end)
-
-        if completed_start is not None:
-            cs = _to_start_of_day(completed_start)
-            stmt = stmt.where(Todo.completed_at.isnot(None)).where(Todo.completed_at >= cs)
-        if completed_end is not None:
-            ce = _to_end_of_day(completed_end)
-            stmt = stmt.where(Todo.completed_at.isnot(None)).where(Todo.completed_at <= ce)
-
-        normalized_search = (search_text or "").strip()
-        if normalized_search:
-            like_expr = f"%{normalized_search}%"
-            stmt = stmt.where(
-                or_(
-                    Todo.name.ilike(like_expr),
-                    Todo.notes.ilike(like_expr),
-                    Todo.helper.ilike(like_expr),
-                    Todo.project.has(Project.name.ilike(like_expr)),
-                )
-            )
-
-        stmt = stmt.order_by(Todo.deadline.asc().nulls_last(), Todo.created_at.asc())
-        todos = list(session.exec(stmt).all())
-
-        filters_applied = any(
-            [
-                project_ids,
-                bool(helper_stripped),
-                helper_names,
-                statuses,
-                start is not None,
-                end is not None,
-                completed_start is not None,
-                completed_end is not None,
-                normalized_search,
-            ]
-        )
-        if filters_applied:
-            parts = []
-            if project_ids:
-                parts.append(f"project_ids={project_ids}")
-            if helper_stripped:
-                parts.append(f"helper={helper_stripped!r}")
-            if helper_names:
-                parts.append(f"helpers={helper_names!r}")
-            if statuses:
-                parts.append(f"statuses={[s.value for s in statuses]}")
-            if start is not None:
-                parts.append(f"start={start!s}")
-            if end is not None:
-                parts.append(f"end={end!s}")
-            if completed_start is not None:
-                parts.append(f"completed_start={completed_start!s}")
-            if completed_end is not None:
-                parts.append(f"completed_end={completed_end!s}")
-            if normalized_search:
-                parts.append(f"search={normalized_search!r}")
-            logger.info(
-                "query_todos filters: {filters} -> {count} todos",
-                filters=", ".join(parts),
-                count=len(todos),
-            )
-
-        return todos
-
-
-def query_now_items(
-    *,
-    project_ids: list[int] | None = None,
-    helper_names: list[str] | None = None,
-    search_text: str | None = None,
-    deadline_near_days: int = 1,
-    next_check_min: date | None = None,
-    next_check_max: date | None = None,
-    deadline_min: date | None = None,
-    deadline_max: date | None = None,
-) -> list[tuple[Todo, bool]]:
-    """Return open items that need attention on the Now page.
-
-    An item needs attention if:
-    - Next check is today or earlier (or null), and/or
-    - Deadline is within deadline_near_days or past due.
-
-    Optional date filters from natural-language search narrow the result set.
-
-    Returns:
-        List of (todo, at_risk) tuples. at_risk is True when deadline is near
-        or past. Sorted with at_risk items first, then by next_check, deadline,
-        created_at.
-
-    """
-    today = date.today()
-    cutoff = today + timedelta(days=deadline_near_days)
-
-    with session_context() as session:
-        stmt = (
-            select(Todo)
-            .options(selectinload(Todo.project))
-            .where(Todo.is_archived.is_(False))
-            .where(Todo.status == TodoStatus.HANDOFF)
-        )
-        if project_ids:
-            stmt = stmt.where(Todo.project_id.in_(project_ids))
-        if helper_names:
-            canonical = [n.strip() for n in helper_names if n.strip()]
-            if canonical:
-                stmt = stmt.where(Todo.helper.in_(canonical))
-        normalized_search = (search_text or "").strip()
-        if normalized_search:
-            like_expr = f"%{normalized_search}%"
-            stmt = stmt.where(
-                or_(
-                    Todo.name.ilike(like_expr),
-                    Todo.notes.ilike(like_expr),
-                    Todo.helper.ilike(like_expr),
-                    Todo.project.has(Project.name.ilike(like_expr)),
-                )
-            )
-        if next_check_min is not None:
-            stmt = stmt.where(
-                Todo.next_check.isnot(None),
-                Todo.next_check >= next_check_min,
-            )
-        if next_check_max is not None:
-            stmt = stmt.where((Todo.next_check.is_(None)) | (Todo.next_check <= next_check_max))
-        if deadline_min is not None:
-            stmt = stmt.where(
-                Todo.deadline.isnot(None),
-                Todo.deadline >= deadline_min,
-            )
-        if deadline_max is not None:
-            stmt = stmt.where(
-                Todo.deadline.isnot(None),
-                Todo.deadline <= deadline_max,
-            )
-
-        # Next-check driven: next_check <= today OR next_check IS NULL
-        next_check_due = (Todo.next_check <= today) | (Todo.next_check.is_(None))
-        # Deadline driven: deadline within range or past
-        deadline_at_risk = (Todo.deadline.isnot(None)) & (Todo.deadline <= cutoff)
-        stmt = stmt.where(next_check_due | deadline_at_risk)
-
-        todos = list(session.exec(stmt).all())
-
-    result: list[tuple[Todo, bool]] = []
-    for todo in todos:
-        at_risk = bool(todo.deadline and todo.deadline <= cutoff)
-        result.append((todo, at_risk))
-
-    # Sort: at_risk first, then by next_check, then deadline, then created_at
-    def _sort_key(item: tuple[Todo, bool]) -> tuple[int, date | None, date | None, datetime]:
-        t, risk = item
-        # Risk items first (0 before 1)
-        risk_order = 0 if risk else 1
-        nc = t.next_check or date.max
-        dl = t.deadline or date.max
-        return (risk_order, nc, dl, t.created_at)
-
-    result.sort(key=_sort_key)
-    return result
-
-
-def query_upcoming_handoffs(
-    *,
-    project_ids: list[int] | None = None,
-    helper_names: list[str] | None = None,
-    search_text: str | None = None,
-    deadline_near_days: int = 1,
-    limit: int = 20,
-    next_check_min: date | None = None,
-    next_check_max: date | None = None,
-    deadline_min: date | None = None,
-    deadline_max: date | None = None,
-) -> list[Todo]:
-    """Return handoff items that are not yet action-required (upcoming).
-
-    An item is upcoming if next_check is in the future and deadline is not
-    at risk (within deadline_near_days). Sorted by next_check asc.
-
-    Optional date filters from natural-language search narrow the result set.
-
-    Args:
-        project_ids: Optional filter by project ids.
-        helper_names: Optional filter by helper names.
-        search_text: Optional search in name, notes, helper, project name.
-        deadline_near_days: Cutoff for "at risk" (deadline > today + N is safe).
-        limit: Maximum number of results.
-        next_check_min: Optional minimum next_check date.
-        next_check_max: Optional maximum next_check date.
-        deadline_min: Optional minimum deadline.
-        deadline_max: Optional maximum deadline.
-
-    Returns:
-        List of Todo models with project loaded, ordered by next_check.
-
-    """
-    today = date.today()
-    cutoff = today + timedelta(days=deadline_near_days)
-
-    with session_context() as session:
-        stmt = (
-            select(Todo)
-            .options(selectinload(Todo.project))
-            .where(Todo.is_archived.is_(False))
-            .where(Todo.status == TodoStatus.HANDOFF)
-            .where(Todo.next_check.isnot(None))
-            .where(Todo.next_check > today)
-            .where((Todo.deadline.is_(None)) | (Todo.deadline > cutoff))
-        )
-        if project_ids:
-            stmt = stmt.where(Todo.project_id.in_(project_ids))
-        if helper_names:
-            canonical = [n.strip() for n in helper_names if n.strip()]
-            if canonical:
-                stmt = stmt.where(Todo.helper.in_(canonical))
-        normalized_search = (search_text or "").strip()
-        if normalized_search:
-            like_expr = f"%{normalized_search}%"
-            stmt = stmt.where(
-                or_(
-                    Todo.name.ilike(like_expr),
-                    Todo.notes.ilike(like_expr),
-                    Todo.helper.ilike(like_expr),
-                    Todo.project.has(Project.name.ilike(like_expr)),
-                )
-            )
-        if next_check_min is not None:
-            stmt = stmt.where(Todo.next_check >= next_check_min)
-        if next_check_max is not None:
-            stmt = stmt.where(Todo.next_check <= next_check_max)
-        if deadline_min is not None:
-            stmt = stmt.where(
-                Todo.deadline.isnot(None),
-                Todo.deadline >= deadline_min,
-            )
-        if deadline_max is not None:
-            stmt = stmt.where(
-                Todo.deadline.isnot(None),
-                Todo.deadline <= deadline_max,
-            )
-
-        stmt = stmt.order_by(Todo.next_check.asc()).limit(limit)
-        todos = list(session.exec(stmt).all())
-
-    return todos
-
-
-def list_helpers() -> list[str]:
-    """Return all distinct helper names (plain string column), sorted.
-
-    Returns:
-        Sorted list of unique non-empty helper names.
-
-    """
-    with session_context() as session:
-        stmt = select(Todo.helper).where(Todo.helper.isnot(None))
-        raw_values = session.exec(stmt).all()
-        canonical_by_lower: dict[str, str] = {}
-        for raw in raw_values:
-            name = (raw or "").strip()
-            if not name:
-                continue
-            lowered = name.lower()
-            if lowered not in canonical_by_lower:
-                canonical_by_lower[lowered] = name
-        return sorted(canonical_by_lower.values(), key=str.lower)
-
-
-def list_helpers_with_open_handoffs() -> list[str]:
-    """Return distinct helper names who have at least one open handoff.
-
-    Open handoffs are status HANDOFF and not archived. Use for Now page Who
-    filter so the dropdown shows only relevant people.
-
-    Returns:
-        Sorted list of unique non-empty helper names.
-    """
-    with session_context() as session:
-        stmt = (
-            select(Todo.helper)
-            .where(Todo.helper.isnot(None))
-            .where(Todo.status == TodoStatus.HANDOFF)
-            .where(Todo.is_archived.is_(False))
-        )
-        raw_values = session.exec(stmt).all()
-        canonical_by_lower: dict[str, str] = {}
-        for raw in raw_values:
-            name = (raw or "").strip()
-            if not name:
-                continue
-            lowered = name.lower()
-            if lowered not in canonical_by_lower:
-                canonical_by_lower[lowered] = name
-        return sorted(canonical_by_lower.values(), key=str.lower)
 
 
 def rename_project(project_id: int, name: str) -> Project | None:
@@ -746,7 +184,6 @@ def rename_project(project_id: int, name: str) -> Project | None:
 
     Returns:
         Updated project, or None when not found.
-
     """
     with session_context() as session:
         project = session.get(Project, project_id)
@@ -763,79 +200,64 @@ def rename_project(project_id: int, name: str) -> Project | None:
 
 
 def delete_project(project_id: int) -> bool:
-    """Delete a project and its todos.
+    """Delete a project and its handoffs.
 
     Args:
         project_id: Id of the project to delete.
 
     Returns:
         True when deleted, otherwise False.
-
     """
     with session_context() as session:
         project = session.get(Project, project_id)
         if not project:
             logger.warning("Project {project_id} not found for delete", project_id=project_id)
             return False
-        todo_count = len(project.todos)
+        handoff_count = len(project.handoffs)
         proj_name = project.name
         session.delete(project)
         session.commit()
         logger.info(
-            "Deleted project {project_id} and {todo_count} todos",
+            "Deleted project {project_id} and {handoff_count} handoffs",
             project_id=project_id,
-            todo_count=todo_count,
+            handoff_count=handoff_count,
         )
         log_activity(
-            "project", project_id, "deleted", {"name": proj_name, "todo_count": todo_count}
+            "project", project_id, "deleted", {"name": proj_name, "handoff_count": handoff_count}
         )
         return True
 
 
-def archive_project(project_id: int, *, archive_todos: bool = True) -> bool:
-    """Archive a project and, optionally, its todos.
+def archive_project(project_id: int) -> bool:
+    """Archive a project. Handoffs are hidden via project filtering.
 
     Args:
         project_id: Id of the project to archive.
-        archive_todos: When True, mark all child todos as archived as well.
 
     Returns:
         True when archived, otherwise False.
-
     """
     with session_context() as session:
         project = session.get(Project, project_id)
         if not project:
             logger.warning("Project {project_id} not found for archive", project_id=project_id)
             return False
-
         project.is_archived = True
-        if archive_todos:
-            todo_stmt = select(Todo).where(Todo.project_id == project_id)
-            for todo in session.exec(todo_stmt).all():
-                todo.is_archived = True
-                session.add(todo)
-
         session.add(project)
         session.commit()
-        logger.info(
-            "Archived project {project_id} (archive_todos={archive_todos})",
-            project_id=project_id,
-            archive_todos=archive_todos,
-        )
-        log_activity("project", project_id, "archived", {"archive_todos": archive_todos})
+        logger.info("Archived project {project_id}", project_id=project_id)
+        log_activity("project", project_id, "archived", {})
         return True
 
 
 def unarchive_project(project_id: int) -> bool:
-    """Unarchive a project (todos remain archived or active as-is).
+    """Unarchive a project.
 
     Args:
         project_id: Id of the project to unarchive.
 
     Returns:
         True when unarchived, otherwise False.
-
     """
     with session_context() as session:
         project = session.get(Project, project_id)
@@ -850,72 +272,698 @@ def unarchive_project(project_id: int) -> bool:
         return True
 
 
-def archive_todo(todo_id: int) -> bool:
-    """Archive a single todo.
+# ---------------------------------------------------------------------------
+# Handoffs
+# ---------------------------------------------------------------------------
+
+
+def create_handoff(
+    project_id: int,
+    need_back: str,
+    next_check: date | None = None,
+    deadline: date | None = None,
+    pitchman: str | list[str] | None = None,
+    notes: str | None = None,
+) -> Handoff:
+    """Create a new handoff in a project.
 
     Args:
-        todo_id: Id of the todo to archive.
+        project_id: Id of the project.
+        need_back: The deliverable/task description.
+        next_check: Optional next follow-up date.
+        deadline: Optional due date.
+        pitchman: Optional person responsible (single string).
+        notes: Optional context (links, markdown, etc.).
 
     Returns:
-        True when archived, otherwise False.
-
+        The created Handoff.
     """
     with session_context() as session:
-        todo = session.get(Todo, todo_id)
-        if not todo:
-            logger.warning("Todo {todo_id} not found for archive", todo_id=todo_id)
-            return False
-        todo.is_archived = True
-        session.add(todo)
+        handoff = Handoff(
+            project_id=project_id,
+            need_back=need_back,
+            next_check=next_check,
+            deadline=deadline,
+            pitchman=_pitchman_to_db(pitchman),
+            notes=notes or None,
+        )
+        session.add(handoff)
         session.commit()
-        logger.info("Archived todo {todo_id}", todo_id=todo_id)
-        log_activity("todo", todo_id, "archived", {"name": todo.name})
+        session.refresh(handoff)
+        logger.info(
+            "Created handoff {handoff_id} in project {project_id}: {need_back} "
+            "(pitchman={pitchman})",
+            handoff_id=handoff.id,
+            project_id=handoff.project_id,
+            need_back=handoff.need_back,
+            pitchman=handoff.pitchman,
+        )
+        log_activity(
+            "handoff",
+            handoff.id,
+            "created",
+            {"need_back": handoff.need_back, "project_id": handoff.project_id},
+        )
+        return handoff
+
+
+def update_handoff(
+    handoff_id: int,
+    *,
+    project_id: int | None | _Unset = _UNSET,
+    need_back: str | None | _Unset = _UNSET,
+    next_check: date | None | _Unset = _UNSET,
+    deadline: date | None | _Unset = _UNSET,
+    pitchman: str | list[str] | None | _Unset = _UNSET,
+    notes: str | None | _Unset = _UNSET,
+) -> Handoff | None:
+    """Update a handoff by id. Only provided fields are updated.
+
+    Args:
+        handoff_id: Id of the handoff to update.
+        project_id: Optional new project id.
+        need_back: Optional new deliverable description.
+        next_check: Optional next follow-up date.
+        deadline: Optional new deadline.
+        pitchman: Optional new pitchman (string or list).
+        notes: Optional new notes.
+
+    Returns:
+        Updated handoff, or None if not found.
+    """
+    with session_context() as session:
+        handoff = session.get(Handoff, handoff_id)
+        if not handoff:
+            logger.warning("Handoff {handoff_id} not found for update", handoff_id=handoff_id)
+            return None
+        if project_id is not _UNSET:
+            handoff.project_id = project_id
+        if need_back is not _UNSET:
+            handoff.need_back = need_back
+        if next_check is not _UNSET:
+            handoff.next_check = next_check
+        if deadline is not _UNSET:
+            handoff.deadline = deadline
+        if pitchman is not _UNSET:
+            handoff.pitchman = _pitchman_to_db(pitchman)
+        if notes is not _UNSET:
+            handoff.notes = notes
+
+        session.add(handoff)
+        session.commit()
+        session.refresh(handoff)
+
+        logger.info(
+            "Updated handoff {handoff_id} in project {project_id} "
+            "(pitchman={pitchman}, deadline={deadline})",
+            handoff_id=handoff.id,
+            project_id=handoff.project_id,
+            pitchman=handoff.pitchman,
+            deadline=handoff.deadline,
+        )
+        log_activity("handoff", handoff.id, "updated", {"need_back": handoff.need_back})
+        return handoff
+
+
+def snooze_handoff(handoff_id: int, *, to_date: date) -> Handoff | None:
+    """Update a handoff's next_check date. Does not change deadline.
+
+    Args:
+        handoff_id: Id of the handoff to snooze.
+        to_date: New next follow-up date.
+
+    Returns:
+        Updated handoff, or None if not found.
+    """
+    return update_handoff(handoff_id, next_check=to_date)
+
+
+def delete_handoff(handoff_id: int) -> bool:
+    """Delete a handoff by id.
+
+    Args:
+        handoff_id: Id of the handoff to delete.
+
+    Returns:
+        True when deleted, otherwise False.
+    """
+    with session_context() as session:
+        handoff = session.get(Handoff, handoff_id)
+        if not handoff:
+            logger.warning("Handoff {handoff_id} not found for delete", handoff_id=handoff_id)
+            return False
+        need_back = handoff.need_back
+        project_id = handoff.project_id
+        session.delete(handoff)
+        session.commit()
+        logger.info(
+            "Deleted handoff {handoff_id} ({need_back}) from project {project_id}",
+            handoff_id=handoff_id,
+            need_back=need_back,
+            project_id=project_id,
+        )
+        log_activity(
+            "handoff", handoff_id, "deleted", {"need_back": need_back, "project_id": project_id}
+        )
         return True
 
 
-def unarchive_todo(todo_id: int) -> bool:
-    """Unarchive a single todo.
+# ---------------------------------------------------------------------------
+# Check-ins
+# ---------------------------------------------------------------------------
+
+
+def create_check_in(
+    handoff_id: int,
+    check_in_type: CheckInType,
+    check_in_date: date,
+    note: str | None = None,
+) -> CheckIn:
+    """Insert a check-in entry and optionally update the handoff's next_check.
 
     Args:
-        todo_id: Id of the todo to unarchive.
+        handoff_id: Id of the handoff.
+        check_in_type: Type of check-in (on_track, delayed, concluded).
+        check_in_date: Date of the check-in.
+        note: Optional note/reason.
 
     Returns:
-        True when unarchived, otherwise False.
-
+        The created CheckIn.
     """
     with session_context() as session:
-        todo = session.get(Todo, todo_id)
-        if not todo:
-            logger.warning("Todo {todo_id} not found for unarchive", todo_id=todo_id)
-            return False
-        todo.is_archived = False
-        session.add(todo)
+        check_in = CheckIn(
+            handoff_id=handoff_id,
+            check_in_type=check_in_type,
+            check_in_date=check_in_date,
+            note=note or None,
+        )
+        session.add(check_in)
         session.commit()
-        logger.info("Unarchived todo {todo_id}", todo_id=todo_id)
-        log_activity("todo", todo_id, "unarchived", {"name": todo.name})
-        return True
+        session.refresh(check_in)
+        logger.info(
+            "Created {check_in_type} check-in for handoff {handoff_id}",
+            check_in_type=check_in_type.value,
+            handoff_id=handoff_id,
+        )
+        log_activity(
+            "handoff",
+            handoff_id,
+            "check_in",
+            {"check_in_type": check_in_type.value, "check_in_date": str(check_in_date)},
+        )
+        return check_in
+
+
+def conclude_handoff(handoff_id: int, note: str | None = None) -> CheckIn:
+    """Add a concluded check-in to a handoff, closing it.
+
+    Args:
+        handoff_id: Id of the handoff to conclude.
+        note: Optional conclusion note.
+
+    Returns:
+        The created concluded CheckIn.
+    """
+    today = date.today()
+    check_in = create_check_in(
+        handoff_id=handoff_id,
+        check_in_type=CheckInType.CONCLUDED,
+        check_in_date=today,
+        note=note,
+    )
+    log_activity("handoff", handoff_id, "concluded", {"note": note})
+    return check_in
+
+
+def handoff_is_open(handoff: Handoff) -> bool:
+    """Return True if the handoff has no concluded check-in."""
+    return not any(ci.check_in_type == CheckInType.CONCLUDED for ci in handoff.check_ins)
+
+
+def get_handoff_close_date(handoff: Handoff) -> date | None:
+    """Return the date of the last concluded check-in, or None if still open."""
+    concluded = [ci for ci in handoff.check_ins if ci.check_in_type == CheckInType.CONCLUDED]
+    if not concluded:
+        return None
+    return max(ci.check_in_date for ci in concluded)
+
+
+# ---------------------------------------------------------------------------
+# Concluded subquery (shared helper)
+# ---------------------------------------------------------------------------
+
+
+def _concluded_subquery():
+    """Return a correlated subquery that matches handoffs with a concluded check-in."""
+    return (
+        select(CheckIn.id)
+        .where(CheckIn.handoff_id == Handoff.id, CheckIn.check_in_type == CheckInType.CONCLUDED)
+        .correlate(Handoff)
+    )
+
+
+# ---------------------------------------------------------------------------
+# Queries
+# ---------------------------------------------------------------------------
+
+
+def _to_start_of_day(value: date | datetime) -> datetime:
+    """Promote a bare date to start-of-day datetime; pass datetimes through."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, time.min)
+
+
+def _to_end_of_day(value: date | datetime) -> datetime:
+    """Promote a bare date to end-of-day datetime; pass datetimes through."""
+    if isinstance(value, datetime):
+        return value
+    return datetime.combine(value, time.max)
+
+
+def query_handoffs(
+    *,
+    query: HandoffQuery | None = None,
+    project_ids: list[int] | None = None,
+    pitchman_name: str | None = None,
+    pitchman_names: list[str] | None = None,
+    start: date | None = None,
+    end: date | None = None,
+    concluded_start: date | None = None,
+    concluded_end: date | None = None,
+    search_text: str | None = None,
+    include_concluded: bool = False,
+    include_archived_projects: bool = False,
+) -> list[Handoff]:
+    """Return handoffs matching optional unified filters.
+
+    Args:
+        query: Optional typed query contract.
+        project_ids: Optional project ids to include.
+        pitchman_name: Optional pitchman substring filter.
+        pitchman_names: Optional exact pitchman names to include.
+        start: Optional inclusive deadline lower bound.
+        end: Optional inclusive deadline upper bound.
+        concluded_start: Optional inclusive conclude-date lower bound.
+        concluded_end: Optional inclusive conclude-date upper bound.
+        search_text: Optional free-text search against need_back/notes/pitchman.
+        include_concluded: When True, include concluded handoffs.
+        include_archived_projects: When True, include handoffs in archived projects.
+
+    Returns:
+        Matching handoffs ordered by deadline then created_at.
+    """
+    if query is not None:
+        project_ids = list(query.project_ids)
+        pitchman_names = list(query.pitchman_names)
+        start = query.deadline_start
+        end = query.deadline_end
+        search_text = query.search_text
+        include_concluded = query.include_concluded
+        include_archived_projects = query.include_archived_projects
+
+    with session_context() as session:
+        stmt = select(Handoff).options(
+            selectinload(Handoff.project),
+            selectinload(Handoff.check_ins),
+        )
+
+        if not include_archived_projects:
+            stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
+
+        if not include_concluded:
+            stmt = stmt.where(~exists(_concluded_subquery()))
+
+        if project_ids:
+            stmt = stmt.where(Handoff.project_id.in_(project_ids))
+
+        pitchman_stripped = (pitchman_name or "").strip()
+        if pitchman_stripped:
+            stmt = stmt.where(Handoff.pitchman.ilike(f"%{pitchman_stripped}%"))
+        if pitchman_names:
+            canonical = [n.strip() for n in pitchman_names if n.strip()]
+            if canonical:
+                stmt = stmt.where(Handoff.pitchman.in_(canonical))
+
+        if start is not None:
+            stmt = stmt.where(Handoff.deadline.isnot(None)).where(Handoff.deadline >= start)
+        if end is not None:
+            stmt = stmt.where(Handoff.deadline.isnot(None)).where(Handoff.deadline <= end)
+
+        if concluded_start is not None or concluded_end is not None:
+            stmt = stmt.join(CheckIn, CheckIn.handoff_id == Handoff.id).where(
+                CheckIn.check_in_type == CheckInType.CONCLUDED
+            )
+            if concluded_start is not None:
+                stmt = stmt.where(CheckIn.check_in_date >= concluded_start)
+            if concluded_end is not None:
+                stmt = stmt.where(CheckIn.check_in_date <= concluded_end)
+
+        normalized_search = (search_text or "").strip()
+        if normalized_search:
+            like_expr = f"%{normalized_search}%"
+            stmt = stmt.where(
+                or_(
+                    Handoff.need_back.ilike(like_expr),
+                    Handoff.notes.ilike(like_expr),
+                    Handoff.pitchman.ilike(like_expr),
+                    Handoff.project.has(Project.name.ilike(like_expr)),
+                )
+            )
+
+        stmt = stmt.order_by(Handoff.deadline.asc().nulls_last(), Handoff.created_at.asc())
+        handoffs = list(session.exec(stmt).unique().all())
+
+        filters_applied = any(
+            [
+                project_ids,
+                bool(pitchman_stripped),
+                pitchman_names,
+                start is not None,
+                end is not None,
+                concluded_start is not None,
+                concluded_end is not None,
+                normalized_search,
+            ]
+        )
+        if filters_applied:
+            parts = []
+            if project_ids:
+                parts.append(f"project_ids={project_ids}")
+            if pitchman_stripped:
+                parts.append(f"pitchman={pitchman_stripped!r}")
+            if pitchman_names:
+                parts.append(f"pitchmen={pitchman_names!r}")
+            if start is not None:
+                parts.append(f"start={start!s}")
+            if end is not None:
+                parts.append(f"end={end!s}")
+            if normalized_search:
+                parts.append(f"search={normalized_search!r}")
+            logger.info(
+                "query_handoffs filters: {filters} -> {count} handoffs",
+                filters=", ".join(parts),
+                count=len(handoffs),
+            )
+
+        return handoffs
+
+
+def query_now_items(
+    *,
+    project_ids: list[int] | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 1,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
+) -> list[tuple[Handoff, bool]]:
+    """Return open handoffs that need attention on the Now page.
+
+    A handoff needs attention if:
+    - Next check is today or earlier (or null), and/or
+    - Deadline is within deadline_near_days or past due.
+
+    Returns:
+        List of (handoff, at_risk) tuples. at_risk is True when deadline is
+        near or past. Sorted with at_risk items first, then by next_check,
+        deadline, created_at.
+    """
+    today = date.today()
+    cutoff = today + timedelta(days=deadline_near_days)
+
+    with session_context() as session:
+        stmt = (
+            select(Handoff)
+            .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
+            .where(Handoff.project.has(Project.is_archived.is_(False)))
+            .where(~exists(_concluded_subquery()))
+        )
+        if project_ids:
+            stmt = stmt.where(Handoff.project_id.in_(project_ids))
+        if pitchman_names:
+            canonical = [n.strip() for n in pitchman_names if n.strip()]
+            if canonical:
+                stmt = stmt.where(Handoff.pitchman.in_(canonical))
+        normalized_search = (search_text or "").strip()
+        if normalized_search:
+            like_expr = f"%{normalized_search}%"
+            stmt = stmt.where(
+                or_(
+                    Handoff.need_back.ilike(like_expr),
+                    Handoff.notes.ilike(like_expr),
+                    Handoff.pitchman.ilike(like_expr),
+                    Handoff.project.has(Project.name.ilike(like_expr)),
+                )
+            )
+        if next_check_min is not None:
+            stmt = stmt.where(
+                Handoff.next_check.isnot(None),
+                Handoff.next_check >= next_check_min,
+            )
+        if next_check_max is not None:
+            stmt = stmt.where(
+                (Handoff.next_check.is_(None)) | (Handoff.next_check <= next_check_max)
+            )
+        if deadline_min is not None:
+            stmt = stmt.where(
+                Handoff.deadline.isnot(None),
+                Handoff.deadline >= deadline_min,
+            )
+        if deadline_max is not None:
+            stmt = stmt.where(
+                Handoff.deadline.isnot(None),
+                Handoff.deadline <= deadline_max,
+            )
+
+        next_check_due = (Handoff.next_check <= today) | (Handoff.next_check.is_(None))
+        deadline_at_risk = (Handoff.deadline.isnot(None)) & (Handoff.deadline <= cutoff)
+        stmt = stmt.where(next_check_due | deadline_at_risk)
+
+        handoffs = list(session.exec(stmt).unique().all())
+
+    result: list[tuple[Handoff, bool]] = []
+    for h in handoffs:
+        at_risk = bool(h.deadline and h.deadline <= cutoff)
+        result.append((h, at_risk))
+
+    def _sort_key(item: tuple[Handoff, bool]) -> tuple[int, date | None, date | None, datetime]:
+        h, risk = item
+        risk_order = 0 if risk else 1
+        nc = h.next_check or date.max
+        dl = h.deadline or date.max
+        return (risk_order, nc, dl, h.created_at)
+
+    result.sort(key=_sort_key)
+    return result
+
+
+def query_upcoming_handoffs(
+    *,
+    project_ids: list[int] | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 1,
+    limit: int = 20,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
+) -> list[Handoff]:
+    """Return open handoffs that are not yet action-required (upcoming).
+
+    A handoff is upcoming if next_check is in the future and deadline is not
+    at risk (within deadline_near_days). Sorted by next_check asc.
+
+    Args:
+        project_ids: Optional filter by project ids.
+        pitchman_names: Optional filter by pitchman names.
+        search_text: Optional search in need_back, notes, pitchman, project name.
+        deadline_near_days: Cutoff for "at risk" (deadline > today + N is safe).
+        limit: Maximum number of results.
+        next_check_min: Optional minimum next_check date.
+        next_check_max: Optional maximum next_check date.
+        deadline_min: Optional minimum deadline.
+        deadline_max: Optional maximum deadline.
+
+    Returns:
+        List of Handoff models with project loaded, ordered by next_check.
+    """
+    today = date.today()
+    cutoff = today + timedelta(days=deadline_near_days)
+
+    with session_context() as session:
+        stmt = (
+            select(Handoff)
+            .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
+            .where(Handoff.project.has(Project.is_archived.is_(False)))
+            .where(~exists(_concluded_subquery()))
+            .where(Handoff.next_check.isnot(None))
+            .where(Handoff.next_check > today)
+            .where((Handoff.deadline.is_(None)) | (Handoff.deadline > cutoff))
+        )
+        if project_ids:
+            stmt = stmt.where(Handoff.project_id.in_(project_ids))
+        if pitchman_names:
+            canonical = [n.strip() for n in pitchman_names if n.strip()]
+            if canonical:
+                stmt = stmt.where(Handoff.pitchman.in_(canonical))
+        normalized_search = (search_text or "").strip()
+        if normalized_search:
+            like_expr = f"%{normalized_search}%"
+            stmt = stmt.where(
+                or_(
+                    Handoff.need_back.ilike(like_expr),
+                    Handoff.notes.ilike(like_expr),
+                    Handoff.pitchman.ilike(like_expr),
+                    Handoff.project.has(Project.name.ilike(like_expr)),
+                )
+            )
+        if next_check_min is not None:
+            stmt = stmt.where(Handoff.next_check >= next_check_min)
+        if next_check_max is not None:
+            stmt = stmt.where(Handoff.next_check <= next_check_max)
+        if deadline_min is not None:
+            stmt = stmt.where(
+                Handoff.deadline.isnot(None),
+                Handoff.deadline >= deadline_min,
+            )
+        if deadline_max is not None:
+            stmt = stmt.where(
+                Handoff.deadline.isnot(None),
+                Handoff.deadline <= deadline_max,
+            )
+
+        stmt = stmt.order_by(Handoff.next_check.asc()).limit(limit)
+        return list(session.exec(stmt).unique().all())
+
+
+def query_concluded_handoffs(
+    *,
+    project_ids: list[int] | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
+    include_archived_projects: bool = True,
+) -> list[Handoff]:
+    """Return handoffs that have at least one concluded check-in.
+
+    Args:
+        project_ids: Optional filter by project ids.
+        pitchman_names: Optional filter by pitchman names.
+        search_text: Optional search in need_back, notes, pitchman, project name.
+        include_archived_projects: When True, include handoffs in archived projects.
+
+    Returns:
+        Concluded handoffs ordered by close date descending.
+    """
+    with session_context() as session:
+        stmt = (
+            select(Handoff)
+            .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
+            .where(exists(_concluded_subquery()))
+        )
+        if not include_archived_projects:
+            stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
+        if project_ids:
+            stmt = stmt.where(Handoff.project_id.in_(project_ids))
+        if pitchman_names:
+            canonical = [n.strip() for n in pitchman_names if n.strip()]
+            if canonical:
+                stmt = stmt.where(Handoff.pitchman.in_(canonical))
+        normalized_search = (search_text or "").strip()
+        if normalized_search:
+            like_expr = f"%{normalized_search}%"
+            stmt = stmt.where(
+                or_(
+                    Handoff.need_back.ilike(like_expr),
+                    Handoff.notes.ilike(like_expr),
+                    Handoff.pitchman.ilike(like_expr),
+                    Handoff.project.has(Project.name.ilike(like_expr)),
+                )
+            )
+        stmt = stmt.order_by(Handoff.created_at.desc())
+        return list(session.exec(stmt).unique().all())
+
+
+# ---------------------------------------------------------------------------
+# Lists
+# ---------------------------------------------------------------------------
+
+
+def list_pitchmen() -> list[str]:
+    """Return all distinct pitchman names, sorted.
+
+    Returns:
+        Sorted list of unique non-empty pitchman names.
+    """
+    with session_context() as session:
+        stmt = select(Handoff.pitchman).where(Handoff.pitchman.isnot(None))
+        raw_values = session.exec(stmt).all()
+        canonical_by_lower: dict[str, str] = {}
+        for raw in raw_values:
+            name = (raw or "").strip()
+            if not name:
+                continue
+            lowered = name.lower()
+            if lowered not in canonical_by_lower:
+                canonical_by_lower[lowered] = name
+        return sorted(canonical_by_lower.values(), key=str.lower)
+
+
+def list_pitchmen_with_open_handoffs() -> list[str]:
+    """Return distinct pitchman names who have at least one open handoff.
+
+    Open handoffs have no concluded check-in and belong to non-archived projects.
+
+    Returns:
+        Sorted list of unique non-empty pitchman names.
+    """
+    with session_context() as session:
+        stmt = (
+            select(Handoff.pitchman)
+            .where(Handoff.pitchman.isnot(None))
+            .where(Handoff.project.has(Project.is_archived.is_(False)))
+            .where(~exists(_concluded_subquery()))
+        )
+        raw_values = session.exec(stmt).all()
+        canonical_by_lower: dict[str, str] = {}
+        for raw in raw_values:
+            name = (raw or "").strip()
+            if not name:
+                continue
+            lowered = name.lower()
+            if lowered not in canonical_by_lower:
+                canonical_by_lower[lowered] = name
+        return sorted(canonical_by_lower.values(), key=str.lower)
+
+
+# ---------------------------------------------------------------------------
+# Import / Export
+# ---------------------------------------------------------------------------
 
 
 def import_payload(data_payload: dict[str, Any]) -> None:
-    """Replace all projects and todos with the contents of *data_payload*.
+    """Replace all projects, handoffs and check-ins with the contents of *data_payload*.
 
-    The payload must match the schema produced by :func:`get_export_payload`
-    (keys ``"projects"`` and ``"todos"``).  The operation runs inside a single
-    transaction: existing rows are deleted, then new rows are inserted.
+    Accepts both the new format (``"handoffs"`` + ``"check_ins"``) and the legacy
+    format (``"todos"``). The operation runs inside a single transaction.
 
     Args:
-        data_payload: Dict with ``"projects"`` and ``"todos"`` lists.
+        data_payload: Dict with ``"projects"`` and ``"handoffs"``/``"check_ins"`` lists.
 
     Raises:
-        KeyError: If ``"projects"`` or ``"todos"`` key is missing.
+        KeyError: If required keys are missing.
         ValueError: If a record cannot be parsed.
-
     """
     payload = BackupPayload.from_dict(data_payload)
 
     with session_context() as session:
-        session.exec(select(Todo)).all()  # ensure model is loaded
-        session.execute(Todo.__table__.delete())
+        session.exec(select(CheckIn)).all()
+        session.exec(select(Handoff)).all()
+        session.execute(CheckIn.__table__.delete())
+        session.execute(Handoff.__table__.delete())
         session.execute(Project.__table__.delete())
 
         for p in payload.projects:
@@ -927,88 +975,97 @@ def import_payload(data_payload: dict[str, Any]) -> None:
             )
             session.add(project)
 
-        for t in payload.todos:
-            todo = Todo(
-                id=t.id,
-                project_id=t.project_id,
-                name=t.name,
-                status=t.status,
-                next_check=t.next_check,
-                deadline=t.deadline,
-                helper=t.helper,
-                notes=t.notes,
-                created_at=t.created_at,
-                completed_at=t.completed_at,
-                is_archived=t.is_archived,
+        for h in payload.handoffs:
+            handoff = Handoff(
+                id=h.id,
+                project_id=h.project_id,
+                need_back=h.need_back,
+                pitchman=h.pitchman,
+                next_check=h.next_check,
+                deadline=h.deadline,
+                notes=h.notes,
+                created_at=h.created_at,
             )
-            session.add(todo)
+            session.add(handoff)
+
+        for c in payload.check_ins:
+            check_in = CheckIn(
+                id=c.id,
+                handoff_id=c.handoff_id,
+                check_in_date=c.check_in_date,
+                note=c.note,
+                check_in_type=c.check_in_type,
+                created_at=c.created_at,
+            )
+            session.add(check_in)
 
         session.commit()
         logger.info(
-            "Imported {project_count} projects and {todo_count} todos",
+            "Imported {project_count} projects, {handoff_count} handoffs, "
+            "{check_in_count} check-ins",
             project_count=len(payload.projects),
-            todo_count=len(payload.todos),
+            handoff_count=len(payload.handoffs),
+            check_in_count=len(payload.check_ins),
         )
 
 
 def get_export_payload() -> dict[str, Any]:
-    """Return JSON-serializable snapshot of projects and todos.
+    """Return JSON-serializable snapshot of projects, handoffs, and check-ins.
 
     Returns:
-        Dict with "projects" and "todos" keys, each a list of serialized records.
-
+        Dict with "projects", "handoffs", and "check_ins" keys.
     """
     with session_context() as session:
         projects = list(session.exec(select(Project).order_by(Project.created_at.asc())).all())
-        todos = list(session.exec(select(Todo).order_by(Todo.created_at.asc())).all())
-        return BackupPayload.from_models(projects, todos).to_dict()
+        handoffs = list(session.exec(select(Handoff).order_by(Handoff.created_at.asc())).all())
+        check_ins = list(session.exec(select(CheckIn).order_by(CheckIn.created_at.asc())).all())
+        return BackupPayload.from_models(projects, handoffs, check_ins).to_dict()
 
 
-def get_projects_with_todo_summary(*, include_archived: bool = False) -> list[dict[str, Any]]:
-    """Return projects with aggregated todo status counts.
+def get_projects_with_handoff_summary(*, include_archived: bool = False) -> list[dict[str, Any]]:
+    """Return projects with aggregated handoff counts (open vs concluded).
 
     Each item contains:
 
     - project: The Project instance.
-    - total: Total todos in the project.
-    - handoff: Count of todos with status handoff.
-    - done: Count of todos with status done.
-    - canceled: Count of todos with status canceled.
+    - total: Total handoffs in the project.
+    - open: Count of open handoffs (no concluded check-in).
+    - concluded: Count of concluded handoffs.
 
     Args:
         include_archived: When True, include archived projects.
 
     Returns:
-        List of dicts with project, total, handoff, done, and canceled keys.
-
+        List of dicts with project, total, open, and concluded keys.
     """
     projects = list_projects(include_archived=include_archived)
     if not projects:
         return []
 
     project_ids = [p.id for p in projects]
-    todos = query_todos(project_ids=project_ids, include_archived=include_archived)
+    all_handoffs = query_handoffs(
+        project_ids=project_ids,
+        include_concluded=True,
+        include_archived_projects=include_archived,
+    )
     summary_by_project: dict[int, dict[str, Any]] = {
         project.id: {
             "project": project,
             "total": 0,
-            "handoff": 0,
-            "done": 0,
-            "canceled": 0,
+            "open": 0,
+            "concluded": 0,
         }
         for project in projects
     }
 
-    for todo in todos:
-        item = summary_by_project.get(todo.project_id)
+    for h in all_handoffs:
+        item = summary_by_project.get(h.project_id)
         if not item:
             continue
         item["total"] += 1
-        if todo.status == TodoStatus.HANDOFF:
-            item["handoff"] += 1
-        elif todo.status == TodoStatus.DONE:
-            item["done"] += 1
-        elif todo.status == TodoStatus.CANCELED:
-            item["canceled"] += 1
+        if handoff_is_open(h):
+            item["open"] += 1
+        else:
+            item["concluded"] += 1
 
     return [summary_by_project[project.id] for project in projects]

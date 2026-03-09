@@ -9,7 +9,7 @@ import pytest
 from sqlmodel import select
 
 import handoff.data as data
-from handoff.models import Project, Todo, TodoStatus
+from handoff.models import Handoff, Project
 from handoff.services import settings_service
 
 
@@ -40,15 +40,15 @@ def test_get_export_payload_via_service(session, monkeypatch) -> None:
     session.commit()
     payload = settings_service.get_export_payload()
     assert "projects" in payload
-    assert "todos" in payload
+    assert "handoffs" in payload
     assert isinstance(payload["projects"], list)
-    assert isinstance(payload["todos"], list)
+    assert isinstance(payload["handoffs"], list)
     assert len(payload["projects"]) == 1
     assert payload["projects"][0]["name"] == "P"
 
 
 def test_import_payload_via_service(session, monkeypatch) -> None:
-    """import_payload replaces data through the service boundary."""
+    """import_payload replaces data through the service boundary (legacy format)."""
     _patch_session_context(monkeypatch, session)
     payload = {
         "projects": [
@@ -77,12 +77,11 @@ def test_import_payload_via_service(session, monkeypatch) -> None:
     }
     settings_service.import_payload(payload)
     projects = list(session.exec(select(Project)).all())
-    todos = list(session.exec(select(Todo)).all())
+    handoffs = list(session.exec(select(Handoff)).all())
     assert len(projects) == 1
     assert projects[0].name == "Imported"
-    assert len(todos) == 1
-    assert todos[0].name == "Imported todo"
-    assert todos[0].status == TodoStatus.HANDOFF
+    assert len(handoffs) == 1
+    assert handoffs[0].need_back == "Imported todo"
 
 
 # --- deadline_near_days persistence ---

@@ -104,7 +104,7 @@ def init_db() -> None:
     try:
         engine = get_engine()
         # Ensure models are imported so SQLModel's metadata is populated with
-        # the Project and Todo tables before create_all() runs.
+        # the Project, Handoff, and CheckIn tables before create_all() runs.
         from handoff import models as _models  # noqa: F401
 
         SQLModel.metadata.create_all(engine)
