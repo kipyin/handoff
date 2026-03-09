@@ -1,4 +1,4 @@
-"""Settings page implementation for Handoff.
+"""System Settings page implementation for Handoff.
 
 This page centralises app updates, code backup restore, data export, log
 download, and a compact About section so that operational controls live in
@@ -169,7 +169,7 @@ def _render_data_import_section() -> None:
 
 
 def _render_about_section() -> None:
-    """Render a compact About section at the end of the Settings page."""
+    """Render a compact About section at the end of the System Settings page."""
     st.markdown("### About Handoff")
     st.caption(f"Version: {APP_VERSION}")
 
@@ -186,9 +186,9 @@ def _render_about_section() -> None:
     )
 
 
-def render_settings_page() -> None:
-    """Render the settings page with update, backup, and about sections."""
-    st.subheader("Settings")
+def render_system_settings_page() -> None:
+    """Render the System Settings page with update, backup, and about sections."""
+    st.subheader("System Settings")
     st.write(
         "Use this page to apply code updates, restore backups created by updates, export "
         "or import your data, and download logs. An About section at the end summarises "

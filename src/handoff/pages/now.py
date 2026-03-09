@@ -12,11 +12,12 @@ import streamlit as st
 
 from handoff.dates import add_business_days, format_date_smart, format_risk_reason
 from handoff.models import Project, Todo, TodoStatus
+from handoff.search_parse import parse_search_query
 from handoff.services import (
     complete_todo,
     create_todo,
     get_deadline_near_days,
-    list_helpers,
+    list_helpers_with_open_handoffs,
     list_projects,
     query_now_items,
     query_upcoming_handoffs,
@@ -42,27 +43,27 @@ def _render_filters(
         Tuple of (project_ids or None, helper_names or None, search_text or None).
     """
     project_names = list(project_by_name)
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
+        search_text = st.text_input(
+            "Search",
+            placeholder="Need back, @today, @due this week…",
+            key=f"{key_prefix}_search",
+        ).strip()
+    with col2:
         project_filters = st.multiselect(
             "Project",
             options=project_names,
             default=[],
             key=f"{key_prefix}_projects",
         )
-    with col2:
+    with col3:
         helper_filters = st.multiselect(
             "Who",
             options=helpers,
             default=[],
             key=f"{key_prefix}_helpers",
         )
-    with col3:
-        search_text = st.text_input(
-            "Search",
-            placeholder="Need back, context…",
-            key=f"{key_prefix}_search",
-        ).strip()
     project_ids = []
     for n in project_filters:
         if n in project_by_name:
@@ -330,7 +331,7 @@ def render_now_page() -> None:
         st.info("No projects yet. Create one on the Projects page.")
         return
 
-    helpers = list_helpers()
+    helpers = list_helpers_with_open_handoffs()
     project_by_name = {p.name: p for p in projects}
     project_ids, helper_names, search_text = _render_filters(
         project_by_name=project_by_name,
@@ -338,19 +339,28 @@ def render_now_page() -> None:
         key_prefix="now",
     )
 
+    parsed = parse_search_query(search_text or "")
     deadline_near_days = get_deadline_near_days()
     items = query_now_items(
         project_ids=project_ids,
         helper_names=helper_names,
-        search_text=search_text or None,
+        search_text=parsed.text_query,
         deadline_near_days=deadline_near_days,
+        next_check_min=parsed.next_check_min,
+        next_check_max=parsed.next_check_max,
+        deadline_min=parsed.deadline_min,
+        deadline_max=parsed.deadline_max,
     )
 
     upcoming = query_upcoming_handoffs(
         project_ids=project_ids,
         helper_names=helper_names,
-        search_text=search_text or None,
+        search_text=parsed.text_query,
         deadline_near_days=deadline_near_days,
+        next_check_min=parsed.next_check_min,
+        next_check_max=parsed.next_check_max,
+        deadline_min=parsed.deadline_min,
+        deadline_max=parsed.deadline_max,
     )
 
     _render_add_form(project_by_name, helpers, "now")

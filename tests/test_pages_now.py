@@ -53,7 +53,7 @@ def test_render_now_page_with_projects_queries_items(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
-    monkeypatch.setattr("handoff.pages.now.list_helpers", lambda: ["Alice"])
+    monkeypatch.setattr("handoff.pages.now.list_helpers_with_open_handoffs", lambda: ["Alice"])
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     query_calls: list[dict] = []
 
@@ -87,7 +87,9 @@ def test_render_now_page_with_action_required_items_renders_expanders_and_button
         def __exit__(self, *a):
             return False
 
-    st_mock.columns.side_effect = lambda n: [Ctx() for _ in range(n)]
+    st_mock.columns.side_effect = lambda n: [
+        Ctx() for _ in range(n if isinstance(n, int) else len(n))
+    ]
     st_mock.expander.return_value = Ctx()
     st_mock.popover.return_value = Ctx()
     st_mock.form.return_value = Ctx()
@@ -95,7 +97,7 @@ def test_render_now_page_with_action_required_items_renders_expanders_and_button
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
-    monkeypatch.setattr("handoff.pages.now.list_helpers", lambda: ["Alice"])
+    monkeypatch.setattr("handoff.pages.now.list_helpers_with_open_handoffs", lambda: ["Alice"])
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     todo_action = _make_fake_todo(todo_id=1, name="Action item")
     todo_upcoming = _make_fake_todo(todo_id=2, name="Upcoming item")
@@ -131,7 +133,9 @@ def test_render_now_page_with_editing_shows_form(monkeypatch: pytest.MonkeyPatch
         def __exit__(self, *a):
             return False
 
-    st_mock.columns.side_effect = lambda n: [Ctx() for _ in range(n)]
+    st_mock.columns.side_effect = lambda n: [
+        Ctx() for _ in range(n if isinstance(n, int) else len(n))
+    ]
     st_mock.expander.return_value = Ctx()
     st_mock.popover.return_value = Ctx()
     st_mock.form.return_value = Ctx()
@@ -140,7 +144,7 @@ def test_render_now_page_with_editing_shows_form(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
-    monkeypatch.setattr("handoff.pages.now.list_helpers", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.list_helpers_with_open_handoffs", lambda: [])
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     todo_action = _make_fake_todo(todo_id=1, name="Edit me")
     monkeypatch.setattr(

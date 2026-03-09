@@ -55,13 +55,13 @@ def _projects_page_entry() -> None:
     render_projects_page()
 
 
-def _settings_page_entry() -> None:
-    """Single-page entrypoint for Settings: setup + render."""
+def _system_settings_page_entry() -> None:
+    """Single-page entrypoint for System Settings: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.settings import render_settings_page
+    from handoff.pages.system_settings import render_system_settings_page
 
     ui.setup("2026.2.24")
-    render_settings_page()
+    render_system_settings_page()
 
 
 def _dashboard_page_entry() -> None:
@@ -73,13 +73,13 @@ def _dashboard_page_entry() -> None:
     render_dashboard_page()
 
 
-def _docs_page_entry() -> None:
-    """Single-page entrypoint for Docs: setup + render."""
+def _about_page_entry() -> None:
+    """Single-page entrypoint for About: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.docs import render_docs_page
+    from handoff.pages.about import render_about_page
 
     ui.setup("2026.2.24")
-    render_docs_page()
+    render_about_page()
 
 
 def _now_page_entry() -> None:
@@ -127,9 +127,9 @@ def test_projects_page_archived_toggle_survives_models_reload(app_test_db: Path)
     assert len(at.get("subheader")) >= 1
 
 
-def test_settings_page_renders_with_app_test(app_test_db: Path) -> None:
-    """Settings page renders (smoke test)."""
-    at = AppTest.from_function(_settings_page_entry)
+def test_system_settings_page_renders_with_app_test(app_test_db: Path) -> None:
+    """System Settings page renders (smoke test)."""
+    at = AppTest.from_function(_system_settings_page_entry)
     at.run(timeout=5)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("markdown")) >= 1
@@ -143,9 +143,9 @@ def test_dashboard_page_renders_with_app_test(app_test_db: Path) -> None:
     assert len(at.get("metric")) >= 4
 
 
-def test_docs_page_renders_with_app_test(app_test_db: Path) -> None:
-    """Docs page renders (smoke test)."""
-    at = AppTest.from_function(_docs_page_entry)
+def test_about_page_renders_with_app_test(app_test_db: Path) -> None:
+    """About page renders (smoke test)."""
+    at = AppTest.from_function(_about_page_entry)
     at.run(timeout=5)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("tabs")) >= 1 or len(at.get("markdown")) >= 1
@@ -300,13 +300,13 @@ def test_projects_create_form_submit_no_error(app_test_db: Path) -> None:
     assert len(at.exception) == 0
 
 
-def test_docs_page_tab_switch_no_error(app_test_db: Path) -> None:
-    """Switching docs page tabs (README / Release notes) does not raise."""
-    at = AppTest.from_function(_docs_page_entry)
+def test_about_page_tab_switch_no_error(app_test_db: Path) -> None:
+    """Switching About page tabs (README / Release notes) does not raise."""
+    at = AppTest.from_function(_about_page_entry)
     at.run(timeout=5)
     assert len(at.exception) == 0
 
     tabs = at.tabs
-    assert len(tabs) == 2, f"Expected exactly 2 tabs on Docs page, got {len(tabs)}"
+    assert len(tabs) == 2, f"Expected exactly 2 tabs on About page, got {len(tabs)}"
     tabs[1].run(timeout=5)  # Switch to Release notes tab
     assert len(at.exception) == 0

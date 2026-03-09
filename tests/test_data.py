@@ -134,6 +134,27 @@ def test_list_helpers_canonicalization(session, monkeypatch) -> None:
     assert helpers == ["Alice", "BOB"]
 
 
+def test_list_helpers_with_open_handoffs(session, monkeypatch) -> None:
+    """list_helpers_with_open_handoffs returns only helpers with open handoffs."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    session.add(Todo(project_id=p.id, name="t1", status=TodoStatus.HANDOFF, helper="Alice"))
+    session.add(Todo(project_id=p.id, name="t2", status=TodoStatus.DONE, helper="Bob"))
+    session.add(Todo(project_id=p.id, name="t3", status=TodoStatus.HANDOFF, helper="Carol"))
+    session.add(
+        Todo(project_id=p.id, name="t4", status=TodoStatus.HANDOFF, is_archived=True, helper="Dave")
+    )
+    session.commit()
+
+    helpers = data.list_helpers_with_open_handoffs()
+    assert helpers == ["Alice", "Carol"]
+    assert "Bob" not in helpers
+    assert "Dave" not in helpers
+
+
 def test_query_todos_filters(session, monkeypatch) -> None:
     """Verify query_todos with multiple filter combinations."""
     _patch_session_context(monkeypatch, session)

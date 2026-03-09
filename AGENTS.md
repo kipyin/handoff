@@ -144,15 +144,16 @@ Extract and run `./handoff.sh`. Future work may add a signed `.app` bundle.
 
 ## Active pages
 
-The navigation in `app.py` exposes five pages:
+The navigation in `app.py` exposes five pages in two groups: main (Now, Dashboard) and
+Settings (Projects, About, System Settings).
 
 | Page | Icon | Module |
 |------|------|--------|
 | Now | 🎯 | `pages/now.py` (`render_now_page`) |
 | Projects | 📁 | `pages/projects.py` |
 | Dashboard | 📊 | `pages/dashboard.py` (`render_dashboard_page`) |
-| Settings | ⚙️ | `pages/settings.py` |
-| Docs | 📖 | `pages/docs.py` |
+| About | 📖 | `pages/about.py` (`render_about_page`) |
+| System Settings | ⚙️ | `pages/system_settings.py` (`render_system_settings_page`) |
 
 There is no Calendar page.
 

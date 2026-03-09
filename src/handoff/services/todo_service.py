@@ -7,6 +7,7 @@ from datetime import date, datetime
 from handoff.data import create_todo as _create_todo
 from handoff.data import delete_todo as _delete_todo
 from handoff.data import list_helpers as _list_helpers
+from handoff.data import list_helpers_with_open_handoffs as _list_helpers_with_open_handoffs
 from handoff.data import query_now_items as _query_now_items
 from handoff.data import query_todos as _query_todos
 from handoff.data import query_upcoming_handoffs as _query_upcoming_handoffs
@@ -82,12 +83,21 @@ def list_helpers() -> list[str]:
     return _list_helpers()
 
 
+def list_helpers_with_open_handoffs() -> list[str]:
+    """List helpers who have at least one open handoff. For Now page Who filter."""
+    return _list_helpers_with_open_handoffs()
+
+
 def query_now_items(
     *,
     project_ids: list[int] | None = None,
     helper_names: list[str] | None = None,
     search_text: str | None = None,
     deadline_near_days: int = 1,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
 ) -> list[tuple[Todo, bool]]:
     """Return open items that need attention on the Now page.
 
@@ -99,6 +109,10 @@ def query_now_items(
         helper_names=helper_names,
         search_text=search_text,
         deadline_near_days=deadline_near_days,
+        next_check_min=next_check_min,
+        next_check_max=next_check_max,
+        deadline_min=deadline_min,
+        deadline_max=deadline_max,
     )
 
 
@@ -109,6 +123,10 @@ def query_upcoming_handoffs(
     search_text: str | None = None,
     deadline_near_days: int = 1,
     limit: int = 20,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
 ) -> list[Todo]:
     """Return handoffs that are not yet action-required (upcoming).
 
@@ -120,6 +138,10 @@ def query_upcoming_handoffs(
         search_text=search_text,
         deadline_near_days=deadline_near_days,
         limit=limit,
+        next_check_min=next_check_min,
+        next_check_max=next_check_max,
+        deadline_min=deadline_min,
+        deadline_max=deadline_max,
     )
 
 

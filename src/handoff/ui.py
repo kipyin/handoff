@@ -10,10 +10,10 @@ import streamlit as st
 
 from .db import DatabaseInitializationError, init_db
 from .logging import configure_logging
+from .pages.about import render_about_page as _render_about_page_impl
 from .pages.dashboard import render_dashboard_page as _render_dashboard_page_impl
-from .pages.docs import render_docs_page as _render_docs_page_impl
 from .pages.projects import render_projects_page as _render_projects_page_impl
-from .pages.settings import render_settings_page as _render_settings_page_impl
+from .pages.system_settings import render_system_settings_page as _render_system_settings_page_impl
 
 
 def setup(app_version: str) -> None:
@@ -50,20 +50,20 @@ def render_dashboard_page() -> None:
     _render_dashboard_page_impl()
 
 
-def render_settings_page() -> None:
-    """Render the settings and about page."""
-    _render_settings_page_impl()
+def render_about_page() -> None:
+    """Render the combined About page (README + release notes)."""
+    _render_about_page_impl()
 
 
-def render_docs_page() -> None:
-    """Render the combined docs page (README + release notes)."""
-    _render_docs_page_impl()
+def render_system_settings_page() -> None:
+    """Render the System Settings and About page."""
+    _render_system_settings_page_impl()
 
 
 __all__ = [
     "setup",
     "render_projects_page",
     "render_dashboard_page",
-    "render_settings_page",
-    "render_docs_page",
+    "render_about_page",
+    "render_system_settings_page",
 ]

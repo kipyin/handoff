@@ -33,6 +33,7 @@ Apply tags in this order. Use the first tag that matches.
 ## 2026.3.9 [Internal]
 
 - **Internal**
+  - **Nav and page renames:** Docs → About, Settings → System Settings, "More" nav group → Settings. Page modules renamed to match: `pages/about.py`, `pages/system_settings.py`.
   - **Todo page removal:** Removed deprecated Todos page code: `pages/todos.py`, `render_todos_page`, TodoRow/TodoMutationDefaults/TodoUpdateInput/TodoCreateInput from page_models, and related tests. Now page unchanged; handoffs managed via Now (add, edit, snooze, close).
 
 ## 2026.3.8 [Recommended]
