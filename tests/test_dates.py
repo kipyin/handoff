@@ -3,6 +3,7 @@
 from datetime import date
 
 from handoff.dates import (
+    add_business_days,
     format_date_smart,
     format_next_check,
     format_risk_reason,
@@ -121,3 +122,25 @@ def test_week_bounds_sunday() -> None:
     mon, sun = week_bounds(date(2026, 3, 1))
     assert mon == date(2026, 2, 23)
     assert sun == date(2026, 3, 1)
+
+
+def test_add_business_days_midweek() -> None:
+    """Mon-Thu + 1 biz day = next calendar day."""
+    assert add_business_days(date(2026, 3, 9), 1) == date(2026, 3, 10)  # Mon -> Tue
+    assert add_business_days(date(2026, 3, 11), 1) == date(2026, 3, 12)  # Wed -> Thu
+
+
+def test_add_business_days_friday() -> None:
+    """Fri + 1 biz day = next Monday."""
+    assert add_business_days(date(2026, 3, 13), 1) == date(2026, 3, 16)  # Fri -> Mon
+
+
+def test_add_business_days_weekend() -> None:
+    """Sat/Sun + 1 biz day = next Monday."""
+    assert add_business_days(date(2026, 3, 14), 1) == date(2026, 3, 16)  # Sat -> Mon
+    assert add_business_days(date(2026, 3, 15), 1) == date(2026, 3, 16)  # Sun -> Mon
+
+
+def test_add_business_days_multiple() -> None:
+    """Multiple business days."""
+    assert add_business_days(date(2026, 3, 13), 2) == date(2026, 3, 17)  # Fri +2 -> Tue

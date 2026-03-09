@@ -112,3 +112,22 @@ def week_bounds(reference: date) -> tuple[date, date]:
     monday = reference - timedelta(days=weekday)
     sunday = monday + timedelta(days=6)
     return monday, sunday
+
+
+def add_business_days(base: date, n: int = 1) -> date:
+    """Return the date n business days after base. Skips Saturday and Sunday.
+
+    Args:
+        base: The starting date.
+        n: Number of business days to add. Defaults to 1.
+
+    Returns:
+        The date n business days after base.
+
+    """
+    result = base
+    for _ in range(n):
+        result += timedelta(days=1)
+        while result.weekday() >= 5:  # Sat=5, Sun=6
+            result += timedelta(days=1)
+    return result
