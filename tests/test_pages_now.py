@@ -38,6 +38,7 @@ def test_render_now_page_with_projects_queries_items(monkeypatch: pytest.MonkeyP
         return []
 
     monkeypatch.setattr("handoff.pages.now.query_now_items", capture_query)
+    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kwargs: [])
     render_now_page()
     assert len(query_calls) == 1
     assert "project_ids" in query_calls[0]

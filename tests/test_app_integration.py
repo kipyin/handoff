@@ -224,8 +224,8 @@ def test_now_page_close_button_marks_todo_done(app_test_db: Path) -> None:
     assert updated.completed_at is not None
 
 
-def test_now_page_snooze_plus_one_day_updates_next_check(app_test_db: Path) -> None:
-    """Clicking +1d snooze updates the todo next_check date."""
+def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
+    """Clicking Snooze updates the todo next_check to the selected date."""
     db.init_db()
     project = data.create_project("Now Snooze Test")
     assert project.id is not None
@@ -237,20 +237,21 @@ def test_now_page_snooze_plus_one_day_updates_next_check(app_test_db: Path) -> N
     )
     assert todo.id is not None
     start_today = date.today()
+    target_date = start_today + timedelta(days=3)
 
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    plus_one_buttons = [b for b in at.button if getattr(b, "label", None) == "+1d"]
-    assert plus_one_buttons, "Expected +1d snooze button not found on Now page"
-    plus_one_buttons[0].click().run(timeout=5)
+    snooze_buttons = [b for b in at.button if getattr(b, "label", None) == "Snooze"]
+    assert snooze_buttons, "Expected Snooze button not found on Now page"
+    snooze_buttons[0].click().run(timeout=5)
     assert len(at.exception) == 0
 
     todos = data.query_todos(project_ids=[project.id])
     updated = next((t for t in todos if t.id == todo.id), None)
     assert updated is not None
-    expected_dates = {start_today + timedelta(days=1), date.today() + timedelta(days=1)}
+    expected_dates = {target_date, date.today() + timedelta(days=3)}
     assert updated.next_check in expected_dates
     assert updated.status == TodoStatus.HANDOFF
 
@@ -260,7 +261,7 @@ def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
     at = AppTest.from_file(str(WORKSPACE / "app.py"))
     at.run(timeout=5)
     assert len(at.exception) == 0
-    # First page (Todos) should render; we expect at least a subheader or info
+    # First page (Now) should render; we expect at least a subheader or info
     assert len(at.get("subheader")) >= 1 or len(at.get("info")) >= 1
 
 
