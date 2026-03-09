@@ -2,6 +2,34 @@
 
 Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** where applicable. Version headings keep an impact tag: `[Breaking]`, `[Recommended]`, or `[Optional]`.
 
+**Release tag criteria**
+
+Apply tags in this order. Use the first tag that matches.
+
+- **`[Breaking]`** — Use when this release contains **any** of:
+  - Changes to `handoff.bat` or `handoff.sh` (launcher scripts)
+  - Python runtime version bump (e.g. 3.13 → 3.14)
+  - New or upgraded runtime dependencies in `pyproject.toml`
+  - Structural changes to the build layout (e.g. embedded Python path, app root logic)
+
+  If any of the above apply, users must do a full reinstall; a patch zip cannot update these.
+
+- **`[Recommended]`** — Use when this release includes changes that **users will notice** and that **can** be applied via patch:
+  - Bug fixes (autosave, filters, updater, etc.)
+  - New features or UI changes
+  - Improvements to existing behavior (performance, UX, feedback messages)
+
+  Rule of thumb: Would a typical user care? Can it ship in a patch? → [Recommended].
+
+- **`[Optional]`** — Use when this release contains **only** changes that users do not see and that do not require a full reinstall:
+  - Refactoring, code reorg, type hints
+  - New or expanded tests
+  - Build script or CI changes (other than launcher/runtime)
+  - Doc updates (README, AGENTS.md, in-code comments)
+  - Ruff/formatting cleanup, pyright fixes
+
+  Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
+
 ## 2026.3.8 [Recommended]
 
 - **Feature**
@@ -19,6 +47,7 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
 - **Breaking**
   - **Todos page removed:** Todos table removed from nav; manage handoffs on Now (add, edit, snooze, close). `render_todos_page` kept for backward compatibility.
 - **Internal**
+  - **Release tag criteria:** Documented `[Breaking]`, `[Recommended]`, `[Optional]` criteria in RELEASE_NOTES.md and AGENTS.md.
   - **dates.add_business_days:** New helper for snooze default; tests in test_dates.py.
   - **Gitee CI removed:** Dropped .gitee-pipeline.yml and .gitee/workflows; CI runs on GitHub only.
   - **Planning docs removed:** Removed docs/ (product-architecture-plan, dashboard-ideas, release plan); AGENTS.md is canonical dev guide.

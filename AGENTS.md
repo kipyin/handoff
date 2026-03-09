@@ -100,7 +100,7 @@ Project layout: `app.py` (entrypoint), `src/handoff/` (package), `pages/`, `serv
 2. Make focused commits.
 3. Bump CalVer when shipping user-visible changes (use `bump`).
 4. Add `## YYYY.M.MINOR [Tag]` to `RELEASE_NOTES.md` — use **Fix**, **Feature**, **Improvement**, **Internal** bullets.
-5. Impact tags: `[Breaking]`, `[Recommended]`, `[Optional]`.
+5. Impact tags: `[Breaking]` if launcher, Python version, deps, or build layout changed (full reinstall required); `[Recommended]` if user-visible changes that patch can deliver; `[Optional]` if internal-only (refactor, tests, build/CI, docs).
 
 ### Release workflow checklist
 
