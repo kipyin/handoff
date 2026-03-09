@@ -30,11 +30,14 @@ Apply tags in this order. Use the first tag that matches.
 
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
 
-## 2026.3.9 [Internal]
+## 2026.3.9 [Recommended]
 
+- **Improvement**
+  - **Now page search:** Natural-language date filters in the search box (e.g. "next week", "tomorrow"); parsed bounds filter handoffs by date.
+  - **Now page Who filter:** "Who" dropdown limited to helpers who have at least one open handoff.
 - **Internal**
   - **Nav and page renames:** Docs → About, Settings → System Settings, "More" nav group → Settings. Page modules renamed to match: `pages/about.py`, `pages/system_settings.py`.
-  - **Todo page removal:** Removed deprecated Todos page code: `pages/todos.py`, `render_todos_page`, TodoRow/TodoMutationDefaults/TodoUpdateInput/TodoCreateInput from page_models, and related tests. Now page unchanged; handoffs managed via Now (add, edit, snooze, close).
+  - **Todo page removal:** Removed deprecated Todos page code: `pages/todos.py`, `render_todos_page`, TodoRow/TodoMutationDefaults/TodoUpdateInput/TodoCreateInput from page_models, and related tests. Handoffs managed via Now (add, edit, snooze, close).
 
 ## 2026.3.8 [Recommended]
 

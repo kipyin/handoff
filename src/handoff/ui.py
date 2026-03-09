@@ -56,7 +56,7 @@ def render_about_page() -> None:
 
 
 def render_system_settings_page() -> None:
-    """Render the System Settings and About page."""
+    """Render the System Settings page."""
     _render_system_settings_page_impl()
 
 

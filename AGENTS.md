@@ -144,8 +144,7 @@ Extract and run `./handoff.sh`. Future work may add a signed `.app` bundle.
 
 ## Active pages
 
-The navigation in `app.py` exposes five pages in two groups: main (Now, Dashboard) and
-Settings (Projects, About, System Settings).
+The navigation in `app.py` exposes five pages: Now and Dashboard in the first (unlabeled) group, and Projects, About, and System Settings under the "Settings" group.
 
 | Page | Icon | Module |
 |------|------|--------|
