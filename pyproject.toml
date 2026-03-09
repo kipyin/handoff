@@ -1,6 +1,6 @@
 [project]
 name = "handoff"
-version = "2026.3.8"
+version = "2026.3.9"
 description = "Handoff — see who's on the hook across all your projects."
 readme = "README.md"
 requires-python = ">=3.13"

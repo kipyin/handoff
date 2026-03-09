@@ -30,6 +30,11 @@ Apply tags in this order. Use the first tag that matches.
 
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
 
+## 2026.3.9 [Internal]
+
+- **Internal**
+  - **Todo page removal:** Removed deprecated Todos page code: `pages/todos.py`, `render_todos_page`, TodoRow/TodoMutationDefaults/TodoUpdateInput/TodoCreateInput from page_models, and related tests. Now page unchanged; handoffs managed via Now (add, edit, snooze, close).
+
 ## 2026.3.8 [Recommended]
 
 - **Feature**
