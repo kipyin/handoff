@@ -580,6 +580,69 @@ def query_now_items(
     return result
 
 
+def query_upcoming_handoffs(
+    *,
+    project_ids: list[int] | None = None,
+    helper_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 2,
+    limit: int = 20,
+) -> list[Todo]:
+    """Return handoff items that are not yet action-required (upcoming).
+
+    An item is upcoming if next_check is in the future and deadline is not
+    at risk (within deadline_near_days). Sorted by next_check asc.
+
+    Args:
+        project_ids: Optional filter by project ids.
+        helper_names: Optional filter by helper names.
+        search_text: Optional search in name, notes, helper, project name.
+        deadline_near_days: Cutoff for "at risk" (deadline > today + N is safe).
+        limit: Maximum number of results.
+
+    Returns:
+        List of Todo models with project loaded, ordered by next_check.
+
+    """
+    today = date.today()
+    cutoff = today + timedelta(days=deadline_near_days)
+
+    with session_context() as session:
+        stmt = (
+            select(Todo)
+            .options(selectinload(Todo.project))
+            .where(Todo.is_archived.is_(False))
+            .where(Todo.status == TodoStatus.HANDOFF)
+            .where(Todo.next_check.isnot(None))
+            .where(Todo.next_check > today)
+            .where(
+                (Todo.deadline.is_(None)) | (Todo.deadline > cutoff)
+            )
+        )
+        if project_ids:
+            stmt = stmt.where(Todo.project_id.in_(project_ids))
+        if helper_names:
+            canonical = [n.strip() for n in helper_names if n.strip()]
+            if canonical:
+                stmt = stmt.where(Todo.helper.in_(canonical))
+        normalized_search = (search_text or "").strip()
+        if normalized_search:
+            like_expr = f"%{normalized_search}%"
+            stmt = stmt.where(
+                or_(
+                    Todo.name.ilike(like_expr),
+                    Todo.notes.ilike(like_expr),
+                    Todo.helper.ilike(like_expr),
+                    Todo.project.has(Project.name.ilike(like_expr)),
+                )
+            )
+
+        stmt = stmt.order_by(Todo.next_check.asc()).limit(limit)
+        todos = list(session.exec(stmt).all())
+
+    return todos
+
+
 def list_helpers() -> list[str]:
     """Return all distinct helper names (plain string column), sorted.
 

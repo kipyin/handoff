@@ -30,6 +30,7 @@ from handoff.services.todo_service import (
     list_helpers,
     query_now_items,
     query_todos,
+    query_upcoming_handoffs,
     snooze_todo,
     update_todo,
 )
@@ -56,6 +57,7 @@ __all__ = [
     "list_projects",
     "query_now_items",
     "query_todos",
+    "query_upcoming_handoffs",
     "snooze_todo",
     "rename_project",
     "unarchive_project",

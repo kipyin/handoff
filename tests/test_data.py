@@ -603,6 +603,56 @@ def test_query_now_items(session, monkeypatch) -> None:
     assert "Check due" not in at_risk_names
 
 
+def test_query_upcoming_handoffs(session, monkeypatch) -> None:
+    """query_upcoming_handoffs returns handoffs with next_check in future and deadline not at risk."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    today = date(2026, 3, 9)
+    tomorrow = date(2026, 3, 10)
+
+    t1 = Todo(
+        project_id=p.id,
+        name="Upcoming",
+        status=TodoStatus.HANDOFF,
+        next_check=tomorrow,
+        deadline=None,
+    )
+    t2 = Todo(
+        project_id=p.id,
+        name="Also upcoming",
+        status=TodoStatus.HANDOFF,
+        next_check=date(2026, 3, 15),
+        deadline=date(2026, 3, 20),
+    )
+    t3 = Todo(
+        project_id=p.id,
+        name="Due soon",
+        status=TodoStatus.HANDOFF,
+        next_check=tomorrow,
+        deadline=tomorrow,
+    )
+    session.add_all([t1, t2, t3])
+    session.commit()
+
+    results = data.query_upcoming_handoffs(deadline_near_days=2)
+    names = [r.name for r in results]
+    assert "Upcoming" in names
+    assert "Also upcoming" in names
+    assert "Due soon" not in names
+
+
 # ---------------------------------------------------------------------------
 # import_payload tests
 # ---------------------------------------------------------------------------

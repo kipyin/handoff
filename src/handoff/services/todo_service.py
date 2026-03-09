@@ -9,6 +9,7 @@ from handoff.data import delete_todo as _delete_todo
 from handoff.data import list_helpers as _list_helpers
 from handoff.data import query_now_items as _query_now_items
 from handoff.data import query_todos as _query_todos
+from handoff.data import query_upcoming_handoffs as _query_upcoming_handoffs
 from handoff.data import snooze_todo as _snooze_todo
 from handoff.data import update_todo as _update_todo
 from handoff.models import Todo, TodoStatus
@@ -98,6 +99,27 @@ def query_now_items(
         helper_names=helper_names,
         search_text=search_text,
         deadline_near_days=deadline_near_days,
+    )
+
+
+def query_upcoming_handoffs(
+    *,
+    project_ids: list[int] | None = None,
+    helper_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 2,
+    limit: int = 20,
+) -> list[Todo]:
+    """Return handoffs that are not yet action-required (upcoming).
+
+    Items with next_check in the future and deadline not at risk.
+    """
+    return _query_upcoming_handoffs(
+        project_ids=project_ids,
+        helper_names=helper_names,
+        search_text=search_text,
+        deadline_near_days=deadline_near_days,
+        limit=limit,
     )
 
 
