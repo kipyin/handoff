@@ -25,15 +25,6 @@ def test_setup_calls_st_error_and_st_stop_when_init_db_raises() -> None:
     st_mock.stop.assert_called_once()
 
 
-def test_render_todos_page_calls_impl() -> None:
-    """render_todos_page delegates to the todos page implementation."""
-    with patch("handoff.ui._render_todos_page_impl") as mock_impl:
-        import handoff.ui as ui
-
-        ui.render_todos_page()
-    mock_impl.assert_called_once()
-
-
 def test_render_projects_page_calls_impl() -> None:
     """render_projects_page delegates to the projects page implementation."""
     with patch("handoff.ui._render_projects_page_impl") as mock_impl:

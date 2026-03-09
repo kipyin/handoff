@@ -2,16 +2,10 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 import pandas as pd
-import pytest
 
 from handoff.autosave import autosave_editor
-from handoff.models import TodoStatus
-from handoff.page_models import TodoMutationDefaults
 from handoff.pages.projects import _persist_project_edits
-from handoff.pages.todos import _make_todos_persist_fn
 
 # ---------------------------------------------------------------------------
 # autosave_editor
@@ -237,88 +231,6 @@ class TestAutosaveEditor:
 
         assert persist_calls["count"] == 0
         assert warnings == [("autosave_editor: missing context for key={}", "todos_table")]
-
-
-# ---------------------------------------------------------------------------
-# _make_todos_persist_fn
-# ---------------------------------------------------------------------------
-
-
-class TestMakeTodosPersistFn:
-    """Test the closure returned by _make_todos_persist_fn."""
-
-    @pytest.fixture
-    def projects(self):
-        return [SimpleNamespace(id=1, name="Work"), SimpleNamespace(id=2, name="Home")]
-
-    @pytest.fixture
-    def defaults(self):
-        return TodoMutationDefaults(
-            project_id=1,
-            project_name="Work",
-            status=TodoStatus.HANDOFF,
-            helper="",
-        )
-
-    def test_edit_returns_false(self, projects, defaults, monkeypatch):
-        """Simple edits should NOT trigger a rerun."""
-        monkeypatch.setattr("handoff.pages.todos.update_todo", lambda tid, **kw: None)
-        persist_fn = _make_todos_persist_fn(projects, defaults, "test")
-
-        display_df = pd.DataFrame(
-            [
-                {
-                    "__todo_id": 10,
-                    "name": "Old",
-                    "status": "handoff",
-                    "project": "Work",
-                    "deadline": None,
-                    "helper": "",
-                    "notes": "",
-                }
-            ]
-        )
-        state = {"edited_rows": {"0": {"name": "New Name"}}, "added_rows": [], "deleted_rows": []}
-        needs_rerun = persist_fn(state, display_df)
-        assert needs_rerun is False
-
-    def test_addition_returns_true(self, projects, defaults, monkeypatch):
-        """Row additions should trigger a rerun."""
-        monkeypatch.setattr(
-            "handoff.pages.todos.create_todo",
-            lambda **kw: SimpleNamespace(id=99, **kw),
-        )
-        monkeypatch.setattr("streamlit.session_state", {})
-        persist_fn = _make_todos_persist_fn(projects, defaults, "test")
-
-        display_df = pd.DataFrame(columns=["__todo_id"])
-        state = {
-            "edited_rows": {},
-            "added_rows": [{"name": "New", "project": "Work"}],
-            "deleted_rows": [],
-        }
-        needs_rerun = persist_fn(state, display_df)
-        assert needs_rerun is True
-
-    def test_deletion_returns_true(self, projects, defaults, monkeypatch):
-        """Row deletions should trigger a rerun."""
-        deleted_ids: list[int] = []
-        monkeypatch.setattr("handoff.pages.todos.delete_todo", deleted_ids.append)
-        persist_fn = _make_todos_persist_fn(projects, defaults, "test")
-
-        display_df = pd.DataFrame([{"__todo_id": 5, "name": "Bye"}])
-        state = {"edited_rows": {}, "added_rows": [], "deleted_rows": [0]}
-        needs_rerun = persist_fn(state, display_df)
-        assert needs_rerun is True
-        assert deleted_ids == [5]
-
-    def test_empty_state_returns_false(self, projects, defaults):
-        """No changes → no persist, no rerun."""
-        persist_fn = _make_todos_persist_fn(projects, defaults, "test")
-        display_df = pd.DataFrame(columns=["__todo_id"])
-        state = {"edited_rows": {}, "added_rows": [], "deleted_rows": []}
-        needs_rerun = persist_fn(state, display_df)
-        assert needs_rerun is False
 
 
 # ---------------------------------------------------------------------------

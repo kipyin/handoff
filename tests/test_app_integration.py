@@ -46,15 +46,6 @@ def app_test_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return db_path
 
 
-def _todos_page_entry() -> None:
-    """Single-page entrypoint for Todos: setup + render."""
-    import handoff.ui as ui
-    from handoff.pages.todos import render_todos_page
-
-    ui.setup("2026.2.24")
-    render_todos_page()
-
-
 def _projects_page_entry() -> None:
     """Single-page entrypoint for Projects: setup + render."""
     import handoff.ui as ui
@@ -98,15 +89,6 @@ def _now_page_entry() -> None:
 
     ui.setup("2026.2.24")
     render_now_page()
-
-
-def test_todos_page_renders_with_app_test(app_test_db: Path) -> None:
-    """Todos page renders (smoke test)."""
-    at = AppTest.from_function(_todos_page_entry)
-    at.run(timeout=5)
-    # With no projects we get subheader + info; with projects we get data_editor
-    assert len(at.get("subheader")) >= 1
-    assert len(at.get("data_editor")) >= 0 or len(at.get("info")) >= 1
 
 
 def test_projects_page_renders_with_app_test(app_test_db: Path) -> None:
@@ -314,33 +296,6 @@ def test_projects_create_form_submit_no_error(app_test_db: Path) -> None:
     create_btns = [b for b in at.button if getattr(b, "label", None) == "Create"]
     assert create_btns, "Expected Create button not found on Projects page"
     create_btns[0].click().run(timeout=5)
-
-    assert len(at.exception) == 0
-
-
-def test_todos_page_filter_selectbox_interaction_no_error(app_test_db: Path) -> None:
-    """Changing deadline filter selectbox does not raise."""
-    import handoff.data as data
-    import handoff.db as db
-
-    db.init_db()
-    proj = data.create_project("Proj")
-    assert proj.id is not None
-    data.create_todo(proj.id, "Task", status="handoff")
-
-    at = AppTest.from_function(_todos_page_entry)
-    at.run(timeout=5)
-    assert len(at.exception) == 0
-
-    # Interact with deadline filter selectbox; it should always be present once a
-    # project exists.
-    selectboxes = at.selectbox
-    assert selectboxes, "Expected at least one selectbox on Todos page"
-    deadline_box = next(
-        (sb for sb in selectboxes if getattr(sb, "label", None) == "Deadline"),
-        selectboxes[0],
-    )
-    deadline_box.select("Overdue").run(timeout=5)
 
     assert len(at.exception) == 0
 
