@@ -7,8 +7,10 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
 - **Feature**
   - **Now page editing:** Handoffs can be edited inline (Edit) with project, who, need back, next check, deadline, context.
   - **Upcoming section:** Now page shows handoffs not yet due (next_check in future, deadline not at risk).
+- **Fix**
+  - **Actions popover:** Date picker no longer auto-opens when opening Actions (Edit/Close shown first).
 - **Improvement**
-  - **Now page layout:** Expanders collapsed by default; header shows project, who, need back, next check, deadline; actions compacted (Snooze, Edit, Close).
+  - **Now page layout:** Expanders collapsed by default; header shows project, who, need back, next check, deadline; actions compacted (Edit, Close, then date picker + Snooze); separator removed from Actions dropdown.
   - **Now page style:** Google-style docstrings, typed contracts (dict[str, Project]), single source for project_by_name; snooze default one business day via add_business_days.
   - **Risk badge:** Specific reasons (e.g. "Risk — due today", "Risk — due tomorrow", "Risk — overdue").
   - **Docs consolidation:** Merged STYLE.md and CONTRIBUTING.md into AGENTS.md; README points to AGENTS.md.
