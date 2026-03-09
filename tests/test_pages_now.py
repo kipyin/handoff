@@ -110,6 +110,7 @@ def test_render_now_page_queries_phase2_sections(monkeypatch: pytest.MonkeyPatch
     assert len(concluded_calls) == 1
     assert "project_ids" in risk_calls[0]
     assert "pitchman_names" in action_calls[0]
+    assert concluded_calls[0]["include_archived_projects"] is True
 
 
 def test_render_now_page_action_item_shows_check_in_buttons(

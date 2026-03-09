@@ -473,7 +473,7 @@ def render_now_page() -> None:
         project_ids=project_ids,
         pitchman_names=pitchman_names,
         search_text=parsed.text_query,
-        include_archived_projects=False,
+        include_archived_projects=True,
     )
 
     _render_add_form(project_by_name, pitchmen, "now")
