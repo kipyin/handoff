@@ -64,6 +64,7 @@ def test_render_now_page_with_projects_queries_items(monkeypatch: pytest.MonkeyP
 
     monkeypatch.setattr("handoff.pages.now.query_now_items", capture_query)
     monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kwargs: [])
+    monkeypatch.setattr("handoff.pages.now.query_todos", lambda **kwargs: [])
     render_now_page()
     assert len(query_calls) == 1
     assert "project_ids" in query_calls[0]
@@ -111,6 +112,7 @@ def test_render_now_page_with_action_required_items_renders_expanders_and_button
         "handoff.pages.now.query_upcoming_handoffs",
         lambda **kw: [todo_upcoming],
     )
+    monkeypatch.setattr("handoff.pages.now.query_todos", lambda **kw: [])
     render_now_page()
     assert st_mock.expander.call_count >= 2
     button_labels = [c[0][0] for c in st_mock.button.call_args_list if c[0]]
@@ -142,7 +144,7 @@ def test_render_now_page_closed_expander_queries_todos(monkeypatch: pytest.Monke
     st_mock.expander.return_value = Ctx()
     st_mock.popover.return_value = Ctx()
     st_mock.form.return_value = Ctx()
-    st_mock.dataframe.return_value = MagicMock(selection=MagicMock(rows=[]))
+    st_mock.dataframe.return_value = {"selection": {"rows": []}}
 
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -197,8 +199,7 @@ def test_render_now_page_reopen_calls_update_todo(monkeypatch: pytest.MonkeyPatc
     closed_todo.completed_at = None
     closed_todo.created_at = MagicMock()
 
-    event_mock = MagicMock()
-    event_mock.selection.rows = [0]
+    event_mock = {"selection": {"rows": [0]}}
 
     st_mock.dataframe.return_value = event_mock
 
@@ -265,6 +266,7 @@ def test_render_now_page_with_editing_shows_form(monkeypatch: pytest.MonkeyPatch
         lambda **kw: [(todo_action, False)],
     )
     monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_todos", lambda **kw: [])
     render_now_page()
     st_mock.form.assert_called()
     assert any("edit" in str(c).lower() for c in st_mock.form.call_args_list)

@@ -451,8 +451,10 @@ def render_now_page() -> None:
                 on_select="rerun",
                 selection_mode="multi-row",
             )
-            if event.selection.rows and st.button("Reopen selected", key="now_reopen_btn"):
-                for row_idx in event.selection.rows:
+            selection = event.get("selection")
+            rows = selection.get("rows", []) if selection else []
+            if rows and st.button("Reopen selected", key="now_reopen_btn"):
+                for row_idx in rows:
                     if 0 <= row_idx < len(closed_sorted):
                         todo = closed_sorted[row_idx]
                         if todo.id:
