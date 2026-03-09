@@ -8,7 +8,13 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from handoff.pages.now import render_now_page
+from handoff.models import CheckIn, CheckInType
+from handoff.pages.now import (
+    _check_in_header,
+    _is_check_in_due,
+    _render_check_in_trail,
+    render_now_page,
+)
 
 
 def _make_fake_handoff(
@@ -169,3 +175,200 @@ def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.Mon
 
     assert st_mock.expander.call_count >= 2  # add-form + concluded item
     st_mock.dataframe.assert_not_called()
+
+
+def test_render_now_page_risk_section_renders_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Risk items appear in the Risk section with their expanders."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
+    risk_handoff = _make_fake_handoff(
+        handoff_id=2,
+        need_back="At risk",
+        deadline=date(2026, 3, 9),
+    )
+    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [risk_handoff])
+    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+
+    render_now_page()
+
+    expander_headers = [str(call[0][0]) for call in st_mock.expander.call_args_list]
+    assert any("At risk" in h for h in expander_headers)
+
+
+def test_render_now_page_upcoming_section_renders_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Upcoming items appear in the Upcoming section with their expanders."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
+    upcoming_handoff = _make_fake_handoff(
+        handoff_id=3,
+        need_back="Check later",
+        next_check=date(2026, 4, 1),
+    )
+    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.query_upcoming_handoffs", lambda **kw: [upcoming_handoff]
+    )
+    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+
+    render_now_page()
+
+    expander_headers = [str(call[0][0]) for call in st_mock.expander.call_args_list]
+    assert any("Check later" in h for h in expander_headers)
+
+
+def test_render_now_page_item_with_context_renders_markdown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Items with notes display context markdown inside the expander."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
+    handoff_with_notes = _make_fake_handoff(
+        handoff_id=4,
+        need_back="Has notes",
+        notes="Important context here",
+    )
+    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.query_upcoming_handoffs", lambda **kw: [handoff_with_notes]
+    )
+    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+
+    render_now_page()
+
+    markdown_calls = [str(c) for c in st_mock.markdown.call_args_list]
+    assert any("Important context here" in c for c in markdown_calls)
+
+
+# --- Unit tests for _check_in_header ---
+
+
+def _make_check_in(
+    check_in_type: CheckInType = CheckInType.ON_TRACK,
+    note: str | None = None,
+    check_in_date: date = date(2026, 3, 9),
+) -> CheckIn:
+    return CheckIn(
+        id=1,
+        handoff_id=1,
+        check_in_type=check_in_type,
+        check_in_date=check_in_date,
+        note=note,
+    )
+
+
+def test_check_in_header_no_note() -> None:
+    """Header with no note returns base label + date only."""
+    ci = _make_check_in(check_in_type=CheckInType.ON_TRACK, note=None)
+    header = _check_in_header(ci)
+    assert "[On Track]" in header
+    assert " — " not in header
+
+
+def test_check_in_header_with_short_note() -> None:
+    """Header with a short note appends the note after a dash."""
+    ci = _make_check_in(note="All good")
+    header = _check_in_header(ci)
+    assert "All good" in header
+    assert " — " in header
+
+
+def test_check_in_header_with_long_note_truncates() -> None:
+    """Header with a note longer than 40 chars is truncated with an ellipsis."""
+    long_note = "A" * 50
+    ci = _make_check_in(note=long_note)
+    header = _check_in_header(ci)
+    assert "…" in header
+    # Preview should be truncated to 40 chars + ellipsis
+    parts = header.split(" — ")
+    assert len(parts[1]) <= 41  # 40 chars + "…"
+
+
+def test_check_in_header_multiline_note_flattened() -> None:
+    """Newlines in the note are replaced with spaces in the header preview."""
+    ci = _make_check_in(note="Line one\nLine two")
+    header = _check_in_header(ci)
+    assert "\n" not in header
+    assert "Line one Line two" in header
+
+
+# --- Unit tests for _render_check_in_trail ---
+
+
+def test_render_check_in_trail_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An empty check-in list shows 'No check-ins yet.' caption."""
+    st_mock = MagicMock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    fake_handoff = SimpleNamespace(check_ins=[])
+    _render_check_in_trail(fake_handoff)
+    st_mock.caption.assert_called_once_with("No check-ins yet.")
+    st_mock.expander.assert_not_called()
+
+
+def test_render_check_in_trail_with_entry_no_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A check-in without a note shows 'No note.' caption inside the expander."""
+    st_mock = MagicMock()
+    st_mock.expander.return_value = _Ctx()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    ci = _make_check_in(check_in_type=CheckInType.ON_TRACK, note=None)
+    fake_handoff = SimpleNamespace(check_ins=[ci])
+    _render_check_in_trail(fake_handoff)
+
+    st_mock.expander.assert_called_once()
+    st_mock.caption.assert_called_with("No note.")
+
+
+def test_render_check_in_trail_with_entry_with_note(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A check-in with a note renders the note as markdown inside the expander."""
+    st_mock = MagicMock()
+    st_mock.expander.return_value = _Ctx()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    ci = _make_check_in(check_in_type=CheckInType.DELAYED, note="Still waiting")
+    fake_handoff = SimpleNamespace(check_ins=[ci])
+    _render_check_in_trail(fake_handoff)
+
+    st_mock.markdown.assert_called_with("Still waiting")
+
+
+# --- Unit tests for _is_check_in_due ---
+
+
+def test_is_check_in_due_past_date() -> None:
+    """Returns True when next_check is in the past."""
+    from types import SimpleNamespace
+
+    h = SimpleNamespace(next_check=date(2000, 1, 1))
+    assert _is_check_in_due(h) is True
+
+
+def test_is_check_in_due_future_date() -> None:
+    """Returns False when next_check is in the future."""
+    from types import SimpleNamespace
+
+    h = SimpleNamespace(next_check=date(2099, 1, 1))
+    assert _is_check_in_due(h) is False
+
+
+def test_is_check_in_due_none() -> None:
+    """Returns False when next_check is None."""
+    from types import SimpleNamespace
+
+    h = SimpleNamespace(next_check=None)
+    assert _is_check_in_due(h) is False
