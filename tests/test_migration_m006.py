@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
-import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Connection
 
@@ -53,7 +53,7 @@ def _make_old_schema_db(path: str) -> None:
     conn.close()
 
 
-def test_m006_no_op_when_no_todo_table(tmp_path: pytest.MonkeyPatch) -> None:
+def test_m006_no_op_when_no_todo_table(tmp_path: Path) -> None:
     """Migration is a no-op when the todo table does not exist (fresh DB)."""
     db_path = str(tmp_path / "fresh.db")
     engine = create_engine(f"sqlite:///{db_path}")
@@ -71,7 +71,7 @@ def test_m006_no_op_when_no_todo_table(tmp_path: pytest.MonkeyPatch) -> None:
     assert "todo" not in tables
 
 
-def test_m006_creates_handoff_table_from_todo(tmp_path: pytest.MonkeyPatch) -> None:
+def test_m006_creates_handoff_table_from_todo(tmp_path: Path) -> None:
     """Migration copies todo rows into handoff table when todo exists."""
     db_path = str(tmp_path / "old.db")
     _make_old_schema_db(db_path)
@@ -91,7 +91,7 @@ def test_m006_creates_handoff_table_from_todo(tmp_path: pytest.MonkeyPatch) -> N
     assert "Canceled item" in names
 
 
-def test_m006_creates_check_in_for_done_todos(tmp_path: pytest.MonkeyPatch) -> None:
+def test_m006_creates_check_in_for_done_todos(tmp_path: Path) -> None:
     """Migration inserts a concluded check-in for each DONE todo."""
     db_path = str(tmp_path / "done.db")
     _make_old_schema_db(db_path)
@@ -109,7 +109,7 @@ def test_m006_creates_check_in_for_done_todos(tmp_path: pytest.MonkeyPatch) -> N
     assert check_in_types.count("concluded") >= 1
 
 
-def test_m006_creates_check_in_for_canceled_todos(tmp_path: pytest.MonkeyPatch) -> None:
+def test_m006_creates_check_in_for_canceled_todos(tmp_path: Path) -> None:
     """Migration inserts a concluded check-in with note='canceled' for CANCELED todos."""
     db_path = str(tmp_path / "canceled.db")
     _make_old_schema_db(db_path)
@@ -126,7 +126,7 @@ def test_m006_creates_check_in_for_canceled_todos(tmp_path: pytest.MonkeyPatch) 
     assert len(rows) == 1
 
 
-def test_m006_drops_todo_table_after_migration(tmp_path: pytest.MonkeyPatch) -> None:
+def test_m006_drops_todo_table_after_migration(tmp_path: Path) -> None:
     """Migration drops the todo table after copying data."""
     db_path = str(tmp_path / "drop.db")
     _make_old_schema_db(db_path)
@@ -149,7 +149,7 @@ def test_m006_drops_todo_table_after_migration(tmp_path: pytest.MonkeyPatch) -> 
 
 
 def test_m006_skips_creating_handoff_table_when_it_already_exists(
-    tmp_path: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Migration reuses an existing handoff table rather than recreating it."""
     db_path = str(tmp_path / "existing_handoff.db")
@@ -190,7 +190,7 @@ def test_m006_skips_creating_handoff_table_when_it_already_exists(
 
 
 def test_m006_skips_creating_check_in_table_when_it_already_exists(
-    tmp_path: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     """Migration reuses an existing check_in table rather than recreating it."""
     db_path = str(tmp_path / "existing_checkin.db")
