@@ -11,7 +11,7 @@ no errors when clicking around different elements.
 from __future__ import annotations
 
 import importlib
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -19,6 +19,7 @@ from streamlit.testing.v1 import AppTest
 
 import handoff.data as data
 import handoff.db as db
+from handoff.dates import add_business_days
 from handoff.models import TodoStatus
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -224,8 +225,8 @@ def test_now_page_close_button_marks_todo_done(app_test_db: Path) -> None:
     assert updated.completed_at is not None
 
 
-def test_now_page_snooze_plus_one_day_updates_next_check(app_test_db: Path) -> None:
-    """Clicking +1d snooze updates the todo next_check date."""
+def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
+    """Clicking Snooze updates the todo next_check to the date input default (next business day)."""
     db.init_db()
     project = data.create_project("Now Snooze Test")
     assert project.id is not None
@@ -236,23 +237,51 @@ def test_now_page_snooze_plus_one_day_updates_next_check(app_test_db: Path) -> N
         helper="Riley",
     )
     assert todo.id is not None
-    start_today = date.today()
 
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    plus_one_buttons = [b for b in at.button if getattr(b, "label", None) == "+1d"]
-    assert plus_one_buttons, "Expected +1d snooze button not found on Now page"
-    plus_one_buttons[0].click().run(timeout=5)
+    snooze_buttons = [b for b in at.button if getattr(b, "label", None) == "Snooze"]
+    assert snooze_buttons, "Expected Snooze button not found on Now page"
+    snooze_buttons[0].click().run(timeout=5)
     assert len(at.exception) == 0
 
     todos = data.query_todos(project_ids=[project.id])
     updated = next((t for t in todos if t.id == todo.id), None)
     assert updated is not None
-    expected_dates = {start_today + timedelta(days=1), date.today() + timedelta(days=1)}
-    assert updated.next_check in expected_dates
+    # UI default for Snooze date is add_business_days(today, 1)
+    assert updated.next_check == add_business_days(date.today(), 1)
     assert updated.status == TodoStatus.HANDOFF
+
+
+def test_now_page_add_form_creates_todo(app_test_db: Path) -> None:
+    """Submitting the Add handoff form creates a new todo."""
+    db.init_db()
+    project = data.create_project("Add Form Test")
+    assert project.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    need_back_inputs = [
+        ti
+        for ti in at.text_input
+        if getattr(ti, "key", None) == "now_add_need" or getattr(ti, "label", None) == "Need back"
+    ]
+    assert need_back_inputs, "Expected Need back text input not found on Now page"
+    need_back_inputs[0].input("New handoff from add form").run(timeout=5)
+
+    add_buttons = [b for b in at.button if getattr(b, "label", None) == "Add"]
+    assert add_buttons, "Expected Add button not found on Now page"
+    add_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    todos = data.query_todos(project_ids=[project.id])
+    created = next((t for t in todos if t.name == "New handoff from add form"), None)
+    assert created is not None
+    assert created.status == TodoStatus.HANDOFF
 
 
 def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
@@ -260,7 +289,7 @@ def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
     at = AppTest.from_file(str(WORKSPACE / "app.py"))
     at.run(timeout=5)
     assert len(at.exception) == 0
-    # First page (Todos) should render; we expect at least a subheader or info
+    # First page (Now) should render; we expect at least a subheader or info
     assert len(at.get("subheader")) >= 1 or len(at.get("info")) >= 1
 
 

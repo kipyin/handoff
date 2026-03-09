@@ -100,7 +100,7 @@ Project layout: `app.py` (entrypoint), `src/handoff/` (package), `pages/`, `serv
 2. Make focused commits.
 3. Bump CalVer when shipping user-visible changes (use `bump`).
 4. Add `## YYYY.M.MINOR [Tag]` to `RELEASE_NOTES.md` — use **Fix**, **Feature**, **Improvement**, **Internal** bullets.
-5. Impact tags: `[Breaking]`, `[Recommended]`, `[Optional]`.
+5. Impact tags: `[Breaking]` if launcher, Python version, deps, or build layout changed (full reinstall required); `[Recommended]` if user-visible changes that patch can deliver; `[Optional]` if internal-only (refactor, tests, build/CI, docs).
 
 ### Release workflow checklist
 
@@ -144,12 +144,11 @@ Extract and run `./handoff.sh`. Future work may add a signed `.app` bundle.
 
 ## Active pages
 
-The navigation in `app.py` exposes six pages:
+The navigation in `app.py` exposes five pages:
 
 | Page | Icon | Module |
 |------|------|--------|
 | Now | 🎯 | `pages/now.py` (`render_now_page`) |
-| Todos | ✅ | `pages/todos.py` |
 | Projects | 📁 | `pages/projects.py` |
 | Dashboard | 📊 | `pages/dashboard.py` (`render_dashboard_page`) |
 | Settings | ⚙️ | `pages/settings.py` |

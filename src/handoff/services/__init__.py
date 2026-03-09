@@ -22,7 +22,12 @@ from handoff.services.project_service import (
     rename_project,
     unarchive_project,
 )
-from handoff.services.settings_service import get_export_payload, import_payload
+from handoff.services.settings_service import (
+    get_deadline_near_days,
+    get_export_payload,
+    import_payload,
+    set_deadline_near_days,
+)
 from handoff.services.todo_service import (
     complete_todo,
     create_todo,
@@ -30,6 +35,7 @@ from handoff.services.todo_service import (
     list_helpers,
     query_now_items,
     query_todos,
+    query_upcoming_handoffs,
     snooze_todo,
     update_todo,
 )
@@ -44,6 +50,7 @@ __all__ = [
     "get_cycle_time_by_project",
     "get_dashboard_metrics",
     "get_deadline_adherence_trend",
+    "get_deadline_near_days",
     "get_exportable_metrics",
     "get_export_payload",
     "get_helper_load",
@@ -56,8 +63,10 @@ __all__ = [
     "list_projects",
     "query_now_items",
     "query_todos",
+    "query_upcoming_handoffs",
     "snooze_todo",
     "rename_project",
+    "set_deadline_near_days",
     "unarchive_project",
     "update_todo",
 ]

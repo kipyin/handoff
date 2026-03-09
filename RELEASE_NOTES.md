@@ -2,16 +2,59 @@
 
 Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** where applicable. Version headings keep an impact tag: `[Breaking]`, `[Recommended]`, or `[Optional]`.
 
-## 2026.3.8 [Optional]
+**Release tag criteria**
 
+Apply tags in this order. Use the first tag that matches.
+
+- **`[Breaking]`** — Use when this release contains **any** of:
+  - Changes to `handoff.bat` or `handoff.sh` (launcher scripts)
+  - Python runtime version bump (e.g. 3.13 → 3.14)
+  - New or upgraded runtime dependencies in `pyproject.toml`
+  - Structural changes to the build layout (e.g. embedded Python path, app root logic)
+
+  If any of the above apply, users must do a full reinstall; a patch zip cannot update these.
+
+- **`[Recommended]`** — Use when this release includes changes that **users will notice** and that **can** be applied via patch:
+  - Bug fixes (autosave, filters, updater, etc.)
+  - New features or UI changes
+  - Improvements to existing behavior (performance, UX, feedback messages)
+
+  Rule of thumb: Would a typical user care? Can it ship in a patch? → [Recommended].
+
+- **`[Optional]`** — Use when this release contains **only** changes that users do not see and that do not require a full reinstall:
+  - Refactoring, code reorg, type hints
+  - New or expanded tests
+  - Build script or CI changes (other than launcher/runtime)
+  - Doc updates (README, AGENTS.md, in-code comments)
+  - Ruff/formatting cleanup, pyright fixes
+
+  Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
+
+## 2026.3.8 [Recommended]
+
+- **Feature**
+  - **Now page editing:** Handoffs can be edited inline (Edit) with project, who, need back, next check, deadline, context.
+  - **Upcoming section:** Now page shows handoffs not yet due (next_check in future, deadline not at risk).
+  - **Deadline-at-risk setting:** Settings page "Now page" section lets you set how many days before a deadline an item is shown as at risk (default 1); value persisted in `handoff_settings.json` next to the DB.
+  - **Now page expander:** Header reordered: urgency first, then **Need back** (bold), who, dates, project last. Next-check icon 👀; when at risk, deadline omitted from trailing segment. Risk label shows "Overdue", "Due today", "Due tomorrow", or "in N days".
+  - **Now page risk window:** Default "deadline at risk" window is 1 day (shows items overdue, due today, or due tomorrow unless changed in Settings).
+  - **Now page layout:** Expanders collapsed by default; actions compacted (Edit, Close, then date picker + Snooze); separator removed from Actions dropdown.
+- **Fix**
+  - **Actions popover:** Date picker no longer auto-opens when opening Actions (Edit/Close shown first).
 - **Improvement**
-  - **Docs consolidation:** Merged STYLE.md and CONTRIBUTING.md into AGENTS.md; README now points to AGENTS.md for developer docs.
-  - **Build dry-run:** Added `--dry-run` to `build --full` and `build --patch` for CI-friendly validation without downloads, PyArmor, or archive creation.
-  - **macOS CI:** Added macos-latest to the CI matrix.
+  - **Now page (internal):** Google-style docstrings, typed contracts (dict[str, Project]), single source for project_by_name; snooze default one business day via add_business_days.
+  - **Docs consolidation:** Merged STYLE.md and CONTRIBUTING.md into AGENTS.md; README points to AGENTS.md.
+  - **Build dry-run:** `--dry-run` for build --full and build --patch (CI-friendly).
+  - **macOS CI:** Added macos-latest to CI matrix.
+- **Breaking**
+  - **Todos page removed:** Todos table removed from nav; manage handoffs on Now (add, edit, snooze, close). `render_todos_page` kept for backward compatibility.
 - **Internal**
-  - **Build integration tests:** Added `tests/test_build_dry_run.py` for build dry-run flows.
-  - **Gitee CI removed:** Dropped `.gitee-pipeline.yml` and `.gitee/workflows/ci.yml`; CI runs on GitHub only.
-  - **Planning docs removed:** Removed `docs/` (product-architecture-plan, dashboard-ideas, release-2026.3.6-plan); AGENTS.md is the canonical dev guide.
+  - **Release tag criteria:** Documented `[Breaking]`, `[Recommended]`, `[Optional]` criteria in RELEASE_NOTES.md and AGENTS.md.
+  - **dates.add_business_days:** New helper for snooze default; tests in test_dates.py.
+  - **Gitee CI removed:** Dropped .gitee-pipeline.yml and .gitee/workflows; CI runs on GitHub only.
+  - **Planning docs removed:** Removed docs/ (product-architecture-plan, dashboard-ideas, release plan); AGENTS.md is canonical dev guide.
+  - **Build tests:** Added tests/test_build_dry_run.py.
+  - **Test coverage:** Fixed snooze integration test to assert UI default (add_business_days). Added tests for entrypoints (test_main.py, test_config.py), project and settings services (test_project_service.py, test_settings_service.py), dashboard render non-empty branches, and Now page (mocked _render_item/upcoming/edit form plus AppTest for Add handoff form).
 
 ## 2026.3.7 [Recommended]
 
