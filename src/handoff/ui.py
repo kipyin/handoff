@@ -14,7 +14,6 @@ from .pages.dashboard import render_dashboard_page as _render_dashboard_page_imp
 from .pages.docs import render_docs_page as _render_docs_page_impl
 from .pages.projects import render_projects_page as _render_projects_page_impl
 from .pages.settings import render_settings_page as _render_settings_page_impl
-from .pages.todos import render_todos_page as _render_todos_page_impl
 
 
 def setup(app_version: str) -> None:
@@ -28,7 +27,7 @@ def setup(app_version: str) -> None:
 
     """
     configure_logging()
-    st.set_page_config(page_title="Handoff", page_icon="📥", layout="wide")
+    st.set_page_config(page_title="Handoff", page_icon="📥", layout="centered")
     try:
         init_db()
     except DatabaseInitializationError:
@@ -39,11 +38,6 @@ def setup(app_version: str) -> None:
             "See the log file for technical details.",
         )
         st.stop()
-
-
-def render_todos_page() -> None:
-    """Render the main todos page."""
-    _render_todos_page_impl()
 
 
 def render_projects_page() -> None:
@@ -68,7 +62,6 @@ def render_docs_page() -> None:
 
 __all__ = [
     "setup",
-    "render_todos_page",
     "render_projects_page",
     "render_dashboard_page",
     "render_settings_page",
