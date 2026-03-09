@@ -454,6 +454,7 @@ def render_now_page() -> None:
         project_ids=project_ids,
         pitchman_names=pitchman_names,
         search_text=parsed.text_query,
+        deadline_near_days=deadline_near_days,
         next_check_min=parsed.next_check_min,
         next_check_max=parsed.next_check_max,
         deadline_min=parsed.deadline_min,

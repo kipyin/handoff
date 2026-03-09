@@ -564,7 +564,7 @@ def test_query_now_items(session, monkeypatch) -> None:
 
 
 def test_query_action_handoffs(session, monkeypatch) -> None:
-    """query_action_handoffs returns only open handoffs with due next_check."""
+    """query_action_handoffs returns due open handoffs, excluding Risk."""
     _patch_session_context(monkeypatch, session)
 
     class FixedDate(date):
@@ -580,30 +580,45 @@ def test_query_action_handoffs(session, monkeypatch) -> None:
     session.refresh(p)
 
     h_due = Handoff(project_id=p.id, need_back="Due", next_check=date(2026, 3, 9))
+    h_due_risk = Handoff(
+        project_id=p.id,
+        need_back="Due but risk",
+        next_check=date(2026, 3, 9),
+        deadline=date(2026, 3, 10),
+    )
     h_future = Handoff(project_id=p.id, need_back="Future", next_check=date(2026, 3, 10))
     h_concluded = Handoff(project_id=p.id, need_back="Done", next_check=date(2026, 3, 8))
-    session.add_all([h_due, h_future, h_concluded])
+    session.add_all([h_due, h_due_risk, h_future, h_concluded])
     session.commit()
     session.refresh(h_concluded)
+    session.refresh(h_due_risk)
 
-    session.add(
-        CheckIn(
-            handoff_id=h_concluded.id,
-            check_in_date=date(2026, 3, 9),
-            check_in_type=CheckInType.CONCLUDED,
-        )
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=h_concluded.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=h_due_risk.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.DELAYED,
+            ),
+        ]
     )
     session.commit()
 
-    results = data.query_action_handoffs()
+    results = data.query_action_handoffs(deadline_near_days=1)
     names = [h.need_back for h in results]
     assert "Due" in names
+    assert "Due but risk" not in names
     assert "Future" not in names
     assert "Done" not in names
 
 
 def test_query_risk_handoffs(session, monkeypatch) -> None:
-    """query_risk_handoffs requires near deadline and at least one delayed check-in."""
+    """query_risk_handoffs requires near deadline and latest check-in delayed."""
     _patch_session_context(monkeypatch, session)
 
     class FixedDate(date):
@@ -624,15 +639,29 @@ def test_query_risk_handoffs(session, monkeypatch) -> None:
         need_back="Near but on-track",
         deadline=date(2026, 3, 10),
     )
+    h_old_delayed_now_on_track = Handoff(
+        project_id=p.id,
+        need_back="Old delayed but now on-track",
+        deadline=date(2026, 3, 10),
+    )
     h_delayed_far = Handoff(
         project_id=p.id,
         need_back="Delayed but far",
         deadline=date(2026, 3, 20),
     )
-    session.add_all([h_risk, h_near_no_delay, h_delayed_far])
+    h_due_after_tomorrow = Handoff(
+        project_id=p.id,
+        need_back="Delayed but not tomorrow",
+        deadline=date(2026, 3, 11),
+    )
+    session.add_all(
+        [h_risk, h_near_no_delay, h_old_delayed_now_on_track, h_delayed_far, h_due_after_tomorrow]
+    )
     session.commit()
     session.refresh(h_risk)
+    session.refresh(h_old_delayed_now_on_track)
     session.refresh(h_delayed_far)
+    session.refresh(h_due_after_tomorrow)
 
     session.add_all(
         [
@@ -646,15 +675,32 @@ def test_query_risk_handoffs(session, monkeypatch) -> None:
                 check_in_date=date(2026, 3, 9),
                 check_in_type=CheckInType.DELAYED,
             ),
+            CheckIn(
+                handoff_id=h_due_after_tomorrow.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.DELAYED,
+            ),
+            CheckIn(
+                handoff_id=h_old_delayed_now_on_track.id,
+                check_in_date=date(2026, 3, 8),
+                check_in_type=CheckInType.DELAYED,
+            ),
+            CheckIn(
+                handoff_id=h_old_delayed_now_on_track.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.ON_TRACK,
+            ),
         ]
     )
     session.commit()
 
-    results = data.query_risk_handoffs(deadline_near_days=2)
+    results = data.query_risk_handoffs(deadline_near_days=1)
     names = [h.need_back for h in results]
     assert "Risk" in names
     assert "Near but on-track" not in names
+    assert "Old delayed but now on-track" not in names
     assert "Delayed but far" not in names
+    assert "Delayed but not tomorrow" not in names
 
 
 def test_query_upcoming_handoffs(session, monkeypatch) -> None:

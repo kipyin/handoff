@@ -524,6 +524,28 @@ def get_handoff_close_date(handoff: Handoff) -> date | None:
     return max(ci.check_in_date for ci in concluded)
 
 
+def _latest_check_in(handoff: Handoff) -> CheckIn | None:
+    """Return the latest check-in on a handoff trail, or None."""
+    if not handoff.check_ins:
+        return None
+    return max(handoff.check_ins, key=lambda ci: (ci.check_in_date, ci.created_at))
+
+
+def _last_check_in_is_delayed(handoff: Handoff) -> bool:
+    """Return True when the latest check-in type is delayed."""
+    latest = _latest_check_in(handoff)
+    return latest is not None and latest.check_in_type == CheckInType.DELAYED
+
+
+def _is_risk_handoff(handoff: Handoff, *, cutoff: date) -> bool:
+    """Return True when deadline is near/overdue and latest check-in is delayed."""
+    return (
+        handoff.deadline is not None
+        and handoff.deadline <= cutoff
+        and _last_check_in_is_delayed(handoff)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Concluded subquery (shared helper)
 # ---------------------------------------------------------------------------
@@ -869,7 +891,7 @@ def query_upcoming_handoffs(
 
     A handoff is upcoming when it is open and neither:
     - Action: next_check is due (<= today), nor
-    - Risk: deadline is near and the handoff has a delayed check-in.
+    - Risk: deadline is near and the last check-in is delayed.
     Handoffs without a next_check are included when they are not Risk/Action.
     Sorted by next_check then deadline.
 
@@ -889,19 +911,12 @@ def query_upcoming_handoffs(
     """
     today = date.today()
     cutoff = today + timedelta(days=deadline_near_days)
-    risk_predicate = (
-        Handoff.deadline.isnot(None) & (Handoff.deadline <= cutoff) & exists(_delayed_subquery())
-    )
-    action_predicate = Handoff.next_check.isnot(None) & (Handoff.next_check <= today)
-
     with session_context() as session:
         stmt = (
             select(Handoff)
             .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
             .where(Handoff.project.has(Project.is_archived.is_(False)))
             .where(~exists(_concluded_subquery()))
-            .where(~risk_predicate)
-            .where(~action_predicate)
         )
         stmt = _apply_handoff_filters(
             stmt,
@@ -917,8 +932,16 @@ def query_upcoming_handoffs(
             Handoff.next_check.asc().nulls_last(),
             Handoff.deadline.asc().nulls_last(),
             Handoff.created_at.asc(),
-        ).limit(limit)
-        return list(session.exec(stmt).unique().all())
+        )
+        handoffs = list(session.exec(stmt).unique().all())
+
+    filtered = [
+        handoff
+        for handoff in handoffs
+        if not _is_risk_handoff(handoff, cutoff=cutoff)
+        and not (handoff.next_check is not None and handoff.next_check <= today)
+    ]
+    return filtered[:limit]
 
 
 def query_action_handoffs(
@@ -926,13 +949,15 @@ def query_action_handoffs(
     project_ids: list[int] | None = None,
     pitchman_names: list[str] | None = None,
     search_text: str | None = None,
+    deadline_near_days: int = 1,
     next_check_min: date | None = None,
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
 ) -> list[Handoff]:
-    """Return open handoffs with a due check-in (next_check <= today)."""
+    """Return open handoffs with a due check-in (next_check <= today), excluding Risk."""
     today = date.today()
+    cutoff = today + timedelta(days=deadline_near_days)
     with session_context() as session:
         stmt = (
             select(Handoff)
@@ -957,7 +982,8 @@ def query_action_handoffs(
             Handoff.deadline.asc().nulls_last(),
             Handoff.created_at.asc(),
         )
-        return list(session.exec(stmt).unique().all())
+        handoffs = list(session.exec(stmt).unique().all())
+    return [handoff for handoff in handoffs if not _is_risk_handoff(handoff, cutoff=cutoff)]
 
 
 def query_risk_handoffs(
@@ -971,7 +997,7 @@ def query_risk_handoffs(
     deadline_min: date | None = None,
     deadline_max: date | None = None,
 ) -> list[Handoff]:
-    """Return open handoffs that are near deadline and already delayed."""
+    """Return open handoffs near deadline where the latest check-in is delayed."""
     cutoff = date.today() + timedelta(days=deadline_near_days)
     with session_context() as session:
         stmt = (
@@ -981,7 +1007,6 @@ def query_risk_handoffs(
             .where(~exists(_concluded_subquery()))
             .where(Handoff.deadline.isnot(None))
             .where(Handoff.deadline <= cutoff)
-            .where(exists(_delayed_subquery()))
         )
         stmt = _apply_handoff_filters(
             stmt,
@@ -998,7 +1023,8 @@ def query_risk_handoffs(
             Handoff.next_check.asc().nulls_last(),
             Handoff.created_at.asc(),
         )
-        return list(session.exec(stmt).unique().all())
+        handoffs = list(session.exec(stmt).unique().all())
+    return [handoff for handoff in handoffs if _is_risk_handoff(handoff, cutoff=cutoff)]
 
 
 def query_concluded_handoffs(
