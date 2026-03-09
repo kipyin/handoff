@@ -36,15 +36,13 @@ Apply tags in this order. Use the first tag that matches.
   - **Now page editing:** Handoffs can be edited inline (Edit) with project, who, need back, next check, deadline, context.
   - **Upcoming section:** Now page shows handoffs not yet due (next_check in future, deadline not at risk).
   - **Deadline-at-risk setting:** Settings page "Now page" section lets you set how many days before a deadline an item is shown as at risk (default 1); value persisted in `handoff_settings.json` next to the DB.
+  - **Now page expander:** Header reordered: urgency first, then **Need back** (bold), who, dates, project last. Next-check icon 👀; when at risk, deadline omitted from trailing segment. Risk label shows "Overdue", "Due today", "Due tomorrow", or "in N days".
+  - **Now page risk window:** Default "deadline at risk" is 1 day (only overdue or due today unless changed in Settings).
+  - **Now page layout:** Expanders collapsed by default; actions compacted (Edit, Close, then date picker + Snooze); separator removed from Actions dropdown.
 - **Fix**
   - **Actions popover:** Date picker no longer auto-opens when opening Actions (Edit/Close shown first).
 - **Improvement**
-  - **Now page layout:** Expanders collapsed by default; header shows project, who, need back, next check, deadline; actions compacted (Edit, Close, then date picker + Snooze); separator removed from Actions dropdown.
-  - **Now page style:** Google-style docstrings, typed contracts (dict[str, Project]), single source for project_by_name; snooze default one business day via add_business_days.
-  - **Risk badge:** Specific reasons (e.g. "Risk — due today", "Risk — due tomorrow", "Risk — overdue").
-  - **Now expander header:** Reordered for clarity: urgency first, then **Need back** (bold), who, dates, project last; next-check icon changed from 📅 to 👀; when at risk, deadline date omitted from trailing segment to avoid overlap with risk label.
-  - **Risk label text:** Risk badge now shows "Overdue", "Due today", "Due tomorrow", or "in N days" (no "Risk —" prefix).
-  - **Risk window default:** Default "deadline at risk" window relaxed from 2 days to 1 day (only overdue or due today count as at risk unless changed in Settings).
+  - **Now page (internal):** Google-style docstrings, typed contracts (dict[str, Project]), single source for project_by_name; snooze default one business day via add_business_days.
   - **Docs consolidation:** Merged STYLE.md and CONTRIBUTING.md into AGENTS.md; README points to AGENTS.md.
   - **Build dry-run:** `--dry-run` for build --full and build --patch (CI-friendly).
   - **macOS CI:** Added macos-latest to CI matrix.
@@ -56,6 +54,7 @@ Apply tags in this order. Use the first tag that matches.
   - **Gitee CI removed:** Dropped .gitee-pipeline.yml and .gitee/workflows; CI runs on GitHub only.
   - **Planning docs removed:** Removed docs/ (product-architecture-plan, dashboard-ideas, release plan); AGENTS.md is canonical dev guide.
   - **Build tests:** Added tests/test_build_dry_run.py.
+  - **Test coverage:** Fixed snooze integration test to assert UI default (add_business_days). Added tests for entrypoints (test_main.py, test_config.py), project and settings services (test_project_service.py, test_settings_service.py), dashboard render non-empty branches, and Now page (mocked _render_item/upcoming/edit form plus AppTest for Add handoff form).
 
 ## 2026.3.7 [Recommended]
 

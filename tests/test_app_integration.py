@@ -11,7 +11,7 @@ no errors when clicking around different elements.
 from __future__ import annotations
 
 import importlib
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -19,6 +19,7 @@ from streamlit.testing.v1 import AppTest
 
 import handoff.data as data
 import handoff.db as db
+from handoff.dates import add_business_days
 from handoff.models import TodoStatus
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -225,7 +226,7 @@ def test_now_page_close_button_marks_todo_done(app_test_db: Path) -> None:
 
 
 def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
-    """Clicking Snooze updates the todo next_check to the selected date."""
+    """Clicking Snooze updates the todo next_check to the date input default (next business day)."""
     db.init_db()
     project = data.create_project("Now Snooze Test")
     assert project.id is not None
@@ -236,8 +237,6 @@ def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
         helper="Riley",
     )
     assert todo.id is not None
-    start_today = date.today()
-    target_date = start_today + timedelta(days=3)
 
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=5)
@@ -251,9 +250,38 @@ def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
     todos = data.query_todos(project_ids=[project.id])
     updated = next((t for t in todos if t.id == todo.id), None)
     assert updated is not None
-    expected_dates = {target_date, date.today() + timedelta(days=3)}
-    assert updated.next_check in expected_dates
+    # UI default for Snooze date is add_business_days(today, 1)
+    assert updated.next_check == add_business_days(date.today(), 1)
     assert updated.status == TodoStatus.HANDOFF
+
+
+def test_now_page_add_form_creates_todo(app_test_db: Path) -> None:
+    """Submitting the Add handoff form creates a new todo."""
+    db.init_db()
+    project = data.create_project("Add Form Test")
+    assert project.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    need_back_inputs = [
+        ti
+        for ti in at.text_input
+        if getattr(ti, "key", None) == "now_add_need" or getattr(ti, "label", None) == "Need back"
+    ]
+    assert need_back_inputs, "Expected Need back text input not found on Now page"
+    need_back_inputs[0].input("New handoff from add form").run(timeout=5)
+
+    add_buttons = [b for b in at.button if getattr(b, "label", None) == "Add"]
+    assert add_buttons, "Expected Add button not found on Now page"
+    add_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    todos = data.query_todos(project_ids=[project.id])
+    created = next((t for t in todos if t.name == "New handoff from add form"), None)
+    assert created is not None
+    assert created.status == TodoStatus.HANDOFF
 
 
 def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
