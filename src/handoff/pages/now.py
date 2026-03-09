@@ -6,8 +6,9 @@ Each item is in an expander with Snooze, Edit, and Close actions.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
+import pandas as pd
 import streamlit as st
 
 from handoff.dates import add_business_days, format_date_smart, format_risk_reason
@@ -20,6 +21,7 @@ from handoff.services import (
     list_helpers_with_open_handoffs,
     list_projects,
     query_now_items,
+    query_todos,
     query_upcoming_handoffs,
     snooze_todo,
     update_todo,
@@ -101,17 +103,17 @@ def _render_item(
     # Header: risk (if at_risk) → **Need back** → Who → dates → Project (last, no bold)
     risk_prefix = ""
     if at_risk and todo.deadline:
-        risk_prefix = f"🔴 {format_risk_reason(todo.deadline)} — "
+        risk_prefix = f"⏰ {format_risk_reason(todo.deadline)} — "
     need_trunc = f"{need_back[:40]}…" if len(need_back) > 40 else need_back
     need_bold = f"**{need_trunc}**"
 
     # Date segment: when at_risk, omit ⏰ (risk already encodes deadline); else show both
     if at_risk and todo.deadline:
-        date_part = f"👀 {next_check_str}"
+        date_part = f"Check-in {next_check_str}"
     elif todo.deadline:
-        date_part = f"👀 {next_check_str} · ⏰ {deadline_str}"
+        date_part = f"Check-in {next_check_str} · ⏰ {deadline_str}"
     else:
-        date_part = f"👀 {next_check_str}"
+        date_part = f"Check-in {next_check_str}"
 
     segments = [need_bold, who, date_part, project_name]
     core = " · ".join(segments)
@@ -318,6 +320,35 @@ def _render_add_form(
                     st.rerun()
 
 
+def _closed_to_dataframe(todos: list[Todo]) -> pd.DataFrame:
+    """Build a DataFrame for the Closed section.
+
+    Args:
+        todos: Sorted list of closed todos (done/canceled).
+
+    Returns:
+        DataFrame with columns: Status, Need back, Who, Project, Next check,
+        Deadline, Completed at.
+    """
+    rows = []
+    for t in todos:
+        project_name = t.project.name if t.project else "—"
+        completed_str = format_date_smart(t.completed_at.date()) if t.completed_at else "—"
+        status_str = t.status.value if hasattr(t.status, "value") else str(t.status)
+        rows.append(
+            {
+                "Status": status_str,
+                "Need back": t.name or "—",
+                "Who": (t.helper or "").strip() or "—",
+                "Project": project_name,
+                "Next check": format_date_smart(t.next_check),
+                "Deadline": format_date_smart(t.deadline) if t.deadline else "—",
+                "Completed at": completed_str,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def render_now_page() -> None:
     """Render the Now page (control tower for action-required handoffs)."""
     st.subheader("Now")
@@ -390,3 +421,40 @@ def render_now_page() -> None:
                 key_prefix="now_upcoming",
                 project_by_name=project_by_name,
             )
+
+    st.markdown("---")
+    with st.expander("Closed >"):
+        closed = query_todos(
+            project_ids=project_ids,
+            helper_names=helper_names,
+            statuses=[TodoStatus.DONE, TodoStatus.CANCELED],
+            search_text=parsed.text_query,
+            include_archived=True,
+        )
+        if not closed:
+            st.caption("No closed handoffs.")
+        else:
+            closed_sorted = sorted(
+                closed,
+                key=lambda t: (
+                    t.completed_at or datetime.min.replace(tzinfo=None),
+                    t.created_at,
+                ),
+                reverse=True,
+            )
+            df = _closed_to_dataframe(closed_sorted)
+            event = st.dataframe(
+                df,
+                key="now_closed_df",
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="multi-row",
+            )
+            if event.selection.rows and st.button("Reopen selected", key="now_reopen_btn"):
+                for row_idx in event.selection.rows:
+                    if 0 <= row_idx < len(closed_sorted):
+                        todo = closed_sorted[row_idx]
+                        if todo.id:
+                            update_todo(todo.id, status=TodoStatus.HANDOFF)
+                st.rerun()
