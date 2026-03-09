@@ -35,12 +35,16 @@ Apply tags in this order. Use the first tag that matches.
 - **Feature**
   - **Now page editing:** Handoffs can be edited inline (Edit) with project, who, need back, next check, deadline, context.
   - **Upcoming section:** Now page shows handoffs not yet due (next_check in future, deadline not at risk).
+  - **Deadline-at-risk setting:** Settings page "Now page" section lets you set how many days before a deadline an item is shown as at risk (default 1); value persisted in `handoff_settings.json` next to the DB.
 - **Fix**
   - **Actions popover:** Date picker no longer auto-opens when opening Actions (Edit/Close shown first).
 - **Improvement**
   - **Now page layout:** Expanders collapsed by default; header shows project, who, need back, next check, deadline; actions compacted (Edit, Close, then date picker + Snooze); separator removed from Actions dropdown.
   - **Now page style:** Google-style docstrings, typed contracts (dict[str, Project]), single source for project_by_name; snooze default one business day via add_business_days.
   - **Risk badge:** Specific reasons (e.g. "Risk — due today", "Risk — due tomorrow", "Risk — overdue").
+  - **Now expander header:** Reordered for clarity: urgency first, then **Need back** (bold), who, dates, project last; next-check icon changed from 📅 to 👀; when at risk, deadline date omitted from trailing segment to avoid overlap with risk label.
+  - **Risk label text:** Risk badge now shows "Overdue", "Due today", "Due tomorrow", or "in N days" (no "Risk —" prefix).
+  - **Risk window default:** Default "deadline at risk" window relaxed from 2 days to 1 day (only overdue or due today count as at risk unless changed in Settings).
   - **Docs consolidation:** Merged STYLE.md and CONTRIBUTING.md into AGENTS.md; README points to AGENTS.md.
   - **Build dry-run:** `--dry-run` for build --full and build --patch (CI-friendly).
   - **macOS CI:** Added macos-latest to CI matrix.

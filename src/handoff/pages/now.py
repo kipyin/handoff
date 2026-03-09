@@ -15,6 +15,7 @@ from handoff.models import Project, Todo, TodoStatus
 from handoff.services import (
     complete_todo,
     create_todo,
+    get_deadline_near_days,
     list_helpers,
     list_projects,
     query_now_items,
@@ -96,13 +97,24 @@ def _render_item(
     deadline_str = format_date_smart(todo.deadline) if todo.deadline else "—"
     context = (todo.notes or "").strip()
 
-    # Header: risk badge (if at_risk) + project · who · need_back · check · due
+    # Header: risk (if at_risk) → **Need back** → Who → dates → Project (last, no bold)
     risk_prefix = ""
     if at_risk and todo.deadline:
         risk_prefix = f"🔴 {format_risk_reason(todo.deadline)} — "
     need_trunc = f"{need_back[:40]}…" if len(need_back) > 40 else need_back
-    core = f"**{project_name}** · {who} · {need_trunc} · 📅 {next_check_str} · ⏰ {deadline_str}"
-    header = f"{risk_prefix}📋 {core}" if not risk_prefix else f"{risk_prefix}{core}"
+    need_bold = f"**{need_trunc}**"
+
+    # Date segment: when at_risk, omit ⏰ (risk already encodes deadline); else show both
+    if at_risk and todo.deadline:
+        date_part = f"👀 {next_check_str}"
+    elif todo.deadline:
+        date_part = f"👀 {next_check_str} · ⏰ {deadline_str}"
+    else:
+        date_part = f"👀 {next_check_str}"
+
+    segments = [need_bold, who, date_part, project_name]
+    core = " · ".join(segments)
+    header = risk_prefix + core
 
     editing = st.session_state.get("now_editing_todo_id") == todo_id
 
@@ -326,16 +338,19 @@ def render_now_page() -> None:
         key_prefix="now",
     )
 
+    deadline_near_days = get_deadline_near_days()
     items = query_now_items(
         project_ids=project_ids,
         helper_names=helper_names,
         search_text=search_text or None,
+        deadline_near_days=deadline_near_days,
     )
 
     upcoming = query_upcoming_handoffs(
         project_ids=project_ids,
         helper_names=helper_names,
         search_text=search_text or None,
+        deadline_near_days=deadline_near_days,
     )
 
     _render_add_form(project_by_name, helpers, "now")

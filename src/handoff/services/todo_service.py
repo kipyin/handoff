@@ -87,7 +87,7 @@ def query_now_items(
     project_ids: list[int] | None = None,
     helper_names: list[str] | None = None,
     search_text: str | None = None,
-    deadline_near_days: int = 2,
+    deadline_near_days: int = 1,
 ) -> list[tuple[Todo, bool]]:
     """Return open items that need attention on the Now page.
 
@@ -107,7 +107,7 @@ def query_upcoming_handoffs(
     project_ids: list[int] | None = None,
     helper_names: list[str] | None = None,
     search_text: str | None = None,
-    deadline_near_days: int = 2,
+    deadline_near_days: int = 1,
     limit: int = 20,
 ) -> list[Todo]:
     """Return handoffs that are not yet action-required (upcoming).

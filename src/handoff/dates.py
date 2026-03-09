@@ -6,25 +6,26 @@ from datetime import date, timedelta
 
 
 def format_risk_reason(deadline: date | None) -> str:
-    """Return human-readable risk reason: 'due today', 'due tomorrow', or 'due {date}'.
+    """Return human-readable risk label: Overdue, Due today, Due tomorrow, or in N days.
 
     Args:
         deadline: The deadline date, or None (returns empty string).
 
     Returns:
-        Empty string if no deadline; otherwise 'Risk — due today', 'Risk — due tomorrow',
-        'Risk — overdue', or 'Risk — due {date}'.
+        Empty string if no deadline; otherwise 'Overdue', 'Due today', 'Due tomorrow',
+        or 'in N days' for future dates within the risk window.
     """
     if deadline is None:
         return ""
     today = date.today()
-    if deadline == today:
-        return "Risk — due today"
-    if deadline == today + timedelta(days=1):
-        return "Risk — due tomorrow"
     if deadline < today:
-        return "Risk — overdue"
-    return f"Risk — due {deadline:%b %d}"
+        return "Overdue"
+    if deadline == today:
+        return "Due today"
+    if deadline == today + timedelta(days=1):
+        return "Due tomorrow"
+    delta = (deadline - today).days
+    return f"in {delta} days"
 
 
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")

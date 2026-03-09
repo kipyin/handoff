@@ -45,22 +45,23 @@ def test_format_risk_reason_none() -> None:
 
 def test_format_risk_reason_due_today(monkeypatch) -> None:
     _freeze_today(monkeypatch)
-    assert format_risk_reason(date(2026, 3, 9)) == "Risk — due today"
+    assert format_risk_reason(date(2026, 3, 9)) == "Due today"
 
 
 def test_format_risk_reason_due_tomorrow(monkeypatch) -> None:
     _freeze_today(monkeypatch)
-    assert format_risk_reason(date(2026, 3, 10)) == "Risk — due tomorrow"
+    assert format_risk_reason(date(2026, 3, 10)) == "Due tomorrow"
 
 
 def test_format_risk_reason_overdue(monkeypatch) -> None:
     _freeze_today(monkeypatch)
-    assert format_risk_reason(date(2026, 3, 1)) == "Risk — overdue"
+    assert format_risk_reason(date(2026, 3, 1)) == "Overdue"
 
 
-def test_format_risk_reason_due_future(monkeypatch) -> None:
+def test_format_risk_reason_in_n_days(monkeypatch) -> None:
     _freeze_today(monkeypatch)
-    assert format_risk_reason(date(2026, 3, 15)) == "Risk — due Mar 15"
+    assert format_risk_reason(date(2026, 3, 11)) == "in 2 days"
+    assert format_risk_reason(date(2026, 3, 15)) == "in 6 days"
 
 
 def test_format_date_smart_none() -> None:
