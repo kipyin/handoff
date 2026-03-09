@@ -63,6 +63,7 @@ class BackupTodoRecord:
     project_id: int
     name: str
     status: TodoStatus
+    next_check: date | None
     deadline: date | None
     helper: str | None
     notes: str | None
@@ -83,6 +84,9 @@ class BackupTodoRecord:
             project_id=int(raw["project_id"]),
             name=str(raw["name"]),
             status=TodoStatus(raw_status),
+            next_check=(
+                date.fromisoformat(str(raw["next_check"])) if raw.get("next_check") else None
+            ),
             deadline=date.fromisoformat(str(raw["deadline"])) if raw.get("deadline") else None,
             helper=str(helper) if helper is not None else None,
             notes=str(notes) if notes is not None else None,
@@ -103,6 +107,7 @@ class BackupTodoRecord:
             project_id=todo.project_id,
             name=todo.name,
             status=todo.status,
+            next_check=todo.next_check,
             deadline=todo.deadline,
             helper=todo.helper,
             notes=todo.notes,
@@ -118,6 +123,7 @@ class BackupTodoRecord:
             "project_id": self.project_id,
             "name": self.name,
             "status": self.status.value,
+            "next_check": self.next_check.isoformat() if self.next_check else None,
             "deadline": self.deadline.isoformat() if self.deadline else None,
             "helper": self.helper,
             "notes": self.notes,

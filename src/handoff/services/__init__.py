@@ -28,7 +28,9 @@ from handoff.services.todo_service import (
     create_todo,
     delete_todo,
     list_helpers,
+    query_now_items,
     query_todos,
+    snooze_todo,
     update_todo,
 )
 
@@ -52,7 +54,9 @@ __all__ = [
     "import_payload",
     "list_helpers",
     "list_projects",
+    "query_now_items",
     "query_todos",
+    "snooze_todo",
     "rename_project",
     "unarchive_project",
     "update_todo",

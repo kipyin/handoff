@@ -20,7 +20,7 @@ The goal is not maximal abstraction or maximal cleverness. The goal is code that
 
 ### Hygienic
 
-- Keep **boundaries explicit**: models define persisted shape; data-layer functions implement behavior and queries; page/UI modules translate UI state into typed app-level inputs; UI-specific concerns should not leak into core modules.
+- Keep **boundaries explicit**: models define persisted shape; data-layer functions implement behavior and queries; **services** orchestrate between pages and data (pages must not import `handoff.data` directly); page/UI modules translate UI state into typed app-level inputs; UI-specific concerns should not leak into core modules.
 - Prefer **typed contracts** for non-trivial flows (query objects, mutation inputs, serialized backup/import payloads).
 - Do not create abstractions just to move code around. A new module or type should reduce ambiguity, coupling, or duplication.
 - Preserve **one source of truth** for important behavior. Filtering, validation, and serialization should not be reimplemented differently in multiple layers.
@@ -92,7 +92,7 @@ Handoff ships as a self-contained Windows zip (or macOS tar.gz) that bundles an 
 
 Version sync: `src/handoff/version.py` and `pyproject.toml` must match; `tests/test_version_sync.py` enforces this.
 
-Project layout: `app.py` (entrypoint), `src/handoff/` (package), `pages/`, `tests/`.
+Project layout: `app.py` (entrypoint), `src/handoff/` (package), `pages/`, `services/`, `tests/`. Pages import from `handoff.services`, never from `handoff.data` directly; the architecture test enforces this.
 
 ### Branching, commits, and releases
 
@@ -144,8 +144,11 @@ Extract and run `./handoff.sh`. Future work may add a signed `.app` bundle.
 
 ## Active pages
 
+The navigation in `app.py` exposes six pages:
+
 | Page | Icon | Module |
 |------|------|--------|
+| Now | 🎯 | `pages/now.py` (`render_now_page`) |
 | Todos | ✅ | `pages/todos.py` |
 | Projects | 📁 | `pages/projects.py` |
 | Dashboard | 📊 | `pages/dashboard.py` (`render_dashboard_page`) |
@@ -160,7 +163,9 @@ There is no Calendar page.
 
 **Data layer:** `uv run pytest tests/test_models.py tests/test_db.py tests/test_data.py` — in-memory SQLite. When adding a column, add inline migration in `db.py:init_db()` and a migration test.
 
-**Pages / UI:** `uv run pytest tests/test_pages_todos.py tests/test_pages_projects.py tests/test_dashboard.py`
+**Pages / UI:** `uv run pytest tests/test_pages_todos.py tests/test_pages_projects.py tests/test_pages_now.py tests/test_dashboard.py`
+
+**Services:** `uv run pytest tests/test_todo_service.py tests/test_services_architecture.py`
 
 **Integration:** `cd /workspace && uv run pytest tests/test_app_integration.py` (from project root).
 

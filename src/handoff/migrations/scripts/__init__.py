@@ -5,6 +5,7 @@ from handoff.migrations.scripts import (
     m002_project_is_archived,
     m003_legacy_status_labels,
     m004_activity_log,
+    m005_todo_next_check,
 )
 
 # Ordered list of migrations; new migrations append here.
@@ -13,4 +14,5 @@ ALL = [
     m002_project_is_archived,
     m003_legacy_status_labels,
     m004_activity_log,
+    m005_todo_next_check,
 ]

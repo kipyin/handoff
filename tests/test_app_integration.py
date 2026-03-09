@@ -11,10 +11,14 @@ no errors when clicking around different elements.
 from __future__ import annotations
 
 import importlib
+from datetime import date
 from pathlib import Path
 
 import pytest
 from streamlit.testing.v1 import AppTest
+
+import handoff.data as data
+import handoff.db as db
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 
@@ -85,6 +89,15 @@ def _docs_page_entry() -> None:
     render_docs_page()
 
 
+def _now_page_entry() -> None:
+    """Single-page entrypoint for Now: setup + render."""
+    import handoff.ui as ui
+    from handoff.pages.now import render_now_page
+
+    ui.setup("2026.2.24")
+    render_now_page()
+
+
 def test_todos_page_renders_with_app_test(app_test_db: Path) -> None:
     """Todos page renders (smoke test)."""
     at = AppTest.from_function(_todos_page_entry)
@@ -152,6 +165,33 @@ def test_docs_page_renders_with_app_test(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("tabs")) >= 1 or len(at.get("markdown")) >= 1
+
+
+def test_now_page_renders_with_app_test(app_test_db: Path) -> None:
+    """Now page renders (smoke test). With no projects, shows info message."""
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.get("subheader")) >= 1
+    assert len(at.get("info")) >= 1
+    assert len(at.get("expander")) == 0
+
+
+def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None:
+    """Now page shows items when project + handoff todo exist with next_check due."""
+    db.init_db()
+    project = data.create_project("Test Project")
+    assert project.id is not None
+    data.create_todo(
+        project_id=project.id,
+        name="Follow up with Alice",
+        next_check=date(2000, 1, 1),
+        helper="Alice",
+    )
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+    assert len(at.get("subheader")) >= 1
+    assert len(at.get("expander")) >= 1
 
 
 def test_full_app_loads_with_app_test(app_test_db: Path) -> None:

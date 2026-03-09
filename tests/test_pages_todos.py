@@ -51,6 +51,7 @@ def test_build_todo_dataframe_empty() -> None:
         "project",
         "name",
         "status",
+        "next_check",
         "helper",
         "deadline",
         "notes",
@@ -66,6 +67,7 @@ def test_build_todo_dataframe_populated() -> None:
         project_name="Project A",
         name="Task",
         status=TodoStatus.DONE,
+        next_check=None,
         helper="",
         deadline=date(2024, 1, 1),
         notes="",
@@ -461,6 +463,29 @@ def test_persist_changes_updates(monkeypatch: pytest.MonkeyPatch) -> None:
     assert kwargs["name"] == "New Name"
     assert kwargs["project_id"] == 2
     assert kwargs["status"] == TodoStatus.HANDOFF
+
+
+def test_build_todo_dataframe_populated_with_next_check() -> None:
+    """Dataframe includes next_check when provided."""
+    row = TodoRow(
+        todo_id=5,
+        project_id=1,
+        project_name="Project A",
+        name="Task",
+        status=TodoStatus.DONE,
+        next_check=date(2024, 1, 2),
+        helper="Alice",
+        deadline=date(2024, 1, 1),
+        notes="Some notes",
+        created_at=datetime(2024, 1, 1, tzinfo=UTC),
+    )
+    df = _build_todo_dataframe([row])
+    assert len(df) == 1
+    assert df.iloc[0]["id"] == 5
+    assert df.iloc[0]["project"] == "Project A"
+    assert df.iloc[0]["status"] == "done"
+    assert df.iloc[0]["next_check"] == date(2024, 1, 2)
+    assert df.iloc[0]["deadline"] == date(2024, 1, 1)
 
 
 class TestPersistChangesEdgeCases:

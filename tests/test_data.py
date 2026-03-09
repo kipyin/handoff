@@ -511,6 +511,98 @@ def test_query_todos_completed_end_date_includes_full_day(session, monkeypatch) 
     assert results[0].name == "Done at 11pm"
 
 
+def test_snooze_todo(session, monkeypatch) -> None:
+    """snooze_todo updates next_check only, leaves deadline unchanged."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    t = Todo(
+        project_id=p.id,
+        name="Follow up",
+        status=TodoStatus.HANDOFF,
+        next_check=date(2026, 1, 1),
+        deadline=date(2026, 6, 1),
+    )
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+
+    updated = data.snooze_todo(t.id, to_date=date(2026, 1, 15))
+    assert updated is not None
+    assert updated.next_check == date(2026, 1, 15)
+    assert updated.deadline == date(2026, 6, 1)
+
+
+def test_close_todo(session, monkeypatch) -> None:
+    """close_todo marks todo as done."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    t = Todo(
+        project_id=p.id,
+        name="Done item",
+        status=TodoStatus.HANDOFF,
+    )
+    session.add(t)
+    session.commit()
+    session.refresh(t)
+
+    updated = data.close_todo(t.id)
+    assert updated is not None
+    assert updated.status == TodoStatus.DONE
+    assert updated.completed_at is not None
+
+
+def test_query_now_items(session, monkeypatch) -> None:
+    """query_now_items returns open items with next_check due or deadline at risk."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    # Past dates so they always qualify regardless of real today
+    t1 = Todo(
+        project_id=p.id,
+        name="Check due",
+        status=TodoStatus.HANDOFF,
+        next_check=date(2000, 1, 1),
+        deadline=None,
+    )
+    t2 = Todo(
+        project_id=p.id,
+        name="Deadline at risk",
+        status=TodoStatus.HANDOFF,
+        next_check=date(2030, 1, 1),
+        deadline=date(2000, 1, 1),
+    )
+    t3 = Todo(
+        project_id=p.id,
+        name="Done",
+        status=TodoStatus.DONE,
+        next_check=date(2000, 1, 1),
+    )
+    session.add_all([t1, t2, t3])
+    session.commit()
+
+    results = data.query_now_items()
+    assert len(results) == 2
+    names = [r[0].name for r in results]
+    assert "Check due" in names
+    assert "Deadline at risk" in names
+    assert "Done" not in names
+
+    at_risk_names = [r[0].name for r in results if r[1]]
+    assert "Deadline at risk" in at_risk_names
+    assert "Check due" not in at_risk_names
+
+
 # ---------------------------------------------------------------------------
 # import_payload tests
 # ---------------------------------------------------------------------------
