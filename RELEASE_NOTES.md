@@ -2,6 +2,17 @@
 
 Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** where applicable. Version headings keep an impact tag: `[Breaking]`, `[Recommended]`, or `[Optional]`.
 
+## 2026.3.8 [Optional]
+
+- **Improvement**
+  - **Docs consolidation:** Merged STYLE.md and CONTRIBUTING.md into AGENTS.md; README now points to AGENTS.md for developer docs.
+  - **Build dry-run:** Added `--dry-run` to `build --full` and `build --patch` for CI-friendly validation without downloads, PyArmor, or archive creation.
+  - **macOS CI:** Added macos-latest to the CI matrix.
+- **Internal**
+  - **Build integration tests:** Added `tests/test_build_dry_run.py` for build dry-run flows.
+  - **Gitee CI removed:** Dropped `.gitee-pipeline.yml` and `.gitee/workflows/ci.yml`; CI runs on GitHub only.
+  - **Planning docs removed:** Removed `docs/` (product-architecture-plan, dashboard-ideas, release-2026.3.6-plan); AGENTS.md is the canonical dev guide.
+
 ## 2026.3.7 [Recommended]
 
 - **Fix**

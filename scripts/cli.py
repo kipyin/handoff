@@ -174,15 +174,23 @@ def build(
     ),
     patch: bool = typer.Option(False, "--patch", help="Build a patch zip from the build output."),
     platform: BuildPlatform = PLATFORM_OPT,
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Run build steps without download/obfuscation/archive; for CI.",
+    ),
 ) -> None:
     """Build the application (full distribution or patch)."""
     if full:
         label = "macOS standalone" if platform == BuildPlatform.MAC else "Windows embedded zip"
         console.print(f"Building full {label} distribution...", style="bold cyan")
-        build_full_module.main(platform=platform.value)
+        build_full_module.main(platform=platform.value, dry_run=dry_run)
     elif patch:
-        path = build_patch_module.build_patch()
-        console.print(f"Patch zip created at {path}", style="bold green")
+        path = build_patch_module.build_patch(dry_run=dry_run)
+        if dry_run:
+            console.print(f"Dry run complete. Would create {path}", style="bold cyan")
+        else:
+            console.print(f"Patch zip created at {path}", style="bold green")
     else:
         console.print("Please specify either --full or --patch.", style="bold red")
         raise typer.Exit(code=1)

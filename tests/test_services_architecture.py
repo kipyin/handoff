@@ -5,11 +5,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-PAGE_FILES = [
-    path
-    for path in Path("src/handoff/pages").glob("*.py")
-    if path.name != "__init__.py"
-]
+PAGE_FILES = [path for path in Path("src/handoff/pages").glob("*.py") if path.name != "__init__.py"]
 
 
 def test_pages_do_not_import_data_layer_directly() -> None:

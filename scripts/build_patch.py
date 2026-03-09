@@ -18,7 +18,7 @@ BUILD_APP_DIR = ROOT / "build" / "handoff"
 DIST_ROOT = ROOT / "dist"
 
 
-def build_patch(*, include_pages: bool = True) -> Path:
+def build_patch(*, include_pages: bool = True, dry_run: bool = False) -> Path:
     """Build a patch zip from current source by regenerating obfuscated code.
 
     Copies app code into build/handoff, runs PyArmor to produce obfuscated
@@ -28,9 +28,10 @@ def build_patch(*, include_pages: bool = True) -> Path:
     Args:
         include_pages: If True, include the root-level pages/ directory
             when present (build_full does not copy pages by default).
+        dry_run: If True, run copy/obfuscate/docs steps only; skip zip creation.
 
     Returns:
-        Path to the created patch zip under dist/.
+        Path to the created (or would-be-created) patch zip under dist/.
 
     Raises:
         RuntimeError: If PyArmor or source copy fails.
@@ -38,9 +39,13 @@ def build_patch(*, include_pages: bool = True) -> Path:
     """
     from . import build_full
 
+    # Ensure build_full uses our directory (it may be overwritten by a prior main() call).
+    build_full.APP_BUILD_DIR = BUILD_APP_DIR
+    build_full.SRC_PLAIN_DIR = BUILD_APP_DIR / "src_plain"
+
     BUILD_APP_DIR.mkdir(parents=True, exist_ok=True)
     build_full._copy_app_code()
-    build_full._obfuscate_app_code_with_pyarmor()
+    build_full._obfuscate_app_code_with_pyarmor(dry_run=dry_run)
     build_full._copy_docs()
 
     src_dir = BUILD_APP_DIR / "src"
@@ -54,6 +59,10 @@ def build_patch(*, include_pages: bool = True) -> Path:
     DIST_ROOT.mkdir(parents=True, exist_ok=True)
     zip_name = f"handoff-{__version__}-patch.zip"
     zip_path = DIST_ROOT / zip_name
+
+    if dry_run:
+        print("Dry run complete. Skipped: zip creation.")
+        return zip_path
 
     if zip_path.exists():
         zip_path.unlink()
