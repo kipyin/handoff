@@ -1,7 +1,7 @@
 """Now page: control tower for action-required handoffs.
 
 Shows items that need attention (next_check due or deadline at risk).
-Each item is in an expander with Snooze and Close actions.
+Each item is in an expander with Snooze, Edit, and Close actions.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 import streamlit as st
 
-from handoff.dates import format_next_check
+from handoff.dates import format_date_smart, format_risk_reason
 from handoff.models import Todo, TodoStatus
 from handoff.services import (
     complete_todo,
@@ -18,7 +18,9 @@ from handoff.services import (
     list_helpers,
     list_projects,
     query_now_items,
+    query_upcoming_handoffs,
     snooze_todo,
+    update_todo,
 )
 
 
@@ -60,60 +62,159 @@ def _render_filters(
     return project_ids or None, helper_filters or None, search_text or None
 
 
-def _render_item(todo: Todo, at_risk: bool, key_prefix: str) -> None:
-    """Render one handoff item in an expander with Snooze and Close."""
+def _render_item(
+    todo: Todo,
+    at_risk: bool,
+    key_prefix: str,
+    *,
+    projects: list,
+    project_by_name: dict,
+) -> None:
+    """Render one handoff item in an expander with Snooze, Edit, and Close."""
     todo_id = todo.id
     if todo_id is None:
         return
     project_name = todo.project.name if todo.project else "—"
     who = (todo.helper or "").strip() or "—"
     need_back = todo.name or "—"
-    next_check_str = format_next_check(todo.next_check)
-    deadline_str = str(todo.deadline) if todo.deadline else "—"
+    next_check_str = format_date_smart(todo.next_check)
+    deadline_str = format_date_smart(todo.deadline) if todo.deadline else "—"
     context = (todo.notes or "").strip()
 
-    # Header: project · who · need_back (truncated) + risk badge
-    header = f"**{project_name}** · {who} · {need_back[:50]}{'…' if len(need_back) > 50 else ''}"
-    header = f"🔴 RISK — {header}" if at_risk else f"📋 {header}"
+    # Header: risk badge (if at_risk) + project · who · need_back · check · due
+    risk_prefix = ""
+    if at_risk and todo.deadline:
+        risk_prefix = f"🔴 {format_risk_reason(todo.deadline)} — "
+    need_trunc = f"{need_back[:40]}…" if len(need_back) > 40 else need_back
+    core = (
+        f"**{project_name}** · {who} · {need_trunc} "
+        f"· 📅 {next_check_str} · ⏰ {deadline_str}"
+    )
+    header = f"{risk_prefix}📋 {core}" if not risk_prefix else f"{risk_prefix}{core}"
 
-    with st.expander(header, expanded=at_risk):
-        st.markdown(f"**Need back:** {need_back}")
-        st.markdown(f"**From:** {who}")
-        st.markdown(f"**Project:** {project_name}")
-        st.markdown(f"**Next check:** {next_check_str}")
-        st.markdown(f"**Deadline:** {deadline_str}")
-        if context:
-            st.markdown("---")
-            st.markdown("**Context:**")
-            st.markdown(context)
+    editing = st.session_state.get("now_editing_todo_id") == todo_id
 
-        st.markdown("---")
-        st.markdown("**Actions**")
-        today = date.today()
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            if st.button("+1d", key=f"{key_prefix}_snooze_1d_{todo_id}"):
-                snooze_todo(todo_id, to_date=today + timedelta(days=1))
-                st.rerun()
-        with c2:
-            if st.button("+3d", key=f"{key_prefix}_snooze_3d_{todo_id}"):
-                snooze_todo(todo_id, to_date=today + timedelta(days=3))
-                st.rerun()
-        with c3:
-            if st.button("+1w", key=f"{key_prefix}_snooze_1w_{todo_id}"):
-                snooze_todo(todo_id, to_date=today + timedelta(days=7))
-                st.rerun()
-        with c4:
-            custom_date = st.date_input(
-                "Custom",
-                value=today + timedelta(days=3),
-                key=f"{key_prefix}_custom_{todo_id}",
+    with st.expander(header, expanded=editing):
+        if editing:
+            _render_edit_form(
+                todo=todo,
+                projects=projects,
+                project_by_name=project_by_name,
+                key_prefix=f"{key_prefix}_edit_{todo_id}",
             )
-            if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{todo_id}"):
-                snooze_todo(todo_id, to_date=custom_date)
+        else:
+            # Actions at top, then Context
+            today = date.today()
+            with st.popover("Actions"):
+                r1c1, r1c2 = st.columns(2)
+                with r1c1:
+                    custom_date = st.date_input(
+                        "Date",
+                        value=today + timedelta(days=3),
+                        key=f"{key_prefix}_custom_{todo_id}",
+                        label_visibility="collapsed",
+                    )
+                with r1c2:
+                    if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{todo_id}"):
+                        snooze_todo(todo_id, to_date=custom_date)
+                        st.rerun()
+                st.markdown("---")
+                r2c1, r2c2 = st.columns(2)
+                with r2c1:
+                    if st.button("Edit", key=f"{key_prefix}_edit_btn_{todo_id}"):
+                        st.session_state["now_editing_todo_id"] = todo_id
+                        st.rerun()
+                with r2c2:
+                    if st.button("✓ Close", key=f"{key_prefix}_close_{todo_id}"):
+                        complete_todo(todo_id)
+                        st.rerun()
+
+            if context:
+                st.markdown("**Context:**")
+                st.markdown(context)
+            else:
+                st.caption("No context.")
+
+
+def _render_edit_form(
+    todo: Todo,
+    projects: list,
+    project_by_name: dict,
+    key_prefix: str,
+) -> None:
+    """Render edit form for a handoff item."""
+    todo_id = todo.id
+    if todo_id is None:
+        return
+    project_names = [p.name for p in projects]
+    with st.form(key=f"{key_prefix}_form"):
+        proj_idx = (
+            project_names.index(todo.project.name)
+            if todo.project and todo.project.name in project_names
+            else 0
+        )
+        project_name = st.selectbox(
+            "Project",
+            options=project_names,
+            index=proj_idx,
+            key=f"{key_prefix}_project",
+        )
+        who = st.text_input(
+            "Who",
+            value=(todo.helper or "").strip(),
+            placeholder="Person you're waiting on",
+            key=f"{key_prefix}_who",
+        )
+        need_back = st.text_input(
+            "Need back",
+            value=todo.name or "",
+            placeholder="Deliverable you need returned",
+            key=f"{key_prefix}_need",
+        )
+        next_check = st.date_input(
+            "Next check",
+            value=todo.next_check or date.today(),
+            key=f"{key_prefix}_next",
+        )
+        deadline = st.date_input(
+            "Deadline (optional)",
+            value=todo.deadline,
+            key=f"{key_prefix}_deadline",
+        )
+        context = st.text_area(
+            "Context (optional)",
+            value=(todo.notes or "").strip(),
+            placeholder="Notes, links, markdown…",
+            key=f"{key_prefix}_context",
+        )
+        col1, col2 = st.columns(2)
+        with col1:
+            submitted = st.form_submit_button("Save")
+        with col2:
+            cancelled = st.form_submit_button("Cancel")
+        if submitted:
+            need_back_stripped = (need_back or "").strip()
+            if not need_back_stripped:
+                st.error("Need back is required.")
+            elif project_name not in project_by_name:
+                st.error("Select a project.")
+            else:
+                update_todo(
+                    todo_id,
+                    project_id=project_by_name[project_name].id,
+                    name=need_back_stripped,
+                    helper=who.strip() or None,
+                    next_check=next_check,
+                    deadline=deadline if deadline else None,
+                    notes=context.strip() or None,
+                )
+                if "now_editing_todo_id" in st.session_state:
+                    del st.session_state["now_editing_todo_id"]
+                st.success("Saved.")
                 st.rerun()
-        if st.button("✓ Close", key=f"{key_prefix}_close_{todo_id}"):
-            complete_todo(todo_id)
+        if cancelled:
+            if "now_editing_todo_id" in st.session_state:
+                del st.session_state["now_editing_todo_id"]
             st.rerun()
 
 
@@ -198,13 +299,39 @@ def render_now_page() -> None:
         search_text=search_text or None,
     )
 
+    upcoming = query_upcoming_handoffs(
+        project_ids=project_ids,
+        helper_names=helper_names,
+        search_text=search_text or None,
+    )
+
     _render_add_form(projects, helpers, "now")
 
     st.markdown("---")
     st.markdown("**Action required**")
+    project_by_name = {p.name: p for p in projects}
     if not items:
         st.info("Nothing needs attention right now. Add handoffs or check back later.")
-        return
+    else:
+        for todo, at_risk in items:
+            _render_item(
+                todo,
+                at_risk,
+                "now",
+                projects=projects,
+                project_by_name=project_by_name,
+            )
 
-    for todo, at_risk in items:
-        _render_item(todo, at_risk, "now")
+    st.markdown("---")
+    st.markdown("**Upcoming**")
+    if not upcoming:
+        st.caption("No upcoming handoffs.")
+    else:
+        for todo in upcoming:
+            _render_item(
+                todo,
+                at_risk=False,
+                key_prefix="now_upcoming",
+                projects=projects,
+                project_by_name=project_by_name,
+            )
