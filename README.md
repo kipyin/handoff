@@ -67,12 +67,17 @@ To keep the app simple and robust, some things are intentionally out of scope:
 1. **Projects** — Create and manage engagements/projects on the Projects page.
 2. **Todos per project** — Each project has many todos. Each todo has:
    - Name
+   - Next check (optional follow-up date)
    - Deadline (optional)
    - Creation timestamp (auto)
    - Status: `handoff` | `done` | `canceled`
    - Helper (assignee)
    - Notes (text; you can paste links, file paths, etc.)
-3. **Unified table view** — One main table lists todos across all projects. Use
+3. **Now page** — Control-tower view for action-required handoffs. Shows items
+   that need attention (next check due today or earlier, or deadline at risk).
+   Use Snooze (+1d, +3d, +1w, or custom) to follow up later, or Close when done.
+   Filter by project, helper, or search.
+4. **Unified table view** — One main table lists todos across all projects. Use
    the filter bar to narrow by:
    - **Search** — Text in name, notes, helper, or project.
    - **Statuses** — Multiselect (defaults to `handoff`).
@@ -82,10 +87,10 @@ To keep the app simple and robust, some things are intentionally out of scope:
      From/To dates).
    Sort by clicking column headers. Edit inline and click **Save changes** to
    create, update, or delete todos.
-4. **Dashboard** — At-a-glance metrics: open handoffs, completed this week vs
+5. **Dashboard** — At-a-glance metrics: open handoffs, completed this week vs
    last, median cycle time, and on-time rate. Plus a weekly throughput chart
    and current helper load.
-5. **Updates and backups** — An in-app Settings page lets you apply code-only
+6. **Updates and backups** — An in-app Settings page lets you apply code-only
    patch zips and restore from backups created before each update.
 
 ## Where your data lives

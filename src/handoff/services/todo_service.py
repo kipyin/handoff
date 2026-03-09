@@ -7,7 +7,9 @@ from datetime import date, datetime
 from handoff.data import create_todo as _create_todo
 from handoff.data import delete_todo as _delete_todo
 from handoff.data import list_helpers as _list_helpers
+from handoff.data import query_now_items as _query_now_items
 from handoff.data import query_todos as _query_todos
+from handoff.data import snooze_todo as _snooze_todo
 from handoff.data import update_todo as _update_todo
 from handoff.models import Todo, TodoStatus
 from handoff.page_models import TodoQuery
@@ -17,6 +19,7 @@ def create_todo(
     project_id: int,
     name: str,
     status: TodoStatus = TodoStatus.HANDOFF,
+    next_check: date | None = None,
     deadline: date | None = None,
     helper: str | list[str] | None = None,
     notes: str | None = None,
@@ -26,6 +29,7 @@ def create_todo(
         project_id=project_id,
         name=name,
         status=status,
+        next_check=next_check,
         deadline=deadline,
         helper=helper,
         notes=notes,
@@ -75,6 +79,31 @@ def query_todos(
 def list_helpers() -> list[str]:
     """List known helper names through the service boundary."""
     return _list_helpers()
+
+
+def query_now_items(
+    *,
+    project_ids: list[int] | None = None,
+    helper_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 2,
+) -> list[tuple[Todo, bool]]:
+    """Return open items that need attention on the Now page.
+
+    Items need attention when next_check is due today or earlier, or deadline
+    is within deadline_near_days. Returns (todo, at_risk) tuples.
+    """
+    return _query_now_items(
+        project_ids=project_ids,
+        helper_names=helper_names,
+        search_text=search_text,
+        deadline_near_days=deadline_near_days,
+    )
+
+
+def snooze_todo(todo_id: int, *, to_date: date) -> Todo | None:
+    """Update a todo's next_check date. Does not change deadline."""
+    return _snooze_todo(todo_id, to_date=to_date)
 
 
 def complete_todo(todo_id: int) -> Todo | None:

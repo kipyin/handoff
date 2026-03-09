@@ -10,16 +10,16 @@ from datetime import date, timedelta
 
 import streamlit as st
 
-from handoff.data import (
-    close_todo,
+from handoff.dates import format_next_check
+from handoff.models import Todo, TodoStatus
+from handoff.services import (
+    complete_todo,
     create_todo,
     list_helpers,
     list_projects,
     query_now_items,
     snooze_todo,
 )
-from handoff.dates import format_next_check
-from handoff.models import Todo, TodoStatus
 
 
 def _render_filters(
@@ -113,7 +113,7 @@ def _render_item(todo: Todo, at_risk: bool, key_prefix: str) -> None:
                 snooze_todo(todo_id, to_date=custom_date)
                 st.rerun()
         if st.button("✓ Close", key=f"{key_prefix}_close_{todo_id}"):
-            close_todo(todo_id)
+            complete_todo(todo_id)
             st.rerun()
 
 
