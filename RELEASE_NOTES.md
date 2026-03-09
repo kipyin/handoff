@@ -2,16 +2,23 @@
 
 Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** where applicable. Version headings keep an impact tag: `[Breaking]`, `[Recommended]`, or `[Optional]`.
 
-## 2026.3.8 [Optional]
+## 2026.3.8 [Recommended]
 
+- **Feature**
+  - **Now page editing:** Handoffs can be edited inline (Edit) with project, who, need back, next check, deadline, context.
+  - **Upcoming section:** Now page shows handoffs not yet due (next_check in future, deadline not at risk).
 - **Improvement**
-  - **Docs consolidation:** Merged STYLE.md and CONTRIBUTING.md into AGENTS.md; README now points to AGENTS.md for developer docs.
-  - **Build dry-run:** Added `--dry-run` to `build --full` and `build --patch` for CI-friendly validation without downloads, PyArmor, or archive creation.
-  - **macOS CI:** Added macos-latest to the CI matrix.
+  - **Now page layout:** Expanders collapsed by default; header shows project, who, need back, next check, deadline; actions compacted (Snooze, Edit, Close).
+  - **Risk badge:** Specific reasons (e.g. "Risk — due today", "Risk — due tomorrow", "Risk — overdue").
+  - **Docs consolidation:** Merged STYLE.md and CONTRIBUTING.md into AGENTS.md; README points to AGENTS.md.
+  - **Build dry-run:** `--dry-run` for build --full and build --patch (CI-friendly).
+  - **macOS CI:** Added macos-latest to CI matrix.
+- **Breaking**
+  - **Todos page removed:** Todos table removed from nav; manage handoffs on Now (add, edit, snooze, close). `render_todos_page` kept for backward compatibility.
 - **Internal**
-  - **Build integration tests:** Added `tests/test_build_dry_run.py` for build dry-run flows.
-  - **Gitee CI removed:** Dropped `.gitee-pipeline.yml` and `.gitee/workflows/ci.yml`; CI runs on GitHub only.
-  - **Planning docs removed:** Removed `docs/` (product-architecture-plan, dashboard-ideas, release-2026.3.6-plan); AGENTS.md is the canonical dev guide.
+  - **Gitee CI removed:** Dropped .gitee-pipeline.yml and .gitee/workflows; CI runs on GitHub only.
+  - **Planning docs removed:** Removed docs/ (product-architecture-plan, dashboard-ideas, release plan); AGENTS.md is canonical dev guide.
+  - **Build tests:** Added tests/test_build_dry_run.py.
 
 ## 2026.3.7 [Recommended]
 
