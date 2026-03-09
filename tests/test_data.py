@@ -705,7 +705,13 @@ def test_query_upcoming_handoffs(session, monkeypatch) -> None:
         next_check=date(2026, 3, 8),
         deadline=date(2026, 3, 20),
     )
-    session.add_all([h1, h2, h3, h4, h5])
+    h6 = Handoff(
+        project_id=p.id,
+        need_back="No next check still upcoming",
+        next_check=None,
+        deadline=None,
+    )
+    session.add_all([h1, h2, h3, h4, h5, h6])
     session.commit()
     session.refresh(h4)
 
@@ -723,6 +729,7 @@ def test_query_upcoming_handoffs(session, monkeypatch) -> None:
     assert "Upcoming" in names
     assert "Also upcoming" in names
     assert "Near deadline but not delayed" in names
+    assert "No next check still upcoming" in names
     assert "Risk item" not in names
     assert "Action item" not in names
 

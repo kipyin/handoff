@@ -870,6 +870,7 @@ def query_upcoming_handoffs(
     A handoff is upcoming when it is open and neither:
     - Action: next_check is due (<= today), nor
     - Risk: deadline is near and the handoff has a delayed check-in.
+    Handoffs without a next_check are included when they are not Risk/Action.
     Sorted by next_check then deadline.
 
     Args:
