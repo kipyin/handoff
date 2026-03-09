@@ -9,6 +9,7 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
   - **Upcoming section:** Now page shows handoffs not yet due (next_check in future, deadline not at risk).
 - **Improvement**
   - **Now page layout:** Expanders collapsed by default; header shows project, who, need back, next check, deadline; actions compacted (Snooze, Edit, Close).
+  - **Now page style:** Google-style docstrings, typed contracts (dict[str, Project]), single source for project_by_name; snooze default one business day via add_business_days.
   - **Risk badge:** Specific reasons (e.g. "Risk — due today", "Risk — due tomorrow", "Risk — overdue").
   - **Docs consolidation:** Merged STYLE.md and CONTRIBUTING.md into AGENTS.md; README points to AGENTS.md.
   - **Build dry-run:** `--dry-run` for build --full and build --patch (CI-friendly).
@@ -16,6 +17,7 @@ Entries are grouped by **Fix**, **Feature**, **Improvement**, and **Internal** w
 - **Breaking**
   - **Todos page removed:** Todos table removed from nav; manage handoffs on Now (add, edit, snooze, close). `render_todos_page` kept for backward compatibility.
 - **Internal**
+  - **dates.add_business_days:** New helper for snooze default; tests in test_dates.py.
   - **Gitee CI removed:** Dropped .gitee-pipeline.yml and .gitee/workflows; CI runs on GitHub only.
   - **Planning docs removed:** Removed docs/ (product-architecture-plan, dashboard-ideas, release plan); AGENTS.md is canonical dev guide.
   - **Build tests:** Added tests/test_build_dry_run.py.
