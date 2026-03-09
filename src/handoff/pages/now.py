@@ -8,26 +8,24 @@ from __future__ import annotations
 
 from datetime import date
 
-import pandas as pd
 import streamlit as st
 
 from handoff.dates import add_business_days, format_date_smart, format_risk_reason
-from handoff.models import Handoff, Project
+from handoff.models import CheckIn, CheckInType, Handoff, Project
 from handoff.search_parse import parse_search_query
 from handoff.services import (
+    add_check_in,
     conclude_handoff,
     create_handoff,
     get_deadline_near_days,
     list_pitchmen_with_open_handoffs,
     list_projects,
+    query_action_handoffs,
     query_concluded_handoffs,
-    query_now_items,
+    query_risk_handoffs,
     query_upcoming_handoffs,
     snooze_handoff,
     update_handoff,
-)
-from handoff.services import (
-    get_handoff_close_date as _get_close_date,
 )
 
 
@@ -78,21 +76,117 @@ def _render_filters(
     return project_ids or None, pitchman_filters or None, search_text or None
 
 
+def _check_in_header(check_in: CheckIn) -> str:
+    """Return a compact check-in header line for trail expanders."""
+    check_label = check_in.check_in_type.value.replace("_", " ")
+    check_label = check_label.title()
+    base = f"[{check_label}] {format_date_smart(check_in.check_in_date)}"
+    note = (check_in.note or "").strip()
+    if not note:
+        return base
+    preview = note.replace("\n", " ").strip()
+    if len(preview) > 40:
+        preview = f"{preview[:40]}…"
+    return f"{base} — {preview}"
+
+
+def _render_check_in_trail(handoff: Handoff) -> None:
+    """Render the check-in trail using collapsed expanders."""
+    if not handoff.check_ins:
+        st.caption("No check-ins yet.")
+        return
+    st.markdown("**Check-in trail**")
+    for check_in in handoff.check_ins:
+        with st.expander(_check_in_header(check_in), expanded=False):
+            note = (check_in.note or "").strip()
+            if note:
+                st.markdown(note)
+            else:
+                st.caption("No note.")
+
+
+def _is_check_in_due(handoff: Handoff) -> bool:
+    """Return True when this handoff needs a check-in decision now."""
+    return handoff.next_check is not None and handoff.next_check <= date.today()
+
+
+def _render_due_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
+    """Render on-track/delayed/conclude check-in forms for due handoffs."""
+    handoff_id = handoff.id
+    if handoff_id is None:
+        return
+
+    mode_key = f"{key_prefix}_check_in_mode_{handoff_id}"
+    selected_mode = st.session_state.get(mode_key)
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button("On-track", key=f"{key_prefix}_on_track_btn_{handoff_id}"):
+            st.session_state[mode_key] = "on_track"
+            st.rerun()
+    with c2:
+        if st.button("Delayed", key=f"{key_prefix}_delayed_btn_{handoff_id}"):
+            st.session_state[mode_key] = "delayed"
+            st.rerun()
+    with c3:
+        if st.button("Conclude", key=f"{key_prefix}_conclude_btn_{handoff_id}"):
+            st.session_state[mode_key] = "concluded"
+            st.rerun()
+
+    if selected_mode not in {"on_track", "delayed", "concluded"}:
+        return
+
+    form_key = f"{key_prefix}_check_in_form_{handoff_id}_{selected_mode}"
+    with st.form(key=form_key):
+        if selected_mode == "concluded":
+            note = st.text_area(
+                "Conclusion note (optional)",
+                key=f"{form_key}_note",
+            )
+            save = st.form_submit_button("Save conclude check-in")
+        else:
+            note_label = "Note (optional)" if selected_mode == "on_track" else "Reason (optional)"
+            note = st.text_area(note_label, key=f"{form_key}_note")
+            next_check = st.date_input(
+                "Next check-in",
+                value=add_business_days(date.today(), 1),
+                key=f"{form_key}_next_check",
+            )
+            save = st.form_submit_button("Save check-in")
+        cancel = st.form_submit_button("Cancel")
+
+        if save:
+            note_value = note.strip() or None
+            if selected_mode == "concluded":
+                conclude_handoff(handoff_id, note=note_value)
+                st.success("Concluded.")
+            else:
+                check_in_type = (
+                    CheckInType.ON_TRACK if selected_mode == "on_track" else CheckInType.DELAYED
+                )
+                add_check_in(
+                    handoff_id,
+                    check_in_type=check_in_type,
+                    note=note_value,
+                    next_check_date=next_check,
+                )
+                st.success("Check-in saved.")
+            st.session_state.pop(mode_key, None)
+            st.rerun()
+        if cancel:
+            st.session_state.pop(mode_key, None)
+            st.rerun()
+
+
 def _render_item(
     handoff: Handoff,
-    at_risk: bool,
     key_prefix: str,
     *,
     project_by_name: dict[str, Project],
+    is_risk: bool = False,
+    show_due_flow: bool = False,
+    allow_actions: bool = True,
 ) -> None:
-    """Render one handoff item in an expander with Snooze, Edit, and Conclude.
-
-    Args:
-        handoff: The handoff item to render.
-        at_risk: Whether to show deadline-at-risk styling.
-        key_prefix: Prefix for Streamlit widget keys.
-        project_by_name: Map of project name to Project for form lookup.
-    """
+    """Render one handoff item in an expander."""
     handoff_id = handoff.id
     if handoff_id is None:
         return
@@ -104,12 +198,12 @@ def _render_item(
     context = (handoff.notes or "").strip()
 
     risk_prefix = ""
-    if at_risk and handoff.deadline:
+    if is_risk and handoff.deadline:
         risk_prefix = f"⏰ {format_risk_reason(handoff.deadline)} — "
     need_trunc = f"{need_back[:40]}…" if len(need_back) > 40 else need_back
     need_bold = f"**{need_trunc}**"
 
-    if at_risk and handoff.deadline:
+    if is_risk and handoff.deadline:
         date_part = f"Check-in {next_check_str}"
     elif handoff.deadline:
         date_part = f"Check-in {next_check_str} · ⏰ {deadline_str}"
@@ -120,8 +214,7 @@ def _render_item(
     core = " · ".join(segments)
     header = risk_prefix + core
 
-    editing = st.session_state.get("now_editing_handoff_id") == handoff_id
-
+    editing = allow_actions and st.session_state.get("now_editing_handoff_id") == handoff_id
     with st.expander(header, expanded=editing):
         if editing:
             _render_edit_form(
@@ -130,35 +223,39 @@ def _render_item(
                 key_prefix=f"{key_prefix}_edit_{handoff_id}",
             )
         else:
-            today = date.today()
-            with st.popover("Actions"):
-                r1c1, r1c2 = st.columns(2)
-                with r1c1:
-                    if st.button("Edit", key=f"{key_prefix}_edit_btn_{handoff_id}"):
-                        st.session_state["now_editing_handoff_id"] = handoff_id
-                        st.rerun()
-                with r1c2:
-                    if st.button("✓ Conclude", key=f"{key_prefix}_conclude_{handoff_id}"):
-                        conclude_handoff(handoff_id)
-                        st.rerun()
-                r2c1, r2c2 = st.columns(2)
-                with r2c1:
-                    custom_date = st.date_input(
-                        "Date",
-                        value=add_business_days(today, 1),
-                        key=f"{key_prefix}_custom_{handoff_id}",
-                        label_visibility="collapsed",
-                    )
-                with r2c2:
-                    if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{handoff_id}"):
-                        snooze_handoff(handoff_id, to_date=custom_date)
-                        st.rerun()
+            if allow_actions and show_due_flow and _is_check_in_due(handoff):
+                _render_due_check_in_flow(handoff, key_prefix=key_prefix)
+            elif allow_actions:
+                today = date.today()
+                with st.popover("Actions"):
+                    r1c1, r1c2 = st.columns(2)
+                    with r1c1:
+                        if st.button("Edit", key=f"{key_prefix}_edit_btn_{handoff_id}"):
+                            st.session_state["now_editing_handoff_id"] = handoff_id
+                            st.rerun()
+                    with r1c2:
+                        if st.button("✓ Conclude", key=f"{key_prefix}_conclude_{handoff_id}"):
+                            conclude_handoff(handoff_id)
+                            st.rerun()
+                    r2c1, r2c2 = st.columns(2)
+                    with r2c1:
+                        custom_date = st.date_input(
+                            "Date",
+                            value=add_business_days(today, 1),
+                            key=f"{key_prefix}_custom_{handoff_id}",
+                            label_visibility="collapsed",
+                        )
+                    with r2c2:
+                        if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{handoff_id}"):
+                            snooze_handoff(handoff_id, to_date=custom_date)
+                            st.rerun()
 
             if context:
                 st.markdown("**Context:**")
                 st.markdown(context)
             else:
                 st.caption("No context.")
+            _render_check_in_trail(handoff)
 
 
 def _render_edit_form(
@@ -319,34 +416,6 @@ def _render_add_form(
                     st.rerun()
 
 
-def _concluded_to_dataframe(handoffs: list[Handoff]) -> pd.DataFrame:
-    """Build a DataFrame for the Concluded section.
-
-    Args:
-        handoffs: Sorted list of concluded handoffs.
-
-    Returns:
-        DataFrame with columns: Need back, Who, Project, Next check,
-        Deadline, Concluded.
-    """
-    rows = []
-    for h in handoffs:
-        project_name = h.project.name if h.project else "—"
-        close = _get_close_date(h)
-        close_str = format_date_smart(close) if close else "—"
-        rows.append(
-            {
-                "Need back": h.need_back or "—",
-                "Who": (h.pitchman or "").strip() or "—",
-                "Project": project_name,
-                "Next check": format_date_smart(h.next_check),
-                "Deadline": format_date_smart(h.deadline) if h.deadline else "—",
-                "Concluded": close_str,
-            }
-        )
-    return pd.DataFrame(rows)
-
-
 def render_now_page() -> None:
     """Render the Now page with four sections: Risk | Action | Upcoming | Concluded."""
     st.subheader("Now")
@@ -370,7 +439,7 @@ def render_now_page() -> None:
 
     parsed = parse_search_query(search_text or "")
     deadline_near_days = get_deadline_near_days()
-    items = query_now_items(
+    risk = query_risk_handoffs(
         project_ids=project_ids,
         pitchman_names=pitchman_names,
         search_text=parsed.text_query,
@@ -381,6 +450,16 @@ def render_now_page() -> None:
         deadline_max=parsed.deadline_max,
     )
 
+    action = query_action_handoffs(
+        project_ids=project_ids,
+        pitchman_names=pitchman_names,
+        search_text=parsed.text_query,
+        deadline_near_days=deadline_near_days,
+        next_check_min=parsed.next_check_min,
+        next_check_max=parsed.next_check_max,
+        deadline_min=parsed.deadline_min,
+        deadline_max=parsed.deadline_max,
+    )
     upcoming = query_upcoming_handoffs(
         project_ids=project_ids,
         pitchman_names=pitchman_names,
@@ -391,26 +470,42 @@ def render_now_page() -> None:
         deadline_min=parsed.deadline_min,
         deadline_max=parsed.deadline_max,
     )
+    concluded = query_concluded_handoffs(
+        project_ids=project_ids,
+        pitchman_names=pitchman_names,
+        search_text=parsed.text_query,
+        include_archived_projects=True,
+    )
 
     _render_add_form(project_by_name, pitchmen, "now")
 
-    # --- Risk section (placeholder — real query in Phase 2) ---
+    # --- Risk section ---
     st.markdown("---")
     st.markdown("**Risk**")
-    st.caption("At-risk handoffs (approaching deadline with delays). Coming soon.")
+    if not risk:
+        st.caption("No at-risk handoffs.")
+    else:
+        for handoff in risk:
+            _render_item(
+                handoff,
+                "now_risk",
+                project_by_name=project_by_name,
+                is_risk=True,
+                allow_actions=True,
+            )
 
     # --- Action section ---
     st.markdown("---")
     st.markdown("**Action required**")
-    if not items:
+    if not action:
         st.info("Nothing needs attention right now. Add handoffs or check back later.")
     else:
-        for handoff, at_risk in items:
+        for handoff in action:
             _render_item(
                 handoff,
-                at_risk,
-                "now",
+                "now_action",
                 project_by_name=project_by_name,
+                show_due_flow=True,
             )
 
     # --- Upcoming section ---
@@ -422,27 +517,20 @@ def render_now_page() -> None:
         for handoff in upcoming:
             _render_item(
                 handoff,
-                at_risk=False,
                 key_prefix="now_upcoming",
                 project_by_name=project_by_name,
             )
 
     # --- Concluded section ---
     st.markdown("---")
-    with st.expander("Concluded >"):
-        concluded = query_concluded_handoffs(
-            project_ids=project_ids,
-            pitchman_names=pitchman_names,
-            search_text=parsed.text_query,
-            include_archived_projects=True,
-        )
-        if not concluded:
-            st.caption("No concluded handoffs.")
-        else:
-            df = _concluded_to_dataframe(concluded)
-            st.dataframe(
-                df,
-                key="now_concluded_df",
-                use_container_width=True,
-                hide_index=True,
+    st.markdown("**Concluded**")
+    if not concluded:
+        st.caption("No concluded handoffs.")
+    else:
+        for handoff in concluded:
+            _render_item(
+                handoff,
+                key_prefix="now_concluded",
+                project_by_name=project_by_name,
+                allow_actions=False,
             )

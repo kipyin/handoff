@@ -11,9 +11,11 @@ from handoff.data import delete_handoff as _delete_handoff
 from handoff.data import get_handoff_close_date as _get_handoff_close_date
 from handoff.data import list_pitchmen as _list_pitchmen
 from handoff.data import list_pitchmen_with_open_handoffs as _list_pitchmen_with_open_handoffs
+from handoff.data import query_action_handoffs as _query_action_handoffs
 from handoff.data import query_concluded_handoffs as _query_concluded_handoffs
 from handoff.data import query_handoffs as _query_handoffs
 from handoff.data import query_now_items as _query_now_items
+from handoff.data import query_risk_handoffs as _query_risk_handoffs
 from handoff.data import query_upcoming_handoffs as _query_upcoming_handoffs
 from handoff.data import snooze_handoff as _snooze_handoff
 from handoff.data import update_handoff as _update_handoff
@@ -118,6 +120,54 @@ def query_now_items(
     )
 
 
+def query_action_handoffs(
+    *,
+    project_ids: list[int] | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 1,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
+) -> list[Handoff]:
+    """Return open handoffs with a due check-in (next_check <= today)."""
+    return _query_action_handoffs(
+        project_ids=project_ids,
+        pitchman_names=pitchman_names,
+        search_text=search_text,
+        deadline_near_days=deadline_near_days,
+        next_check_min=next_check_min,
+        next_check_max=next_check_max,
+        deadline_min=deadline_min,
+        deadline_max=deadline_max,
+    )
+
+
+def query_risk_handoffs(
+    *,
+    project_ids: list[int] | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 1,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
+) -> list[Handoff]:
+    """Return open handoffs that are near deadline and have delayed check-ins."""
+    return _query_risk_handoffs(
+        project_ids=project_ids,
+        pitchman_names=pitchman_names,
+        search_text=search_text,
+        deadline_near_days=deadline_near_days,
+        next_check_min=next_check_min,
+        next_check_max=next_check_max,
+        deadline_min=deadline_min,
+        deadline_max=deadline_max,
+    )
+
+
 def query_upcoming_handoffs(
     *,
     project_ids: list[int] | None = None,
@@ -186,23 +236,27 @@ def get_handoff_close_date(handoff: Handoff) -> date | None:
 def add_check_in(
     handoff_id: int,
     check_in_type: CheckInType,
-    check_in_date: date,
     note: str | None = None,
+    next_check_date: date | None = None,
+    check_in_date: date | None = None,
 ) -> CheckIn:
-    """Add a check-in entry to a handoff.
+    """Add a check-in entry to a handoff and optionally move next_check.
 
     Args:
         handoff_id: Id of the handoff.
         check_in_type: Type of check-in.
-        check_in_date: Date of the check-in.
         note: Optional note.
+        next_check_date: Optional next check date for non-concluded check-ins.
+        check_in_date: Optional check-in date. Defaults to today.
 
     Returns:
         The created CheckIn.
     """
+    effective_check_in_date = check_in_date or date.today()
     return _create_check_in(
         handoff_id=handoff_id,
         check_in_type=check_in_type,
-        check_in_date=check_in_date,
+        check_in_date=effective_check_in_date,
         note=note,
+        next_check_date=next_check_date,
     )

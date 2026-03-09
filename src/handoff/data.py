@@ -438,6 +438,7 @@ def create_check_in(
     check_in_type: CheckInType,
     check_in_date: date,
     note: str | None = None,
+    next_check_date: date | None = None,
 ) -> CheckIn:
     """Insert a check-in entry for a handoff.
 
@@ -446,11 +447,19 @@ def create_check_in(
         check_in_type: Type of check-in (on_track, delayed, concluded).
         check_in_date: Date of the check-in.
         note: Optional note/reason.
+        next_check_date: Optional next check date to set on the handoff when
+            check_in_type is not concluded.
 
     Returns:
         The created CheckIn.
     """
     with session_context() as session:
+        handoff = session.get(Handoff, handoff_id)
+        if handoff is None:
+            msg = f"Handoff {handoff_id} not found for check-in"
+            logger.warning(msg)
+            raise ValueError(msg)
+
         check_in = CheckIn(
             handoff_id=handoff_id,
             check_in_type=check_in_type,
@@ -458,6 +467,9 @@ def create_check_in(
             note=note or None,
         )
         session.add(check_in)
+        if check_in_type != CheckInType.CONCLUDED and next_check_date is not None:
+            handoff.next_check = next_check_date
+            session.add(handoff)
         session.commit()
         session.refresh(check_in)
         logger.info(
@@ -469,7 +481,11 @@ def create_check_in(
             "handoff",
             handoff_id,
             "check_in",
-            {"check_in_type": check_in_type.value, "check_in_date": str(check_in_date)},
+            {
+                "check_in_type": check_in_type.value,
+                "check_in_date": str(check_in_date),
+                "next_check_date": str(next_check_date) if next_check_date else None,
+            },
         )
         return check_in
 
@@ -508,6 +524,28 @@ def get_handoff_close_date(handoff: Handoff) -> date | None:
     return max(ci.check_in_date for ci in concluded)
 
 
+def _latest_check_in(handoff: Handoff) -> CheckIn | None:
+    """Return the latest check-in on a handoff trail, or None."""
+    if not handoff.check_ins:
+        return None
+    return max(handoff.check_ins, key=lambda ci: (ci.check_in_date, ci.created_at))
+
+
+def _last_check_in_is_delayed(handoff: Handoff) -> bool:
+    """Return True when the latest check-in type is delayed."""
+    latest = _latest_check_in(handoff)
+    return latest is not None and latest.check_in_type == CheckInType.DELAYED
+
+
+def _is_risk_handoff(handoff: Handoff, *, cutoff: date) -> bool:
+    """Return True when deadline is near/overdue and latest check-in is delayed."""
+    return (
+        handoff.deadline is not None
+        and handoff.deadline <= cutoff
+        and _last_check_in_is_delayed(handoff)
+    )
+
+
 # ---------------------------------------------------------------------------
 # Concluded subquery (shared helper)
 # ---------------------------------------------------------------------------
@@ -520,6 +558,67 @@ def _concluded_subquery():
         .where(CheckIn.handoff_id == Handoff.id, CheckIn.check_in_type == CheckInType.CONCLUDED)
         .correlate(Handoff)
     )
+
+
+def _delayed_subquery():
+    """Return a correlated subquery that matches handoffs with a delayed check-in."""
+    return (
+        select(CheckIn.id)
+        .where(CheckIn.handoff_id == Handoff.id, CheckIn.check_in_type == CheckInType.DELAYED)
+        .correlate(Handoff)
+    )
+
+
+def _check_in_note_subquery(search_value: str):
+    """Return a correlated subquery matching check-in notes for a handoff."""
+    return (
+        select(CheckIn.id)
+        .where(CheckIn.handoff_id == Handoff.id, CheckIn.note.ilike(search_value))
+        .correlate(Handoff)
+    )
+
+
+def _apply_handoff_filters(
+    stmt,
+    *,
+    project_ids: list[int] | None,
+    pitchman_names: list[str] | None,
+    search_text: str | None,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
+):
+    """Apply reusable handoff filters used across section queries."""
+    if project_ids:
+        stmt = stmt.where(Handoff.project_id.in_(project_ids))
+    if pitchman_names:
+        canonical = [n.strip() for n in pitchman_names if n.strip()]
+        if canonical:
+            stmt = stmt.where(Handoff.pitchman.in_(canonical))
+
+    normalized_search = (search_text or "").strip()
+    if normalized_search:
+        like_expr = f"%{normalized_search}%"
+        stmt = stmt.where(
+            or_(
+                Handoff.need_back.ilike(like_expr),
+                Handoff.notes.ilike(like_expr),
+                Handoff.pitchman.ilike(like_expr),
+                Handoff.project.has(Project.name.ilike(like_expr)),
+                exists(_check_in_note_subquery(like_expr)),
+            )
+        )
+
+    if next_check_min is not None:
+        stmt = stmt.where(Handoff.next_check.isnot(None), Handoff.next_check >= next_check_min)
+    if next_check_max is not None:
+        stmt = stmt.where(Handoff.next_check.isnot(None), Handoff.next_check <= next_check_max)
+    if deadline_min is not None:
+        stmt = stmt.where(Handoff.deadline.isnot(None), Handoff.deadline >= deadline_min)
+    if deadline_max is not None:
+        stmt = stmt.where(Handoff.deadline.isnot(None), Handoff.deadline <= deadline_max)
+    return stmt
 
 
 def count_open_handoffs() -> int:
@@ -643,6 +742,7 @@ def query_handoffs(
                     Handoff.notes.ilike(like_expr),
                     Handoff.pitchman.ilike(like_expr),
                     Handoff.project.has(Project.name.ilike(like_expr)),
+                    exists(_check_in_note_subquery(like_expr)),
                 )
             )
 
@@ -787,10 +887,13 @@ def query_upcoming_handoffs(
     deadline_min: date | None = None,
     deadline_max: date | None = None,
 ) -> list[Handoff]:
-    """Return open handoffs that are not yet action-required (upcoming).
+    """Return open handoffs that are not in Risk or Action sections.
 
-    A handoff is upcoming if next_check is in the future and deadline is not
-    at risk (within deadline_near_days). Sorted by next_check asc.
+    A handoff is upcoming when it is open and neither:
+    - Action: next_check is due (<= today), nor
+    - Risk: deadline is near and the last check-in is delayed.
+    Handoffs without a next_check are included when they are not Risk/Action.
+    Sorted by next_check then deadline.
 
     Args:
         project_ids: Optional filter by project ids.
@@ -808,7 +911,53 @@ def query_upcoming_handoffs(
     """
     today = date.today()
     cutoff = today + timedelta(days=deadline_near_days)
+    with session_context() as session:
+        stmt = (
+            select(Handoff)
+            .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
+            .where(Handoff.project.has(Project.is_archived.is_(False)))
+            .where(~exists(_concluded_subquery()))
+        )
+        stmt = _apply_handoff_filters(
+            stmt,
+            project_ids=project_ids,
+            pitchman_names=pitchman_names,
+            search_text=search_text,
+            next_check_min=next_check_min,
+            next_check_max=next_check_max,
+            deadline_min=deadline_min,
+            deadline_max=deadline_max,
+        )
+        stmt = stmt.order_by(
+            Handoff.next_check.asc().nulls_last(),
+            Handoff.deadline.asc().nulls_last(),
+            Handoff.created_at.asc(),
+        )
+        handoffs = list(session.exec(stmt).unique().all())
 
+    filtered = [
+        handoff
+        for handoff in handoffs
+        if not _is_risk_handoff(handoff, cutoff=cutoff)
+        and not (handoff.next_check is not None and handoff.next_check <= today)
+    ]
+    return filtered[:limit]
+
+
+def query_action_handoffs(
+    *,
+    project_ids: list[int] | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 1,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
+) -> list[Handoff]:
+    """Return open handoffs with a due check-in (next_check <= today), excluding Risk."""
+    today = date.today()
+    cutoff = today + timedelta(days=deadline_near_days)
     with session_context() as session:
         stmt = (
             select(Handoff)
@@ -816,43 +965,66 @@ def query_upcoming_handoffs(
             .where(Handoff.project.has(Project.is_archived.is_(False)))
             .where(~exists(_concluded_subquery()))
             .where(Handoff.next_check.isnot(None))
-            .where(Handoff.next_check > today)
-            .where((Handoff.deadline.is_(None)) | (Handoff.deadline > cutoff))
+            .where(Handoff.next_check <= today)
         )
-        if project_ids:
-            stmt = stmt.where(Handoff.project_id.in_(project_ids))
-        if pitchman_names:
-            canonical = [n.strip() for n in pitchman_names if n.strip()]
-            if canonical:
-                stmt = stmt.where(Handoff.pitchman.in_(canonical))
-        normalized_search = (search_text or "").strip()
-        if normalized_search:
-            like_expr = f"%{normalized_search}%"
-            stmt = stmt.where(
-                or_(
-                    Handoff.need_back.ilike(like_expr),
-                    Handoff.notes.ilike(like_expr),
-                    Handoff.pitchman.ilike(like_expr),
-                    Handoff.project.has(Project.name.ilike(like_expr)),
-                )
-            )
-        if next_check_min is not None:
-            stmt = stmt.where(Handoff.next_check >= next_check_min)
-        if next_check_max is not None:
-            stmt = stmt.where(Handoff.next_check <= next_check_max)
-        if deadline_min is not None:
-            stmt = stmt.where(
-                Handoff.deadline.isnot(None),
-                Handoff.deadline >= deadline_min,
-            )
-        if deadline_max is not None:
-            stmt = stmt.where(
-                Handoff.deadline.isnot(None),
-                Handoff.deadline <= deadline_max,
-            )
+        stmt = _apply_handoff_filters(
+            stmt,
+            project_ids=project_ids,
+            pitchman_names=pitchman_names,
+            search_text=search_text,
+            next_check_min=next_check_min,
+            next_check_max=next_check_max,
+            deadline_min=deadline_min,
+            deadline_max=deadline_max,
+        )
+        stmt = stmt.order_by(
+            Handoff.next_check.asc().nulls_last(),
+            Handoff.deadline.asc().nulls_last(),
+            Handoff.created_at.asc(),
+        )
+        handoffs = list(session.exec(stmt).unique().all())
+    return [handoff for handoff in handoffs if not _is_risk_handoff(handoff, cutoff=cutoff)]
 
-        stmt = stmt.order_by(Handoff.next_check.asc()).limit(limit)
-        return list(session.exec(stmt).unique().all())
+
+def query_risk_handoffs(
+    *,
+    project_ids: list[int] | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 1,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
+) -> list[Handoff]:
+    """Return open handoffs near deadline where the latest check-in is delayed."""
+    cutoff = date.today() + timedelta(days=deadline_near_days)
+    with session_context() as session:
+        stmt = (
+            select(Handoff)
+            .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
+            .where(Handoff.project.has(Project.is_archived.is_(False)))
+            .where(~exists(_concluded_subquery()))
+            .where(Handoff.deadline.isnot(None))
+            .where(Handoff.deadline <= cutoff)
+        )
+        stmt = _apply_handoff_filters(
+            stmt,
+            project_ids=project_ids,
+            pitchman_names=pitchman_names,
+            search_text=search_text,
+            next_check_min=next_check_min,
+            next_check_max=next_check_max,
+            deadline_min=deadline_min,
+            deadline_max=deadline_max,
+        )
+        stmt = stmt.order_by(
+            Handoff.deadline.asc().nulls_last(),
+            Handoff.next_check.asc().nulls_last(),
+            Handoff.created_at.asc(),
+        )
+        handoffs = list(session.exec(stmt).unique().all())
+    return [handoff for handoff in handoffs if _is_risk_handoff(handoff, cutoff=cutoff)]
 
 
 def query_concluded_handoffs(
@@ -896,6 +1068,7 @@ def query_concluded_handoffs(
                     Handoff.notes.ilike(like_expr),
                     Handoff.pitchman.ilike(like_expr),
                     Handoff.project.has(Project.name.ilike(like_expr)),
+                    exists(_check_in_note_subquery(like_expr)),
                 )
             )
         handoffs = list(session.exec(stmt).unique().all())
