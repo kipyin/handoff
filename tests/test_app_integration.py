@@ -3,13 +3,15 @@
 Each page is tested in isolation via AppTest.from_function() with a wrapper that
 calls setup() and the page renderer. Uses a temporary DB path so tests do not
 touch real user data.
+
+Also includes full-app load and programmatic UI interaction tests to verify
+no errors when clicking around different elements.
 """
 
 from __future__ import annotations
 
 import importlib
 from datetime import date
-
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,8 @@ from streamlit.testing.v1 import AppTest
 
 import handoff.data as data
 import handoff.db as db
+
+WORKSPACE = Path(__file__).resolve().parents[1]
 
 
 def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -187,3 +191,76 @@ def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None
     assert len(at.exception) == 0
     assert len(at.get("subheader")) >= 1
     assert len(at.get("expander")) >= 1
+
+
+def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
+    """Full app (app.py with st.navigation) loads without exception."""
+    at = AppTest.from_file(str(WORKSPACE / "app.py"))
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+    # First page (Todos) should render; we expect at least a subheader or info
+    assert len(at.get("subheader")) >= 1 or len(at.get("info")) >= 1
+
+
+def test_projects_create_form_submit_no_error(app_test_db: Path) -> None:
+    """Submitting the create-project form does not raise."""
+    at = AppTest.from_function(_projects_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    # Fill project name and submit. The Projects page always renders a project-name
+    # text input and a Create submit button. Target them by label/key so the test
+    # fails if the UI contract breaks.
+    project_name_inputs = [
+        ti
+        for ti in at.text_input
+        if getattr(ti, "key", None) == "projects_new_project_name"
+        or getattr(ti, "label", None) == "Project name"
+    ]
+    assert project_name_inputs, "Expected project-name text input not found on Projects page"
+    project_name_inputs[0].input("TestProjectFromForm").run(timeout=5)
+
+    create_btns = [b for b in at.button if getattr(b, "label", None) == "Create"]
+    assert create_btns, "Expected Create button not found on Projects page"
+    create_btns[0].click().run(timeout=5)
+
+    assert len(at.exception) == 0
+
+
+def test_todos_page_filter_selectbox_interaction_no_error(app_test_db: Path) -> None:
+    """Changing deadline filter selectbox does not raise."""
+    import handoff.data as data
+    import handoff.db as db
+
+    db.init_db()
+    proj = data.create_project("Proj")
+    assert proj.id is not None
+    data.create_todo(proj.id, "Task", status="handoff")
+
+    at = AppTest.from_function(_todos_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    # Interact with deadline filter selectbox; it should always be present once a
+    # project exists.
+    selectboxes = at.selectbox
+    assert selectboxes, "Expected at least one selectbox on Todos page"
+    deadline_box = next(
+        (sb for sb in selectboxes if getattr(sb, "label", None) == "Deadline"),
+        selectboxes[0],
+    )
+    deadline_box.select("Overdue").run(timeout=5)
+
+    assert len(at.exception) == 0
+
+
+def test_docs_page_tab_switch_no_error(app_test_db: Path) -> None:
+    """Switching docs page tabs (README / Release notes) does not raise."""
+    at = AppTest.from_function(_docs_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    tabs = at.tabs
+    assert len(tabs) == 2, f"Expected exactly 2 tabs on Docs page, got {len(tabs)}"
+    tabs[1].run(timeout=5)  # Switch to Release notes tab
+    assert len(at.exception) == 0

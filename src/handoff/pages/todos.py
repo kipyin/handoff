@@ -15,14 +15,6 @@ import streamlit as st
 from loguru import logger
 
 from handoff.autosave import autosave_editor
-from handoff.data import (
-    create_todo,
-    delete_todo,
-    list_helpers,
-    list_projects,
-    query_todos,
-    update_todo,
-)
 from handoff.dates import week_bounds
 from handoff.models import TodoStatus
 from handoff.page_models import (
@@ -31,6 +23,14 @@ from handoff.page_models import (
     TodoQuery,
     TodoRow,
     TodoUpdateInput,
+)
+from handoff.services.project_service import list_projects
+from handoff.services.todo_service import (
+    create_todo,
+    delete_todo,
+    list_helpers,
+    query_todos,
+    update_todo,
 )
 
 # Deadline filter presets (used by table filters and tests).

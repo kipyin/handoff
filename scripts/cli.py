@@ -32,17 +32,57 @@ PLATFORM_OPT = typer.Option(
 )
 
 
-def _format_and_lint(extra_args: list[str] | None = None) -> None:
-    """Run lint and format with optional extra args passed to underlying tools."""
-    extra_args = list(extra_args) if extra_args else []
-    format_(extra_args=extra_args)
-    lint(extra_args=extra_args)
+def _extract_fix_flag(extra_args: list[str] | None = None) -> tuple[list[str], bool]:
+    """Return non-fix args plus whether ``--fix`` was requested."""
+    args = list(extra_args) if isinstance(extra_args, (list, tuple)) else []
+    fix = False
+    filtered_args: list[str] = []
+    for arg in args:
+        if arg == "--fix":
+            fix = True
+            continue
+        filtered_args.append(arg)
+    return filtered_args, fix
+
+
+def _ruff_targets(extra_args: list[str] | None = None) -> list[str]:
+    """Return Ruff target args, defaulting to the repository root."""
+    args = list(extra_args) if isinstance(extra_args, (list, tuple)) else []
+    return args or ["."]
+
+
+def _run_format(extra_args: list[str] | None = None, *, check: bool) -> None:
+    """Run Ruff format in check or apply mode."""
+    args = _ruff_targets(extra_args)
+    cmd = ["uv", "run", "ruff", "format"]
+    if check:
+        cmd.append("--check")
+    cmd.extend(args)
+    description = "Running Ruff format check..." if check else "Running Ruff formatter..."
+    run_cmd(cmd, cwd=ROOT, description=description)
+
+
+def _run_lint(extra_args: list[str] | None = None, *, fix: bool) -> None:
+    """Run Ruff lint in check or fix mode."""
+    args = _ruff_targets(extra_args)
+    cmd = ["uv", "run", "ruff", "check"]
+    if fix:
+        cmd.append("--fix")
+    cmd.extend(args)
+    description = "Running Ruff lint with fixes..." if fix else "Running Ruff lint..."
+    run_cmd(cmd, cwd=ROOT, description=description)
+
+
+def _format_and_lint(extra_args: list[str] | None = None, *, fix: bool) -> None:
+    """Run format and lint checks, optionally applying Ruff fixes."""
+    _run_format(extra_args=extra_args, check=not fix)
+    _run_lint(extra_args=extra_args, fix=fix)
 
 
 def _ci_run(extra_args: list[str] | None = None) -> None:
-    """Run lint/format/typecheck/tests in a CI-like sequence with optional extra args."""
-    extra_args = list(extra_args) if extra_args else []
-    _format_and_lint(extra_args=extra_args)
+    """Run checks/typecheck/tests, allowing optional Ruff fixes via ``--fix``."""
+    extra_args, fix = _extract_fix_flag(extra_args)
+    _format_and_lint(extra_args=extra_args, fix=fix)
     typecheck(extra_args=extra_args)
     test(extra_args=extra_args)
 
@@ -72,33 +112,25 @@ def sync(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     run_cmd(["uv", "sync", *extra_args], cwd=ROOT, description="Syncing dependencies with uv...")
 
 
-@app.command()
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def lint(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
-    """Run Ruff lint checks."""
-    extra_args = list(extra_args) if extra_args else ["."]
-    run_cmd(
-        ["uv", "run", "ruff", "check", "--fix", *extra_args],
-        cwd=ROOT,
-        description="Running Ruff lint...",
-    )
+    """Run Ruff lint checks; pass ``--fix`` to apply fixes."""
+    extra_args, fix = _extract_fix_flag(extra_args)
+    _run_lint(extra_args=extra_args, fix=fix)
 
 
-@app.command("format")
+@app.command("format", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def format_(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     """Run Ruff formatter."""
-    extra_args = list(extra_args) if extra_args else ["."]
-    run_cmd(
-        ["uv", "run", "ruff", "format", *extra_args],
-        cwd=ROOT,
-        description="Running Ruff formatter...",
-    )
+    extra_args, _ = _extract_fix_flag(extra_args)
+    _run_format(extra_args=extra_args, check=False)
 
 
-@app.command("check")
+@app.command("check", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def check_command(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
-    """Run lint and format in sequence."""
-    format_(extra_args)
-    lint(extra_args)
+    """Run format/lint checks; pass ``--fix`` to apply Ruff changes."""
+    extra_args, fix = _extract_fix_flag(extra_args)
+    _format_and_lint(extra_args=extra_args, fix=fix)
 
 
 @app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
@@ -128,9 +160,9 @@ def typecheck(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     )
 
 
-@app.command("ci")
+@app.command("ci", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def ci(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
-    """Run lint, format, type checking, and tests."""
+    """Run check, type checking, and tests; pass ``--fix`` for Ruff fixes first."""
     extra_args = list(extra_args) if extra_args else []
     _ci_run(extra_args=extra_args)
 
@@ -142,15 +174,23 @@ def build(
     ),
     patch: bool = typer.Option(False, "--patch", help="Build a patch zip from the build output."),
     platform: BuildPlatform = PLATFORM_OPT,
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Run build steps without download/obfuscation/archive; for CI.",
+    ),
 ) -> None:
     """Build the application (full distribution or patch)."""
     if full:
         label = "macOS standalone" if platform == BuildPlatform.MAC else "Windows embedded zip"
         console.print(f"Building full {label} distribution...", style="bold cyan")
-        build_full_module.main(platform=platform.value)
+        build_full_module.main(platform=platform.value, dry_run=dry_run)
     elif patch:
-        path = build_patch_module.build_patch()
-        console.print(f"Patch zip created at {path}", style="bold green")
+        path = build_patch_module.build_patch(dry_run=dry_run)
+        if dry_run:
+            console.print(f"Dry run complete. Would create {path}", style="bold cyan")
+        else:
+            console.print(f"Patch zip created at {path}", style="bold green")
     else:
         console.print("Please specify either --full or --patch.", style="bold red")
         raise typer.Exit(code=1)

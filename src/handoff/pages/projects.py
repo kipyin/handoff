@@ -9,7 +9,8 @@ import streamlit as st
 from loguru import logger
 
 from handoff.autosave import autosave_editor
-from handoff.data import (
+from handoff.page_models import ProjectSummaryRow
+from handoff.services.project_service import (
     archive_project,
     create_project,
     delete_project,
@@ -17,7 +18,6 @@ from handoff.data import (
     rename_project,
     unarchive_project,
 )
-from handoff.page_models import ProjectSummaryRow
 
 
 def _render_create_project_form() -> None:

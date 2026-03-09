@@ -94,7 +94,7 @@ def get_engine() -> Engine:
 def init_db() -> None:
     """Create all tables if they do not exist.
 
-    Safe to call on every app start; only creates missing tables.
+    Runs pending migrations in order. Safe to call on every app start.
 
     Raises:
         DatabaseInitializationError: If the database engine or schema cannot be
@@ -109,41 +109,9 @@ def init_db() -> None:
 
         SQLModel.metadata.create_all(engine)
 
-        # Lightweight migrations: ensure newer columns exist on existing tables.
-        # Use begin() so changes commit on exit; connect() would roll back.
-        with engine.begin() as conn:
-            # Todo table migrations.
-            result = conn.exec_driver_sql("PRAGMA table_info('todo')")
-            todo_columns = {row[1] for row in result}  # row[1] = column name
-            if "completed_at" not in todo_columns:
-                logger.info("Applying migration: adding completed_at column to todo table")
-                conn.exec_driver_sql("ALTER TABLE todo ADD COLUMN completed_at TIMESTAMP NULL")
-            if "is_archived" not in todo_columns:
-                logger.info("Applying migration: adding is_archived column to todo table")
-                conn.exec_driver_sql(
-                    "ALTER TABLE todo ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0"
-                )
-            if "next_check" not in todo_columns:
-                logger.info("Applying migration: adding next_check column to todo table")
-                conn.exec_driver_sql("ALTER TABLE todo ADD COLUMN next_check DATE NULL")
-            # Migrate legacy status labels (only if status column exists)
-            if "status" in todo_columns:
-                conn.exec_driver_sql(
-                    "UPDATE todo SET status = 'handoff' WHERE status = 'delegated'"
-                )
-                # DELEGATED was an enum-name alias for HANDOFF; SQLAlchemy expects HANDOFF.
-                conn.exec_driver_sql(
-                    "UPDATE todo SET status = 'HANDOFF' WHERE status = 'DELEGATED'"
-                )
+        from handoff.migrations import run_pending_migrations
 
-            # Project table migrations.
-            result = conn.exec_driver_sql("PRAGMA table_info('project')")
-            project_columns = {row[1] for row in result}
-            if "is_archived" not in project_columns:
-                logger.info("Applying migration: adding is_archived column to project table")
-                conn.exec_driver_sql(
-                    "ALTER TABLE project ADD COLUMN is_archived BOOLEAN NOT NULL DEFAULT 0"
-                )
+        run_pending_migrations(engine)
     except Exception as exc:  # noqa: BLE001
         logger.exception("Database initialization failed: {}", exc)
         msg = "Database initialisation failed. See the log file for details."

@@ -208,5 +208,8 @@ moment it is a personal project; treat issues and requests as best-effort.
 
 For **user-facing docs** (how to run, update the app, backups), stay in this
 README. For **developer docs** (CLI commands, layout, release workflow, and
-code style), see [`CONTRIBUTING.md`](CONTRIBUTING.md). You can also read the
-README and release notes inside the app via the Docs navigation entry.
+code style), see [`AGENTS.md`](AGENTS.md). You can also read the README and
+release notes inside the app via the Docs navigation entry.
+
+**Contributing:** Run `uv run handoff ci` before submitting changes. See
+AGENTS.md for commands, style, and workflow.
