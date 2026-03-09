@@ -604,7 +604,7 @@ def test_query_now_items(session, monkeypatch) -> None:
 
 
 def test_query_upcoming_handoffs(session, monkeypatch) -> None:
-    """query_upcoming_handoffs returns handoffs with next_check in future and deadline not at risk."""
+    """query_upcoming_handoffs returns handoffs with next_check in future, deadline not at risk."""
     _patch_session_context(monkeypatch, session)
 
     class FixedDate(date):
@@ -619,7 +619,6 @@ def test_query_upcoming_handoffs(session, monkeypatch) -> None:
     session.commit()
     session.refresh(p)
 
-    today = date(2026, 3, 9)
     tomorrow = date(2026, 3, 10)
 
     t1 = Todo(

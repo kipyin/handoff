@@ -86,10 +86,7 @@ def _render_item(
     if at_risk and todo.deadline:
         risk_prefix = f"🔴 {format_risk_reason(todo.deadline)} — "
     need_trunc = f"{need_back[:40]}…" if len(need_back) > 40 else need_back
-    core = (
-        f"**{project_name}** · {who} · {need_trunc} "
-        f"· 📅 {next_check_str} · ⏰ {deadline_str}"
-    )
+    core = f"**{project_name}** · {who} · {need_trunc} · 📅 {next_check_str} · ⏰ {deadline_str}"
     header = f"{risk_prefix}📋 {core}" if not risk_prefix else f"{risk_prefix}{core}"
 
     editing = st.session_state.get("now_editing_todo_id") == todo_id

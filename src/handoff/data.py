@@ -615,9 +615,7 @@ def query_upcoming_handoffs(
             .where(Todo.status == TodoStatus.HANDOFF)
             .where(Todo.next_check.isnot(None))
             .where(Todo.next_check > today)
-            .where(
-                (Todo.deadline.is_(None)) | (Todo.deadline > cutoff)
-            )
+            .where((Todo.deadline.is_(None)) | (Todo.deadline > cutoff))
         )
         if project_ids:
             stmt = stmt.where(Todo.project_id.in_(project_ids))
