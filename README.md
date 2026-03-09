@@ -139,7 +139,7 @@ What gets logged (non-exhaustive):
 - Save summary counts and high-level query info.
 
 For deeper diagnostics you can extend the existing `loguru` calls in
-`src/handoff/data.py`, `src/handoff/db.py`, or `src/handoff/pages/todos.py`.
+`src/handoff/data.py`, `src/handoff/db.py`, or `src/handoff/pages/now.py`.
 
 ## Windows embedded zip build and obfuscated patches
 

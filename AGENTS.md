@@ -184,7 +184,7 @@ uv run handoff typecheck   # pyright only
 uv run handoff test        # pytest only
 ```
 
-**pyright exclusions:** `data.py`, `pages/dashboard.py`, `pages/todos.py`, `services/dashboard_service.py` — do not remove without understanding the consequences.
+**pyright exclusions:** `data.py`, `pages/dashboard.py`, `services/dashboard_service.py` — do not remove without understanding the consequences.
 
 ---
 
