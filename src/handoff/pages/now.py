@@ -6,12 +6,12 @@ Each item is in an expander with Snooze, Edit, and Close actions.
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 import streamlit as st
 
-from handoff.dates import format_date_smart, format_risk_reason
-from handoff.models import Todo, TodoStatus
+from handoff.dates import add_business_days, format_date_smart, format_risk_reason
+from handoff.models import Project, Todo, TodoStatus
 from handoff.services import (
     complete_todo,
     create_todo,
@@ -26,12 +26,20 @@ from handoff.services import (
 
 def _render_filters(
     *,
-    projects: list,
+    project_by_name: dict[str, Project],
     helpers: list[str],
     key_prefix: str,
 ) -> tuple[list[int] | None, list[str] | None, str | None]:
-    """Render Project, Who, and search filters. Return (project_ids, helper_names, search_text)."""
-    project_by_name = {p.name: p for p in projects}
+    """Render Project, Who, and search filters.
+
+    Args:
+        project_by_name: Map of project name to Project for id lookup.
+        helpers: List of helper names for the Who filter.
+        key_prefix: Prefix for Streamlit widget keys.
+
+    Returns:
+        Tuple of (project_ids or None, helper_names or None, search_text or None).
+    """
     project_names = list(project_by_name)
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -54,11 +62,12 @@ def _render_filters(
             placeholder="Need back, context…",
             key=f"{key_prefix}_search",
         ).strip()
-    project_ids = [
-        pid
-        for n in project_filters
-        if n in project_by_name and (pid := project_by_name[n].id) is not None
-    ]
+    project_ids = []
+    for n in project_filters:
+        if n in project_by_name:
+            pid = project_by_name[n].id
+            if pid is not None:
+                project_ids.append(pid)
     return project_ids or None, helper_filters or None, search_text or None
 
 
@@ -67,10 +76,16 @@ def _render_item(
     at_risk: bool,
     key_prefix: str,
     *,
-    projects: list,
-    project_by_name: dict,
+    project_by_name: dict[str, Project],
 ) -> None:
-    """Render one handoff item in an expander with Snooze, Edit, and Close."""
+    """Render one handoff item in an expander with Snooze, Edit, and Close.
+
+    Args:
+        todo: The handoff item to render.
+        at_risk: Whether to show deadline-at-risk styling.
+        key_prefix: Prefix for Streamlit widget keys.
+        project_by_name: Map of project name to Project for form lookup.
+    """
     todo_id = todo.id
     if todo_id is None:
         return
@@ -95,7 +110,6 @@ def _render_item(
         if editing:
             _render_edit_form(
                 todo=todo,
-                projects=projects,
                 project_by_name=project_by_name,
                 key_prefix=f"{key_prefix}_edit_{todo_id}",
             )
@@ -105,25 +119,24 @@ def _render_item(
             with st.popover("Actions"):
                 r1c1, r1c2 = st.columns(2)
                 with r1c1:
-                    custom_date = st.date_input(
-                        "Date",
-                        value=today + timedelta(days=3),
-                        key=f"{key_prefix}_custom_{todo_id}",
-                        label_visibility="collapsed",
-                    )
-                with r1c2:
-                    if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{todo_id}"):
-                        snooze_todo(todo_id, to_date=custom_date)
-                        st.rerun()
-                st.markdown("---")
-                r2c1, r2c2 = st.columns(2)
-                with r2c1:
                     if st.button("Edit", key=f"{key_prefix}_edit_btn_{todo_id}"):
                         st.session_state["now_editing_todo_id"] = todo_id
                         st.rerun()
-                with r2c2:
+                with r1c2:
                     if st.button("✓ Close", key=f"{key_prefix}_close_{todo_id}"):
                         complete_todo(todo_id)
+                        st.rerun()
+                r2c1, r2c2 = st.columns(2)
+                with r2c1:
+                    custom_date = st.date_input(
+                        "Date",
+                        value=add_business_days(today, 1),
+                        key=f"{key_prefix}_custom_{todo_id}",
+                        label_visibility="collapsed",
+                    )
+                with r2c2:
+                    if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{todo_id}"):
+                        snooze_todo(todo_id, to_date=custom_date)
                         st.rerun()
 
             if context:
@@ -135,15 +148,20 @@ def _render_item(
 
 def _render_edit_form(
     todo: Todo,
-    projects: list,
-    project_by_name: dict,
+    project_by_name: dict[str, Project],
     key_prefix: str,
 ) -> None:
-    """Render edit form for a handoff item."""
+    """Render edit form for a handoff item.
+
+    Args:
+        todo: The handoff item being edited.
+        project_by_name: Map of project name to Project for form lookup.
+        key_prefix: Prefix for Streamlit widget keys.
+    """
     todo_id = todo.id
     if todo_id is None:
         return
-    project_names = [p.name for p in projects]
+    project_names = list(project_by_name)
     with st.form(key=f"{key_prefix}_form"):
         proj_idx = (
             project_names.index(todo.project.name)
@@ -196,33 +214,46 @@ def _render_edit_form(
             elif project_name not in project_by_name:
                 st.error("Select a project.")
             else:
-                update_todo(
-                    todo_id,
-                    project_id=project_by_name[project_name].id,
-                    name=need_back_stripped,
-                    helper=who.strip() or None,
-                    next_check=next_check,
-                    deadline=deadline if deadline else None,
-                    notes=context.strip() or None,
-                )
-                if "now_editing_todo_id" in st.session_state:
-                    del st.session_state["now_editing_todo_id"]
-                st.success("Saved.")
-                st.rerun()
+                proj_id = project_by_name[project_name].id
+                if proj_id is None:
+                    st.error("Select a valid project.")
+                else:
+                    update_todo(
+                        todo_id,
+                        project_id=proj_id,
+                        name=need_back_stripped,
+                        helper=who.strip() or None,
+                        next_check=next_check,
+                        deadline=deadline if deadline else None,
+                        notes=context.strip() or None,
+                    )
+                    if "now_editing_todo_id" in st.session_state:
+                        del st.session_state["now_editing_todo_id"]
+                    st.success("Saved.")
+                    st.rerun()
         if cancelled:
             if "now_editing_todo_id" in st.session_state:
                 del st.session_state["now_editing_todo_id"]
             st.rerun()
 
 
-def _render_add_form(projects: list, helpers: list[str], key_prefix: str) -> None:
-    """Render form to add a new handoff item."""
+def _render_add_form(
+    project_by_name: dict[str, Project],
+    helpers: list[str],
+    key_prefix: str,
+) -> None:
+    """Render form to add a new handoff item.
+
+    Args:
+        project_by_name: Map of project name to Project for form lookup.
+        helpers: List of helper names (unused but kept for UI symmetry).
+        key_prefix: Prefix for Streamlit widget keys.
+    """
     with (
         st.expander("➕ Add handoff", expanded=False),
         st.form(key=f"{key_prefix}_add_form", clear_on_submit=True),
     ):
-        project_names = [p.name for p in projects]
-        project_by_name = {p.name: p for p in projects}
+        project_names = list(project_by_name)
         project_name = st.selectbox(
             "Project", options=project_names, key=f"{key_prefix}_add_project"
         )
@@ -257,17 +288,21 @@ def _render_add_form(projects: list, helpers: list[str], key_prefix: str) -> Non
             elif project_name not in project_by_name:
                 st.error("Select a project.")
             else:
-                create_todo(
-                    project_id=project_by_name[project_name].id,
-                    name=need_back_stripped,
-                    status=TodoStatus.HANDOFF,
-                    next_check=next_check,
-                    deadline=deadline if deadline else None,
-                    helper=who.strip() or None,
-                    notes=context.strip() or None,
-                )
-                st.success("Added.")
-                st.rerun()
+                proj_id = project_by_name[project_name].id
+                if proj_id is None:
+                    st.error("Select a valid project.")
+                else:
+                    create_todo(
+                        project_id=proj_id,
+                        name=need_back_stripped,
+                        status=TodoStatus.HANDOFF,
+                        next_check=next_check,
+                        deadline=deadline if deadline else None,
+                        helper=who.strip() or None,
+                        notes=context.strip() or None,
+                    )
+                    st.success("Added.")
+                    st.rerun()
 
 
 def render_now_page() -> None:
@@ -284,8 +319,9 @@ def render_now_page() -> None:
         return
 
     helpers = list_helpers()
+    project_by_name = {p.name: p for p in projects}
     project_ids, helper_names, search_text = _render_filters(
-        projects=projects,
+        project_by_name=project_by_name,
         helpers=helpers,
         key_prefix="now",
     )
@@ -302,11 +338,10 @@ def render_now_page() -> None:
         search_text=search_text or None,
     )
 
-    _render_add_form(projects, helpers, "now")
+    _render_add_form(project_by_name, helpers, "now")
 
     st.markdown("---")
     st.markdown("**Action required**")
-    project_by_name = {p.name: p for p in projects}
     if not items:
         st.info("Nothing needs attention right now. Add handoffs or check back later.")
     else:
@@ -315,7 +350,6 @@ def render_now_page() -> None:
                 todo,
                 at_risk,
                 "now",
-                projects=projects,
                 project_by_name=project_by_name,
             )
 
@@ -329,6 +363,5 @@ def render_now_page() -> None:
                 todo,
                 at_risk=False,
                 key_prefix="now_upcoming",
-                projects=projects,
                 project_by_name=project_by_name,
             )
