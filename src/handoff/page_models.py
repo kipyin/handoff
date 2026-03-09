@@ -5,20 +5,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from .models import TodoStatus
-
 
 @dataclass(slots=True, frozen=True)
-class TodoQuery:
-    """Interface-neutral query contract for listing todos."""
+class HandoffQuery:
+    """Interface-neutral query contract for listing handoffs."""
 
     search_text: str = ""
-    statuses: tuple[TodoStatus, ...] = ()
     project_ids: tuple[int, ...] = ()
-    helper_names: tuple[str, ...] = ()
+    pitchman_names: tuple[str, ...] = ()
     deadline_start: date | None = None
     deadline_end: date | None = None
-    include_archived: bool = False
+    include_concluded: bool = False
+    include_archived_projects: bool = False
 
 
 @dataclass(slots=True, frozen=True)
@@ -28,9 +26,8 @@ class ProjectSummaryRow:
     project_id: int
     name: str
     is_archived: bool
-    handoff: int
-    done: int
-    canceled: int
+    open: int
+    concluded: int
 
 
 @dataclass(slots=True, frozen=True)

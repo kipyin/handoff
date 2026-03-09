@@ -2,14 +2,14 @@
 
 import importlib
 from contextlib import contextmanager
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
 from sqlmodel import select
 
 import handoff.data as data
-from handoff.models import Project, Todo, TodoStatus
+from handoff.models import CheckIn, CheckInType, Handoff, Project
 
 
 def _patch_session_context(monkeypatch, session) -> None:
@@ -22,72 +22,63 @@ def _patch_session_context(monkeypatch, session) -> None:
     monkeypatch.setattr(data, "session_context", _session_context)
 
 
-def test_update_todo_allows_clearing_fields(session, monkeypatch) -> None:
-    """Update supports clearing deadline/helper/notes via explicit None-like values."""
+def test_update_handoff_allows_clearing_fields(session, monkeypatch) -> None:
+    """Update supports clearing deadline/pitchman/notes via explicit None-like values."""
     _patch_session_context(monkeypatch, session)
     project = Project(name="Alpha")
     session.add(project)
     session.commit()
     session.refresh(project)
 
-    todo = Todo(
+    handoff = Handoff(
         project_id=project.id,
-        name="Draft summary",
-        status=TodoStatus.DELEGATED,
+        need_back="Draft summary",
         deadline=datetime(2026, 1, 1, 12, 0),
-        helper="Alice",
+        pitchman="Alice",
         notes="first",
     )
-    session.add(todo)
+    session.add(handoff)
     session.commit()
-    session.refresh(todo)
+    session.refresh(handoff)
 
-    updated = data.update_todo(todo.id, deadline=None, helper=" ", notes=None)
+    updated = data.update_handoff(handoff.id, deadline=None, pitchman=" ", notes=None)
     assert updated is not None
     assert updated.deadline is None
-    assert updated.helper is None
+    assert updated.pitchman is None
     assert updated.notes is None
 
 
 def test_delete_project_deletes_project_and_children(session, monkeypatch) -> None:
-    """Deleting a project also removes its child todos."""
+    """Deleting a project also removes its child handoffs."""
     _patch_session_context(monkeypatch, session)
     project = Project(name="Delete Me")
     session.add(project)
     session.commit()
     session.refresh(project)
 
-    todo = Todo(project_id=project.id, name="child")
-    session.add(todo)
+    handoff = Handoff(project_id=project.id, need_back="child")
+    session.add(handoff)
     session.commit()
-    session.refresh(todo)
+    session.refresh(handoff)
 
     deleted = data.delete_project(project.id)
     assert deleted is True
     assert session.get(Project, project.id) is None
-    assert session.get(Todo, todo.id) is None
+    assert session.get(Handoff, handoff.id) is None
 
 
 def test_archive_and_unarchive_project(session, monkeypatch) -> None:
-    """Archiving a project marks it and its todos; unarchiving clears the flag."""
+    """Archiving a project marks it; unarchiving clears the flag."""
     _patch_session_context(monkeypatch, session)
     project = Project(name="Archive Me")
     session.add(project)
     session.commit()
     session.refresh(project)
 
-    todo1 = Todo(project_id=project.id, name="t1")
-    todo2 = Todo(project_id=project.id, name="t2")
-    session.add(todo1)
-    session.add(todo2)
-    session.commit()
-
     archived = data.archive_project(project.id)
     assert archived is True
     session.refresh(project)
     assert project.is_archived is True
-    todos = session.exec(select(Todo).where(Todo.project_id == project.id)).all()
-    assert {t.is_archived for t in todos} == {True}
 
     unarchived = data.unarchive_project(project.id)
     assert unarchived is True
@@ -95,120 +86,130 @@ def test_archive_and_unarchive_project(session, monkeypatch) -> None:
     assert project.is_archived is False
 
 
-def test_get_export_payload_includes_projects_and_todos(session, monkeypatch) -> None:
-    """Export payload returns serializable project and todo records."""
+def test_get_export_payload_includes_projects_and_handoffs(session, monkeypatch) -> None:
+    """Export payload returns serializable project, handoff, and check-in records."""
     _patch_session_context(monkeypatch, session)
     project = Project(name="Export")
     session.add(project)
     session.commit()
     session.refresh(project)
 
-    todo = Todo(project_id=project.id, name="Export todo", status=TodoStatus.DONE)
-    session.add(todo)
+    handoff = Handoff(project_id=project.id, need_back="Export handoff")
+    session.add(handoff)
+    session.commit()
+    session.refresh(handoff)
+
+    ci = CheckIn(
+        handoff_id=handoff.id,
+        check_in_date=date(2026, 3, 1),
+        check_in_type=CheckInType.CONCLUDED,
+    )
+    session.add(ci)
     session.commit()
 
     payload = data.get_export_payload()
     assert "projects" in payload
-    assert "todos" in payload
+    assert "handoffs" in payload
+    assert "check_ins" in payload
     assert len(payload["projects"]) == 1
-    assert len(payload["todos"]) == 1
-    assert payload["todos"][0]["status"] == TodoStatus.DONE.value
+    assert len(payload["handoffs"]) == 1
+    assert len(payload["check_ins"]) == 1
 
 
-def test_list_helpers_canonicalization(session, monkeypatch) -> None:
-    """Verify that list_helpers handles case-insensitivity and trimming."""
+def test_list_pitchmen_canonicalization(session, monkeypatch) -> None:
+    """Verify that list_pitchmen handles case-insensitivity and trimming."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
 
-    # Add todos with variations of the same name
-    session.add(Todo(project_id=p.id, name="t1", helper="  Alice  "))
-    session.add(Todo(project_id=p.id, name="t2", helper="alice"))
-    session.add(Todo(project_id=p.id, name="t3", helper="BOB"))
-    session.add(Todo(project_id=p.id, name="t4", helper=None))
+    session.add(Handoff(project_id=p.id, need_back="t1", pitchman="  Alice  "))
+    session.add(Handoff(project_id=p.id, need_back="t2", pitchman="alice"))
+    session.add(Handoff(project_id=p.id, need_back="t3", pitchman="BOB"))
+    session.add(Handoff(project_id=p.id, need_back="t4", pitchman=None))
     session.commit()
 
-    helpers = data.list_helpers()
-    # Should be sorted, trimmed, and unique by case (keeping first encountered casing)
-    assert helpers == ["Alice", "BOB"]
+    pitchmen = data.list_pitchmen()
+    assert pitchmen == ["Alice", "BOB"]
 
 
-def test_list_helpers_with_open_handoffs(session, monkeypatch) -> None:
-    """list_helpers_with_open_handoffs returns only helpers with open handoffs."""
+def test_list_pitchmen_with_open_handoffs(session, monkeypatch) -> None:
+    """list_pitchmen_with_open_handoffs returns only pitchmen with open handoffs."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
 
-    session.add(Todo(project_id=p.id, name="t1", status=TodoStatus.HANDOFF, helper="Alice"))
-    session.add(Todo(project_id=p.id, name="t2", status=TodoStatus.DONE, helper="Bob"))
-    session.add(Todo(project_id=p.id, name="t3", status=TodoStatus.HANDOFF, helper="Carol"))
-    session.add(
-        Todo(project_id=p.id, name="t4", status=TodoStatus.HANDOFF, is_archived=True, helper="Dave")
+    h1 = Handoff(project_id=p.id, need_back="t1", pitchman="Alice")
+    h2 = Handoff(project_id=p.id, need_back="t2", pitchman="Bob")
+    h3 = Handoff(project_id=p.id, need_back="t3", pitchman="Carol")
+    session.add_all([h1, h2, h3])
+    session.commit()
+    session.refresh(h2)
+
+    # Bob's handoff is concluded
+    ci = CheckIn(
+        handoff_id=h2.id,
+        check_in_date=date(2026, 1, 1),
+        check_in_type=CheckInType.CONCLUDED,
     )
+    session.add(ci)
     session.commit()
 
-    helpers = data.list_helpers_with_open_handoffs()
-    assert helpers == ["Alice", "Carol"]
-    assert "Bob" not in helpers
-    assert "Dave" not in helpers
+    pitchmen = data.list_pitchmen_with_open_handoffs()
+    assert "Alice" in pitchmen
+    assert "Carol" in pitchmen
+    assert "Bob" not in pitchmen
 
 
-def test_query_todos_filters(session, monkeypatch) -> None:
-    """Verify query_todos with multiple filter combinations."""
+def test_query_handoffs_filters(session, monkeypatch) -> None:
+    """Verify query_handoffs with multiple filter combinations."""
     _patch_session_context(monkeypatch, session)
     p1 = Project(name="P1")
     p2 = Project(name="P2")
     session.add_all([p1, p2])
     session.commit()
 
-    t1 = Todo(project_id=p1.id, name="Apple", status=TodoStatus.DONE, helper="Alice")
-    t2 = Todo(project_id=p2.id, name="Banana", status=TodoStatus.DELEGATED, helper="Bob")
-    session.add_all([t1, t2])
+    h1 = Handoff(project_id=p1.id, need_back="Apple", pitchman="Alice")
+    h2 = Handoff(project_id=p2.id, need_back="Banana", pitchman="Bob")
+    session.add_all([h1, h2])
     session.commit()
-
-    # Filter by status
-    results = data.query_todos(statuses=[TodoStatus.DONE])
-    assert len(results) == 1
-    assert results[0].name == "Apple"
 
     # Filter by search text (case-insensitive)
-    results = data.query_todos(search_text="nan")
+    results = data.query_handoffs(search_text="nan", include_concluded=True)
     assert len(results) == 1
-    assert results[0].name == "Banana"
+    assert results[0].need_back == "Banana"
 
     # Filter by project
-    results = data.query_todos(project_ids=[p1.id])
+    results = data.query_handoffs(project_ids=[p1.id], include_concluded=True)
     assert len(results) == 1
-    assert results[0].name == "Apple"
+    assert results[0].need_back == "Apple"
 
 
-def test_create_todo_with_list_helper(session, monkeypatch) -> None:
-    """Verify _helper_to_db logic when a list is passed (from UI multiselects)."""
+def test_create_handoff_with_list_pitchman(session, monkeypatch) -> None:
+    """Verify _pitchman_to_db logic when a list is passed (from UI multiselects)."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
 
-    # UI often passes lists from multiselects; we take the first non-empty
-    todo = data.create_todo(p.id, "Task", helper=["", "  Charlie  ", "Dave"])
-    assert todo.helper == "Charlie"
+    handoff = data.create_handoff(p.id, "Task", pitchman=["", "  Charlie  ", "Dave"])
+    assert handoff.pitchman == "Charlie"
 
 
-def test_create_todo_helper_none_and_empty_list(session, monkeypatch) -> None:
-    """create_todo with helper=None or helper=[] stores None (covers _helper_to_db branches)."""
+def test_create_handoff_pitchman_none_and_empty_list(session, monkeypatch) -> None:
+    """create_handoff with pitchman=None or pitchman=[] stores None."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
 
-    t1 = data.create_todo(p.id, "No helper", helper=None)
-    assert t1.helper is None
-    t2 = data.create_todo(p.id, "Empty list", helper=[])
-    assert t2.helper is None
-    t3 = data.create_todo(p.id, "Whitespace only list", helper=["  ", ""])
-    assert t3.helper is None
+    h1 = data.create_handoff(p.id, "No pitchman", pitchman=None)
+    assert h1.pitchman is None
+    h2 = data.create_handoff(p.id, "Empty list", pitchman=[])
+    assert h2.pitchman is None
+    h3 = data.create_handoff(p.id, "Whitespace only list", pitchman=["  ", ""])
+    assert h3.pitchman is None
 
 
 def test_get_project_returns_none_for_missing_id(session, monkeypatch) -> None:
@@ -217,20 +218,20 @@ def test_get_project_returns_none_for_missing_id(session, monkeypatch) -> None:
     assert data.get_project(99999) is None
 
 
-def test_delete_todo_returns_false_for_missing_id(session, monkeypatch) -> None:
-    """delete_todo returns False when todo_id does not exist."""
+def test_delete_handoff_returns_false_for_missing_id(session, monkeypatch) -> None:
+    """delete_handoff returns False when handoff_id does not exist."""
     _patch_session_context(monkeypatch, session)
-    assert data.delete_todo(99999) is False
+    assert data.delete_handoff(99999) is False
 
 
-def test_update_todo_returns_none_for_missing_id(session, monkeypatch) -> None:
-    """update_todo returns None when todo_id does not exist."""
+def test_update_handoff_returns_none_for_missing_id(session, monkeypatch) -> None:
+    """update_handoff returns None when handoff_id does not exist."""
     _patch_session_context(monkeypatch, session)
-    assert data.update_todo(99999, name="No-op") is None
+    assert data.update_handoff(99999, need_back="No-op") is None
 
 
-def test_query_todos_date_range_and_include_archived(session, monkeypatch) -> None:
-    """query_todos respects start/end deadline and include_archived."""
+def test_query_handoffs_date_range(session, monkeypatch) -> None:
+    """query_handoffs respects start/end deadline."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
@@ -238,52 +239,37 @@ def test_query_todos_date_range_and_include_archived(session, monkeypatch) -> No
 
     start_dt = datetime(2026, 1, 5)
     end_dt = datetime(2026, 1, 15)
-    t_in = Todo(
+    h_in = Handoff(
         project_id=p.id,
-        name="In range",
-        status=TodoStatus.DELEGATED,
+        need_back="In range",
         deadline=datetime(2026, 1, 10),
     )
-    t_out = Todo(
+    h_out = Handoff(
         project_id=p.id,
-        name="Out of range",
-        status=TodoStatus.DELEGATED,
+        need_back="Out of range",
         deadline=datetime(2026, 1, 20),
     )
-    session.add_all([t_in, t_out])
+    session.add_all([h_in, h_out])
     session.commit()
 
-    results = data.query_todos(start=start_dt.date(), end=end_dt.date())
+    results = data.query_handoffs(start=start_dt.date(), end=end_dt.date(), include_concluded=True)
     assert len(results) == 1
-    assert results[0].name == "In range"
-
-    # include_archived: add an archived todo and ensure it's included when True
-    t_archived = Todo(
-        project_id=p.id,
-        name="Archived",
-        status=TodoStatus.DELEGATED,
-        is_archived=True,
-    )
-    session.add(t_archived)
-    session.commit()
-    without = data.query_todos(include_archived=False)
-    with_archived = data.query_todos(include_archived=True)
-    assert len(with_archived) == len(without) + 1
+    assert results[0].need_back == "In range"
 
 
-def test_query_todos_helper_name_filter(session, monkeypatch) -> None:
-    """query_todos filters by helper_name substring."""
+def test_query_handoffs_pitchman_name_filter(session, monkeypatch) -> None:
+    """query_handoffs filters by pitchman_name substring."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
-    session.add(Todo(project_id=p.id, name="A", status=TodoStatus.DELEGATED, helper="Alice"))
-    session.add(Todo(project_id=p.id, name="B", status=TodoStatus.DELEGATED, helper="Bob"))
+    session.add(Handoff(project_id=p.id, need_back="A", pitchman="Alice"))
+    session.add(Handoff(project_id=p.id, need_back="B", pitchman="Bob"))
     session.commit()
 
-    results = data.query_todos(helper_name="lic")
+    results = data.query_handoffs(pitchman_name="lic", include_concluded=True)
     assert len(results) == 1
-    assert results[0].helper == "Alice"
+    assert results[0].pitchman == "Alice"
 
 
 def test_create_project(session, monkeypatch) -> None:
@@ -341,11 +327,11 @@ def test_list_projects_survives_models_reload(session, monkeypatch) -> None:
     import handoff.models as models
 
     before_project = models.Project
-    before_todo = models.Todo
+    before_handoff = models.Handoff
     importlib.reload(models)
 
     assert models.Project is before_project
-    assert models.Todo is before_todo
+    assert models.Handoff is before_handoff
     projects = data.list_projects(include_archived=True)
     assert [p.name for p in projects] == ["Reload safe"]
 
@@ -369,56 +355,27 @@ def test_rename_project_missing_id(session, monkeypatch) -> None:
     assert data.rename_project(99999, "No-op") is None
 
 
-def test_delete_todo_success(session, monkeypatch) -> None:
-    """delete_todo removes the todo and returns True."""
+def test_delete_handoff_success(session, monkeypatch) -> None:
+    """delete_handoff removes the handoff and returns True."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
     session.refresh(p)
 
-    t = Todo(project_id=p.id, name="To delete")
-    session.add(t)
+    h = Handoff(project_id=p.id, need_back="To delete")
+    session.add(h)
     session.commit()
-    session.refresh(t)
+    session.refresh(h)
 
-    assert data.delete_todo(t.id) is True
-    assert session.get(Todo, t.id) is None
+    assert data.delete_handoff(h.id) is True
+    assert session.get(Handoff, h.id) is None
 
 
 def test_delete_project_missing_id(session, monkeypatch) -> None:
     """delete_project returns False for a non-existent id."""
     _patch_session_context(monkeypatch, session)
     assert data.delete_project(99999) is False
-
-
-def test_archive_and_unarchive_todo(session, monkeypatch) -> None:
-    """archive_todo and unarchive_todo toggle the is_archived flag."""
-    _patch_session_context(monkeypatch, session)
-    p = Project(name="P")
-    session.add(p)
-    session.commit()
-    session.refresh(p)
-
-    t = Todo(project_id=p.id, name="Toggle")
-    session.add(t)
-    session.commit()
-    session.refresh(t)
-
-    assert data.archive_todo(t.id) is True
-    session.refresh(t)
-    assert t.is_archived is True
-
-    assert data.unarchive_todo(t.id) is True
-    session.refresh(t)
-    assert t.is_archived is False
-
-
-def test_archive_todo_missing_id(session, monkeypatch) -> None:
-    """archive_todo/unarchive_todo return False for missing ids."""
-    _patch_session_context(monkeypatch, session)
-    assert data.archive_todo(99999) is False
-    assert data.unarchive_todo(99999) is False
 
 
 def test_archive_project_missing_id(session, monkeypatch) -> None:
@@ -428,8 +385,8 @@ def test_archive_project_missing_id(session, monkeypatch) -> None:
     assert data.unarchive_project(99999) is False
 
 
-def test_update_todo_changes_project_name_status(session, monkeypatch) -> None:
-    """update_todo can change project_id, name, and status."""
+def test_update_handoff_changes_project_and_need_back(session, monkeypatch) -> None:
+    """update_handoff can change project_id and need_back."""
     _patch_session_context(monkeypatch, session)
     p1 = Project(name="P1")
     p2 = Project(name="P2")
@@ -438,188 +395,142 @@ def test_update_todo_changes_project_name_status(session, monkeypatch) -> None:
     session.refresh(p1)
     session.refresh(p2)
 
-    t = Todo(project_id=p1.id, name="Original", status=TodoStatus.DELEGATED)
-    session.add(t)
+    h = Handoff(project_id=p1.id, need_back="Original")
+    session.add(h)
     session.commit()
-    session.refresh(t)
+    session.refresh(h)
 
-    updated = data.update_todo(t.id, project_id=p2.id, name="Renamed", status=TodoStatus.DONE)
+    updated = data.update_handoff(h.id, project_id=p2.id, need_back="Renamed")
     assert updated is not None
     assert updated.project_id == p2.id
-    assert updated.name == "Renamed"
-    assert updated.status == TodoStatus.DONE
-    assert updated.completed_at is not None
+    assert updated.need_back == "Renamed"
 
 
-def test_get_projects_with_todo_summary(session, monkeypatch) -> None:
-    """get_projects_with_todo_summary returns counts per status."""
+def test_get_projects_with_handoff_summary(session, monkeypatch) -> None:
+    """get_projects_with_handoff_summary returns counts per open/concluded."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="Summarise")
     session.add(p)
     session.commit()
     session.refresh(p)
 
-    session.add(Todo(project_id=p.id, name="A", status=TodoStatus.DELEGATED))
-    session.add(Todo(project_id=p.id, name="B", status=TodoStatus.DELEGATED))
-    session.add(Todo(project_id=p.id, name="C", status=TodoStatus.DONE))
-    session.add(Todo(project_id=p.id, name="D", status=TodoStatus.CANCELED))
+    h1 = Handoff(project_id=p.id, need_back="A")
+    h2 = Handoff(project_id=p.id, need_back="B")
+    h3 = Handoff(project_id=p.id, need_back="C")
+    session.add_all([h1, h2, h3])
+    session.commit()
+    session.refresh(h3)
+
+    # Conclude h3
+    ci = CheckIn(
+        handoff_id=h3.id,
+        check_in_date=date(2026, 1, 1),
+        check_in_type=CheckInType.CONCLUDED,
+    )
+    session.add(ci)
     session.commit()
 
-    summaries = data.get_projects_with_todo_summary()
+    summaries = data.get_projects_with_handoff_summary()
     assert len(summaries) == 1
     s = summaries[0]
-    assert s["total"] == 4
-    assert s["handoff"] == 2
-    assert s["done"] == 1
-    assert s["canceled"] == 1
+    assert s["total"] == 3
+    assert s["open"] == 2
+    assert s["concluded"] == 1
 
 
-def test_query_todos_completed_start_end(session, monkeypatch) -> None:
-    """query_todos filters by completed_at with completed_start/completed_end."""
+def test_snooze_handoff(session, monkeypatch) -> None:
+    """snooze_handoff updates next_check only, leaves deadline unchanged."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
     session.refresh(p)
 
-    t1 = Todo(
+    h = Handoff(
         project_id=p.id,
-        name="Done early",
-        status=TodoStatus.DONE,
-        completed_at=datetime(2026, 1, 5, tzinfo=UTC),
-    )
-    t2 = Todo(
-        project_id=p.id,
-        name="Done later",
-        status=TodoStatus.DONE,
-        completed_at=datetime(2026, 1, 15, tzinfo=UTC),
-    )
-    t3 = Todo(
-        project_id=p.id,
-        name="Not done",
-        status=TodoStatus.DELEGATED,
-    )
-    session.add_all([t1, t2, t3])
-    session.commit()
-
-    results = data.query_todos(
-        completed_start=date(2026, 1, 10),
-        completed_end=date(2026, 1, 20),
-    )
-    assert len(results) == 1
-    assert results[0].name == "Done later"
-
-
-def test_query_todos_completed_end_date_includes_full_day(session, monkeypatch) -> None:
-    """A bare date for completed_end is promoted to end-of-day, including late completions."""
-    _patch_session_context(monkeypatch, session)
-    p = Project(name="P")
-    session.add(p)
-    session.commit()
-    session.refresh(p)
-
-    t = Todo(
-        project_id=p.id,
-        name="Done at 11pm",
-        status=TodoStatus.DONE,
-        completed_at=datetime(2026, 1, 15, 23, 30, 0, tzinfo=UTC),
-    )
-    session.add(t)
-    session.commit()
-
-    results = data.query_todos(completed_end=date(2026, 1, 15))
-    assert len(results) == 1
-    assert results[0].name == "Done at 11pm"
-
-
-def test_snooze_todo(session, monkeypatch) -> None:
-    """snooze_todo updates next_check only, leaves deadline unchanged."""
-    _patch_session_context(monkeypatch, session)
-    p = Project(name="P")
-    session.add(p)
-    session.commit()
-    session.refresh(p)
-
-    t = Todo(
-        project_id=p.id,
-        name="Follow up",
-        status=TodoStatus.HANDOFF,
+        need_back="Follow up",
         next_check=date(2026, 1, 1),
         deadline=date(2026, 6, 1),
     )
-    session.add(t)
+    session.add(h)
     session.commit()
-    session.refresh(t)
+    session.refresh(h)
 
-    updated = data.snooze_todo(t.id, to_date=date(2026, 1, 15))
+    updated = data.snooze_handoff(h.id, to_date=date(2026, 1, 15))
     assert updated is not None
     assert updated.next_check == date(2026, 1, 15)
     assert updated.deadline == date(2026, 6, 1)
 
 
-def test_close_todo(session, monkeypatch) -> None:
-    """close_todo marks todo as done."""
+def test_conclude_handoff(session, monkeypatch) -> None:
+    """conclude_handoff adds a concluded check-in."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
     session.refresh(p)
 
-    t = Todo(
-        project_id=p.id,
-        name="Done item",
-        status=TodoStatus.HANDOFF,
-    )
-    session.add(t)
+    h = Handoff(project_id=p.id, need_back="Done item")
+    session.add(h)
     session.commit()
-    session.refresh(t)
+    session.refresh(h)
 
-    updated = data.close_todo(t.id)
-    assert updated is not None
-    assert updated.status == TodoStatus.DONE
-    assert updated.completed_at is not None
+    ci = data.conclude_handoff(h.id, note="All done")
+    assert ci is not None
+    assert ci.check_in_type == CheckInType.CONCLUDED
+    assert ci.handoff_id == h.id
+
+    session.refresh(h)
+    assert not data.handoff_is_open(h)
+    assert data.get_handoff_close_date(h) is not None
 
 
 def test_query_now_items(session, monkeypatch) -> None:
-    """query_now_items returns open items with next_check due or deadline at risk."""
+    """query_now_items returns open handoffs with next_check due or deadline at risk."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
     session.refresh(p)
 
-    # Past dates so they always qualify regardless of real today
-    t1 = Todo(
+    h1 = Handoff(
         project_id=p.id,
-        name="Check due",
-        status=TodoStatus.HANDOFF,
+        need_back="Check due",
         next_check=date(2000, 1, 1),
         deadline=None,
     )
-    t2 = Todo(
+    h2 = Handoff(
         project_id=p.id,
-        name="Deadline at risk",
-        status=TodoStatus.HANDOFF,
+        need_back="Deadline at risk",
         next_check=date(2030, 1, 1),
         deadline=date(2000, 1, 1),
     )
-    t3 = Todo(
+    h3 = Handoff(
         project_id=p.id,
-        name="Done",
-        status=TodoStatus.DONE,
+        need_back="Concluded",
         next_check=date(2000, 1, 1),
     )
-    session.add_all([t1, t2, t3])
+    session.add_all([h1, h2, h3])
+    session.commit()
+    session.refresh(h3)
+
+    # Conclude h3
+    ci = CheckIn(
+        handoff_id=h3.id,
+        check_in_date=date(2026, 1, 1),
+        check_in_type=CheckInType.CONCLUDED,
+    )
+    session.add(ci)
     session.commit()
 
     results = data.query_now_items()
     assert len(results) == 2
-    names = [r[0].name for r in results]
+    names = [r[0].need_back for r in results]
     assert "Check due" in names
     assert "Deadline at risk" in names
-    assert "Done" not in names
+    assert "Concluded" not in names
 
-    at_risk_names = [r[0].name for r in results if r[1]]
+    at_risk_names = [r[0].need_back for r in results if r[1]]
     assert "Deadline at risk" in at_risk_names
     assert "Check due" not in at_risk_names
 
@@ -642,32 +553,29 @@ def test_query_upcoming_handoffs(session, monkeypatch) -> None:
 
     tomorrow = date(2026, 3, 10)
 
-    t1 = Todo(
+    h1 = Handoff(
         project_id=p.id,
-        name="Upcoming",
-        status=TodoStatus.HANDOFF,
+        need_back="Upcoming",
         next_check=tomorrow,
         deadline=None,
     )
-    t2 = Todo(
+    h2 = Handoff(
         project_id=p.id,
-        name="Also upcoming",
-        status=TodoStatus.HANDOFF,
+        need_back="Also upcoming",
         next_check=date(2026, 3, 15),
         deadline=date(2026, 3, 20),
     )
-    t3 = Todo(
+    h3 = Handoff(
         project_id=p.id,
-        name="Due soon",
-        status=TodoStatus.HANDOFF,
+        need_back="Due soon",
         next_check=tomorrow,
         deadline=tomorrow,
     )
-    session.add_all([t1, t2, t3])
+    session.add_all([h1, h2, h3])
     session.commit()
 
     results = data.query_upcoming_handoffs(deadline_near_days=2)
-    names = [r.name for r in results]
+    names = [r.need_back for r in results]
     assert "Upcoming" in names
     assert "Also upcoming" in names
     assert "Due soon" not in names
@@ -686,7 +594,7 @@ def test_import_payload_replaces_existing_data(session, monkeypatch) -> None:
     session.add(old_project)
     session.commit()
     session.refresh(old_project)
-    session.add(Todo(project_id=old_project.id, name="old todo"))
+    session.add(Handoff(project_id=old_project.id, need_back="old handoff"))
     session.commit()
 
     payload = {
@@ -698,30 +606,28 @@ def test_import_payload_replaces_existing_data(session, monkeypatch) -> None:
                 "is_archived": False,
             },
         ],
-        "todos": [
+        "handoffs": [
             {
                 "id": 200,
                 "project_id": 100,
-                "name": "Imported todo",
-                "status": "handoff",
+                "need_back": "Imported handoff",
                 "deadline": "2026-04-01",
-                "helper": "Alice",
+                "pitchman": "Alice",
                 "notes": "some notes",
                 "created_at": "2026-03-01T00:00:00",
-                "completed_at": None,
-                "is_archived": False,
             },
         ],
+        "check_ins": [],
     }
     data.import_payload(payload)
 
     projects = list(session.exec(select(Project)).all())
-    todos = list(session.exec(select(Todo)).all())
+    handoffs = list(session.exec(select(Handoff)).all())
     assert len(projects) == 1
     assert projects[0].name == "Imported"
-    assert len(todos) == 1
-    assert todos[0].name == "Imported todo"
-    assert todos[0].helper == "Alice"
+    assert len(handoffs) == 1
+    assert handoffs[0].need_back == "Imported handoff"
+    assert handoffs[0].pitchman == "Alice"
 
 
 def test_import_payload_empty(session, monkeypatch) -> None:
@@ -732,22 +638,115 @@ def test_import_payload_empty(session, monkeypatch) -> None:
     session.add(p)
     session.commit()
     session.refresh(p)
-    session.add(Todo(project_id=p.id, name="Also gone"))
+    session.add(Handoff(project_id=p.id, need_back="Also gone"))
     session.commit()
 
-    data.import_payload({"projects": [], "todos": []})
+    data.import_payload({"projects": [], "handoffs": [], "check_ins": []})
 
     assert list(session.exec(select(Project)).all()) == []
-    assert list(session.exec(select(Todo)).all()) == []
+    assert list(session.exec(select(Handoff)).all()) == []
 
 
 def test_import_payload_missing_key_raises(session, monkeypatch) -> None:
     """import_payload raises KeyError when required keys are missing."""
     _patch_session_context(monkeypatch, session)
-    import pytest
 
     with pytest.raises(KeyError):
         data.import_payload({"projects": []})
 
-    with pytest.raises(KeyError):
-        data.import_payload({"todos": []})
+
+def test_import_payload_legacy_format(session, monkeypatch) -> None:
+    """import_payload accepts legacy 'todos' format and converts to handoffs."""
+    _patch_session_context(monkeypatch, session)
+
+    payload = {
+        "projects": [
+            {
+                "id": 1,
+                "name": "Legacy",
+                "created_at": "2026-01-01T00:00:00",
+            },
+        ],
+        "todos": [
+            {
+                "id": 10,
+                "project_id": 1,
+                "name": "Old task",
+                "status": "done",
+                "helper": "Alice",
+                "notes": "Done!",
+                "created_at": "2026-01-01T00:00:00",
+                "completed_at": "2026-01-15T00:00:00",
+            },
+            {
+                "id": 11,
+                "project_id": 1,
+                "name": "Open task",
+                "status": "handoff",
+                "helper": "Bob",
+                "created_at": "2026-01-01T00:00:00",
+            },
+        ],
+    }
+    data.import_payload(payload)
+
+    handoffs = list(session.exec(select(Handoff)).all())
+    check_ins = list(session.exec(select(CheckIn)).all())
+    assert len(handoffs) == 2
+    assert len(check_ins) == 1
+    assert check_ins[0].check_in_type == CheckInType.CONCLUDED
+
+
+def test_create_check_in(session, monkeypatch) -> None:
+    """create_check_in inserts a check-in record."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    h = Handoff(project_id=p.id, need_back="Task")
+    session.add(h)
+    session.commit()
+    session.refresh(h)
+
+    ci = data.create_check_in(
+        handoff_id=h.id,
+        check_in_type=CheckInType.ON_TRACK,
+        check_in_date=date(2026, 3, 1),
+        note="All good",
+    )
+    assert ci.id is not None
+    assert ci.check_in_type == CheckInType.ON_TRACK
+    assert ci.handoff_id == h.id
+
+
+def test_handoff_is_open_and_close_date(session, monkeypatch) -> None:
+    """handoff_is_open and get_handoff_close_date work correctly."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    h = Handoff(project_id=p.id, need_back="Task")
+    session.add(h)
+    session.commit()
+    session.refresh(h)
+    # Force load relationship
+    _ = h.check_ins
+
+    assert data.handoff_is_open(h) is True
+    assert data.get_handoff_close_date(h) is None
+
+    ci = CheckIn(
+        handoff_id=h.id,
+        check_in_date=date(2026, 3, 5),
+        check_in_type=CheckInType.CONCLUDED,
+    )
+    session.add(ci)
+    session.commit()
+    session.refresh(h)
+
+    assert data.handoff_is_open(h) is False
+    assert data.get_handoff_close_date(h) == date(2026, 3, 5)

@@ -83,7 +83,7 @@ class TestRenderDataExportSection:
         st_mock = _patch_streamlit(monkeypatch)
         monkeypatch.setattr(
             "handoff.pages.system_settings.get_export_payload",
-            lambda: {"projects": [], "todos": []},
+            lambda: {"projects": [], "handoffs": [], "check_ins": []},
         )
 
         _render_data_export_section()

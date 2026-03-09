@@ -119,11 +119,11 @@ def test_unarchive_project_via_service_invalid_id_returns_false(session, monkeyp
     assert result is False
 
 
-def test_get_projects_with_todo_summary_via_service(session, monkeypatch) -> None:
-    """get_projects_with_todo_summary returns summary rows through the service boundary."""
+def test_get_projects_with_handoff_summary_via_service(session, monkeypatch) -> None:
+    """get_projects_with_handoff_summary returns summary rows through the service boundary."""
     _patch_session_context(monkeypatch, session)
     session.add(Project(name="P"))
     session.commit()
-    rows = project_service.get_projects_with_todo_summary()
+    rows = project_service.get_projects_with_handoff_summary()
     assert isinstance(rows, list)
     assert len(rows) >= 1

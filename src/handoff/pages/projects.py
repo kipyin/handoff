@@ -1,4 +1,4 @@
-"""Projects page implementation for the engagement to-do app."""
+"""Projects page implementation for the Handoff app."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from handoff.services.project_service import (
     archive_project,
     create_project,
     delete_project,
-    get_projects_with_todo_summary,
+    get_projects_with_handoff_summary,
     rename_project,
     unarchive_project,
 )
@@ -36,22 +36,16 @@ def _render_create_project_form() -> None:
             st.rerun()
 
 
-# New pure-logic helpers for testability
-
-
 def _build_projects_display_rows(
     summary_list: list[dict],
 ) -> list[ProjectSummaryRow]:
     """Build typed summary rows for the projects table.
 
     Args:
-        summary_list: List of dicts with "project" and "handoff", "done", "canceled" counts.
+        summary_list: List of dicts with "project" and "open", "concluded" counts.
 
     Returns:
-        List of :class:`ProjectSummaryRow` values. The UI later adds editor-only
-        columns like ``__project_id`` and ``confirm_delete`` when building the
-        DataFrame passed to Streamlit.
-
+        List of :class:`ProjectSummaryRow` values.
     """
     rows: list[ProjectSummaryRow] = []
     for item in summary_list:
@@ -61,9 +55,8 @@ def _build_projects_display_rows(
                 project_id=p.id,
                 name=p.name,
                 is_archived=getattr(p, "is_archived", False),
-                handoff=item["handoff"],
-                done=item["done"],
-                canceled=item["canceled"],
+                open=item["open"],
+                concluded=item["concluded"],
             )
         )
     return rows
@@ -87,11 +80,7 @@ def _get_projects_to_delete(edited_df: pd.DataFrame, projects: list) -> list[tup
 def _get_pending_changes(
     edited_df: pd.DataFrame, projects: list
 ) -> tuple[bool, list[str], list[dict]]:
-    """Compare UI-edited DataFrame to current projects and produce a list of changes.
-
-    Returns (valid, errors, changes). Changes are dicts with a 'type' key: 'rename', 'archive',
-    'unarchive', 'delete'.
-    """
+    """Compare UI-edited DataFrame to current projects and produce a list of changes."""
     project_by_id = {p.id: p for p in projects}
     errors: list[str] = []
     changes: list[dict] = []
@@ -179,15 +168,7 @@ _AUTOSAVE_ERRORS_KEY = "__projects_autosave_errors"
 
 
 def _persist_project_edits(state: dict, display_df: pd.DataFrame) -> bool:
-    """Autosave callback for project renames and archive toggles.
-
-    Skips ``confirm_delete`` changes — those are handled by the separate
-    deletion confirmation flow.  Returns ``False`` (no rerun needed for
-    simple cell edits).
-
-    Errors are collected into ``st.session_state[_AUTOSAVE_ERRORS_KEY]``
-    so the page can surface them after the editor renders.
-    """
+    """Autosave callback for project renames and archive toggles."""
     edited = state.get("edited_rows", {})
     if not edited:
         return False
@@ -258,7 +239,7 @@ def render_projects_page() -> None:
         on_change=_reset_projects_table_state,
     )
 
-    summary_list = get_projects_with_todo_summary(include_archived=show_archived)
+    summary_list = get_projects_with_handoff_summary(include_archived=show_archived)
     if not summary_list:
         if show_archived:
             st.info("No projects yet. Use the form above to create the first project.")
@@ -300,14 +281,13 @@ def render_projects_page() -> None:
         num_rows="fixed",
         height="content",
         hide_index=True,
-        column_order=["name", "is_archived", "handoff", "done", "canceled", "confirm_delete"],
+        column_order=["name", "is_archived", "open", "concluded", "confirm_delete"],
         column_config={
             "__project_id": None,
             "name": st.column_config.TextColumn("Project name", required=True),
             "is_archived": st.column_config.CheckboxColumn("Archived", default=False),
-            "handoff": st.column_config.NumberColumn("Handoff", disabled=True),
-            "done": st.column_config.NumberColumn("Done", disabled=True),
-            "canceled": st.column_config.NumberColumn("Canceled", disabled=True),
+            "open": st.column_config.NumberColumn("Open", disabled=True),
+            "concluded": st.column_config.NumberColumn("Concluded", disabled=True),
             "confirm_delete": st.column_config.CheckboxColumn(
                 "Delete",
                 default=False,

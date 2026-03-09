@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from handoff.models import Project, Todo, TodoStatus
+from handoff.models import CheckIn, CheckInType, Handoff, Project
 
 
 @pytest.fixture
@@ -22,41 +22,45 @@ def session():
 
 @pytest.fixture
 def app_with_sample_data():
-    """Fixture providing sample projects and todos for page tests.
+    """Fixture providing sample projects and handoffs for page tests.
 
-    Yields (projects, todos) — model instances that tests can use when mocking
-    get_projects_with_todo_summary, query_todos, etc. Reduces boilerplate.
+    Yields (projects, handoffs) — model instances that tests can use when mocking
+    get_projects_with_handoff_summary, query_handoffs, etc. Reduces boilerplate.
     """
     created = datetime(2025, 1, 1, tzinfo=UTC)
     p1 = Project(id=1, name="Work", is_archived=False, created_at=created)
     p2 = Project(id=2, name="Home", is_archived=False, created_at=created)
     projects = [p1, p2]
-    t1 = Todo(
+    h1 = Handoff(
         id=1,
         project_id=1,
-        name="Task 1",
-        status=TodoStatus.HANDOFF,
-        helper="Alice",
+        need_back="Task 1",
+        pitchman="Alice",
         deadline=date.today(),
         notes="",
         created_at=created,
-        completed_at=None,
-        is_archived=False,
     )
-    t2 = Todo(
+    h1.check_ins = []
+    h2 = Handoff(
         id=2,
         project_id=2,
-        name="Task 2",
-        status=TodoStatus.DONE,
-        helper="Bob",
+        need_back="Task 2",
+        pitchman="Bob",
         deadline=None,
         notes="",
         created_at=created,
-        completed_at=created,
-        is_archived=False,
     )
-    todos = [t1, t2]
-    yield projects, todos
+    h2.check_ins = [
+        CheckIn(
+            id=1,
+            handoff_id=2,
+            check_in_date=created.date(),
+            check_in_type=CheckInType.CONCLUDED,
+            created_at=created,
+        )
+    ]
+    handoffs = [h1, h2]
+    yield projects, handoffs
 
 
 def pytest_sessionfinish(session, exitstatus):

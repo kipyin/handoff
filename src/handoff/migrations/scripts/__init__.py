@@ -6,6 +6,7 @@ from handoff.migrations.scripts import (
     m003_legacy_status_labels,
     m004_activity_log,
     m005_todo_next_check,
+    m006_todo_to_handoff,
 )
 
 # Ordered list of migrations; new migrations append here.
@@ -15,4 +16,5 @@ ALL = [
     m003_legacy_status_labels,
     m004_activity_log,
     m005_todo_next_check,
+    m006_todo_to_handoff,
 ]
