@@ -186,6 +186,34 @@ def test_query_handoffs_filters(session, monkeypatch) -> None:
     assert results[0].need_back == "Apple"
 
 
+def test_query_handoffs_search_includes_check_in_notes(session, monkeypatch) -> None:
+    """query_handoffs search text matches check-in notes."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    h = Handoff(project_id=p.id, need_back="Unrelated title", notes="none")
+    session.add(h)
+    session.commit()
+    session.refresh(h)
+
+    session.add(
+        CheckIn(
+            handoff_id=h.id,
+            check_in_date=date(2026, 3, 9),
+            check_in_type=CheckInType.DELAYED,
+            note="Need assumption doc X before proceeding",
+        )
+    )
+    session.commit()
+
+    results = data.query_handoffs(search_text="assumption doc X", include_concluded=True)
+    assert len(results) == 1
+    assert results[0].id == h.id
+
+
 def test_create_handoff_with_list_pitchman(session, monkeypatch) -> None:
     """Verify _pitchman_to_db logic when a list is passed (from UI multiselects)."""
     _patch_session_context(monkeypatch, session)
@@ -535,8 +563,102 @@ def test_query_now_items(session, monkeypatch) -> None:
     assert "Check due" not in at_risk_names
 
 
+def test_query_action_handoffs(session, monkeypatch) -> None:
+    """query_action_handoffs returns only open handoffs with due next_check."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    h_due = Handoff(project_id=p.id, need_back="Due", next_check=date(2026, 3, 9))
+    h_future = Handoff(project_id=p.id, need_back="Future", next_check=date(2026, 3, 10))
+    h_concluded = Handoff(project_id=p.id, need_back="Done", next_check=date(2026, 3, 8))
+    session.add_all([h_due, h_future, h_concluded])
+    session.commit()
+    session.refresh(h_concluded)
+
+    session.add(
+        CheckIn(
+            handoff_id=h_concluded.id,
+            check_in_date=date(2026, 3, 9),
+            check_in_type=CheckInType.CONCLUDED,
+        )
+    )
+    session.commit()
+
+    results = data.query_action_handoffs()
+    names = [h.need_back for h in results]
+    assert "Due" in names
+    assert "Future" not in names
+    assert "Done" not in names
+
+
+def test_query_risk_handoffs(session, monkeypatch) -> None:
+    """query_risk_handoffs requires near deadline and at least one delayed check-in."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    h_risk = Handoff(project_id=p.id, need_back="Risk", deadline=date(2026, 3, 10))
+    h_near_no_delay = Handoff(
+        project_id=p.id,
+        need_back="Near but on-track",
+        deadline=date(2026, 3, 10),
+    )
+    h_delayed_far = Handoff(
+        project_id=p.id,
+        need_back="Delayed but far",
+        deadline=date(2026, 3, 20),
+    )
+    session.add_all([h_risk, h_near_no_delay, h_delayed_far])
+    session.commit()
+    session.refresh(h_risk)
+    session.refresh(h_delayed_far)
+
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=h_risk.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.DELAYED,
+            ),
+            CheckIn(
+                handoff_id=h_delayed_far.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.DELAYED,
+            ),
+        ]
+    )
+    session.commit()
+
+    results = data.query_risk_handoffs(deadline_near_days=2)
+    names = [h.need_back for h in results]
+    assert "Risk" in names
+    assert "Near but on-track" not in names
+    assert "Delayed but far" not in names
+
+
 def test_query_upcoming_handoffs(session, monkeypatch) -> None:
-    """query_upcoming_handoffs returns handoffs with next_check in future, deadline not at risk."""
+    """query_upcoming_handoffs returns open handoffs not in Risk/Action."""
     _patch_session_context(monkeypatch, session)
 
     class FixedDate(date):
@@ -567,18 +689,42 @@ def test_query_upcoming_handoffs(session, monkeypatch) -> None:
     )
     h3 = Handoff(
         project_id=p.id,
-        need_back="Due soon",
+        need_back="Near deadline but not delayed",
         next_check=tomorrow,
         deadline=tomorrow,
     )
-    session.add_all([h1, h2, h3])
+    h4 = Handoff(
+        project_id=p.id,
+        need_back="Risk item",
+        next_check=tomorrow,
+        deadline=tomorrow,
+    )
+    h5 = Handoff(
+        project_id=p.id,
+        need_back="Action item",
+        next_check=date(2026, 3, 8),
+        deadline=date(2026, 3, 20),
+    )
+    session.add_all([h1, h2, h3, h4, h5])
+    session.commit()
+    session.refresh(h4)
+
+    delayed = CheckIn(
+        handoff_id=h4.id,
+        check_in_date=date(2026, 3, 9),
+        check_in_type=CheckInType.DELAYED,
+        note="Blocked",
+    )
+    session.add(delayed)
     session.commit()
 
     results = data.query_upcoming_handoffs(deadline_near_days=2)
     names = [r.need_back for r in results]
     assert "Upcoming" in names
     assert "Also upcoming" in names
-    assert "Due soon" not in names
+    assert "Near deadline but not delayed" in names
+    assert "Risk item" not in names
+    assert "Action item" not in names
 
 
 # ---------------------------------------------------------------------------
@@ -698,7 +844,7 @@ def test_import_payload_legacy_format(session, monkeypatch) -> None:
 
 
 def test_create_check_in(session, monkeypatch) -> None:
-    """create_check_in inserts a check-in record."""
+    """create_check_in inserts a record and can update handoff.next_check."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
@@ -715,10 +861,14 @@ def test_create_check_in(session, monkeypatch) -> None:
         check_in_type=CheckInType.ON_TRACK,
         check_in_date=date(2026, 3, 1),
         note="All good",
+        next_check_date=date(2026, 3, 8),
     )
     assert ci.id is not None
     assert ci.check_in_type == CheckInType.ON_TRACK
     assert ci.handoff_id == h.id
+    refreshed = session.get(Handoff, h.id)
+    assert refreshed is not None
+    assert refreshed.next_check == date(2026, 3, 8)
 
 
 def test_handoff_is_open_and_close_date(session, monkeypatch) -> None:
