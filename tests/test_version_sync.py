@@ -28,9 +28,13 @@ def _read_uv_lock_handoff_version() -> str:
         if package.get("name") != "handoff":
             continue
         if package.get("source", {}).get("editable") == ".":
-            return package["version"]
+            version = package.get("version")
+            assert version is not None, (
+                "Expected editable handoff package in uv.lock to have a 'version' field."
+            )
+            return version
 
-    raise AssertionError('Could not find editable package "handoff" in uv.lock.')
+    raise AssertionError("Could not find editable package 'handoff' in uv.lock.")
 
 
 def test_version_module_matches_pyproject() -> None:
