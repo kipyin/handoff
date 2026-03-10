@@ -184,10 +184,6 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     Due action items (next_check in the past) use a two-step check-in form:
     1. Click "Conclude" to enter concluded mode.
     2. Submit "Save conclude check-in" to persist and close the handoff.
-
-    Note: the quick "✓ Conclude" button lives inside a st.popover (Actions),
-    which Streamlit's AppTest v1 does not expose; that path is covered by the
-    unit tests in test_pages_now.py instead.
     """
     db.init_db()
     project = data.create_project("Now Conclude Test")
@@ -204,8 +200,7 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    # Due action items show "On-track / Delayed / Conclude" buttons in-line
-    # (not in a popover) via _render_due_check_in_flow.
+    # Due action items show "On-track / Delayed / Conclude" buttons in-line.
     conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "Conclude"]
     assert conclude_buttons, "Expected Conclude button not found on Now page"
     conclude_buttons[0].click().run(timeout=5)
