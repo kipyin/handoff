@@ -5,16 +5,20 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import date
 
+import pytest
+
 import handoff.data as data
 from handoff.models import CheckInType, Handoff, Project
 from handoff.services import (
     add_check_in,
+    conclude_handoff,
     create_handoff,
     list_pitchmen_with_open_handoffs,
     query_action_handoffs,
     query_concluded_handoffs,
     query_risk_handoffs,
     query_upcoming_handoffs,
+    reopen_handoff,
     snooze_handoff,
 )
 
@@ -163,6 +167,61 @@ def test_service_add_check_in_updates_next_check(session, monkeypatch) -> None:
     refreshed = session.get(Handoff, handoff.id)
     assert refreshed is not None
     assert refreshed.next_check == date(2026, 3, 16)
+
+
+def test_service_reopen_handoff_conclude_then_open_again(session, monkeypatch) -> None:
+    """Service reopen flow appends check-in and returns item to open queries."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    handoff = create_handoff(
+        project_id=p.id,
+        need_back="Conclude then reopen",
+        next_check=date(2026, 3, 9),
+    )
+    assert handoff.id is not None
+
+    concluded = conclude_handoff(handoff.id, note="done")
+    assert concluded.check_in_type == CheckInType.CONCLUDED
+
+    reopened = reopen_handoff(
+        handoff.id,
+        note="reopen: waiting on revised doc",
+        next_check_date=date(2026, 3, 9),
+    )
+    assert reopened.check_in_type == CheckInType.ON_TRACK
+    assert reopened.check_in_date == date(2026, 3, 9)
+
+    action_names = [h.need_back for h in query_action_handoffs()]
+    concluded_names = [h.need_back for h in query_concluded_handoffs()]
+    assert "Conclude then reopen" in action_names
+    assert "Conclude then reopen" not in concluded_names
+
+
+def test_service_reopen_handoff_rejects_open_item(session, monkeypatch) -> None:
+    """Service reopen rejects handoffs whose latest check-in is not concluded."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    handoff = create_handoff(project_id=p.id, need_back="Already open")
+    assert handoff.id is not None
+
+    with pytest.raises(ValueError, match="latest check-in is concluded"):
+        reopen_handoff(handoff.id)
 
 
 def test_service_query_risk_handoffs_include_archived_projects(session, monkeypatch) -> None:

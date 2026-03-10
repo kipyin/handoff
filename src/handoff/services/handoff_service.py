@@ -17,6 +17,7 @@ from handoff.data import query_handoffs as _query_handoffs
 from handoff.data import query_now_items as _query_now_items
 from handoff.data import query_risk_handoffs as _query_risk_handoffs
 from handoff.data import query_upcoming_handoffs as _query_upcoming_handoffs
+from handoff.data import reopen_handoff as _reopen_handoff
 from handoff.data import snooze_handoff as _snooze_handoff
 from handoff.data import update_handoff as _update_handoff
 from handoff.models import CheckIn, CheckInType, Handoff
@@ -207,7 +208,7 @@ def query_concluded_handoffs(
     search_text: str | None = None,
     include_archived_projects: bool = True,
 ) -> list[Handoff]:
-    """Return handoffs that have at least one concluded check-in."""
+    """Return handoffs whose latest check-in is concluded."""
     return _query_concluded_handoffs(
         project_ids=project_ids,
         pitchman_names=pitchman_names,
@@ -232,6 +233,20 @@ def conclude_handoff(handoff_id: int, note: str | None = None) -> CheckIn:
         The created concluded CheckIn.
     """
     return _conclude_handoff(handoff_id, note=note)
+
+
+def reopen_handoff(
+    handoff_id: int,
+    *,
+    note: str | None = None,
+    next_check_date: date | None = None,
+) -> CheckIn:
+    """Reopen a concluded handoff by appending a new on-track check-in."""
+    return _reopen_handoff(
+        handoff_id,
+        note=note,
+        next_check_date=next_check_date,
+    )
 
 
 def get_handoff_close_date(handoff: Handoff) -> date | None:

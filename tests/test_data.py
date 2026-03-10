@@ -534,6 +534,86 @@ def test_conclude_handoff(session, monkeypatch) -> None:
     assert data.get_handoff_close_date(h) is not None
 
 
+def test_reopen_handoff_appends_on_track_and_sets_next_check(session, monkeypatch) -> None:
+    """reopen_handoff appends an on-track check-in and re-opens the handoff."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    h = Handoff(project_id=p.id, need_back="Reopen me", next_check=date(2026, 3, 1))
+    session.add(h)
+    session.commit()
+    session.refresh(h)
+
+    concluded = data.conclude_handoff(h.id, note="finished")
+    reopened = data.reopen_handoff(
+        h.id,
+        note="reopen: waiting on revised doc",
+        next_check_date=date(2026, 3, 16),
+    )
+
+    assert concluded.id is not None
+    assert reopened.id is not None
+    assert reopened.id != concluded.id
+    assert reopened.check_in_type == CheckInType.ON_TRACK
+    assert reopened.check_in_date == date(2026, 3, 9)
+    assert reopened.note == "reopen: waiting on revised doc"
+
+    session.refresh(h)
+    assert h.next_check == date(2026, 3, 16)
+    assert data.handoff_is_open(h) is True
+    assert data.get_handoff_close_date(h) == date(2026, 3, 9)
+    assert len(h.check_ins) == 2
+    assert any(ci.check_in_type == CheckInType.CONCLUDED for ci in h.check_ins)
+
+
+def test_reopen_handoff_rejects_non_concluded_latest(session, monkeypatch) -> None:
+    """reopen_handoff raises when latest check-in is not concluded."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    no_history = Handoff(project_id=p.id, need_back="No history")
+    already_open = Handoff(project_id=p.id, need_back="Already open")
+    session.add_all([no_history, already_open])
+    session.commit()
+    session.refresh(already_open)
+
+    session.add(
+        CheckIn(
+            handoff_id=already_open.id,
+            check_in_date=date(2026, 3, 8),
+            check_in_type=CheckInType.ON_TRACK,
+        )
+    )
+    session.commit()
+
+    with pytest.raises(ValueError, match="latest check-in is concluded"):
+        data.reopen_handoff(no_history.id)
+    with pytest.raises(ValueError, match="latest check-in is concluded"):
+        data.reopen_handoff(already_open.id)
+
+
 def test_query_now_items(session, monkeypatch) -> None:
     """query_now_items returns open handoffs with next_check due or deadline at risk."""
     _patch_session_context(monkeypatch, session)
@@ -1031,6 +1111,111 @@ def test_query_concluded_handoffs_filters_and_ordering(session, monkeypatch) -> 
     assert [h.need_back for h in filtered_results] == ["Active newer"]
 
 
+def test_section_queries_use_latest_check_in_lifecycle(session, monkeypatch) -> None:
+    """Section membership follows latest check-in semantics after reopen."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    reopened_action = Handoff(
+        project_id=p.id,
+        need_back="Reopened action",
+        next_check=date(2026, 3, 9),
+    )
+    reopened_risk = Handoff(
+        project_id=p.id,
+        need_back="Reopened risk",
+        next_check=date(2026, 3, 11),
+        deadline=date(2026, 3, 10),
+    )
+    reopened_upcoming = Handoff(
+        project_id=p.id,
+        need_back="Reopened upcoming",
+        next_check=date(2026, 3, 12),
+    )
+    still_concluded = Handoff(
+        project_id=p.id,
+        need_back="Still concluded",
+        next_check=date(2026, 3, 9),
+    )
+    session.add_all([reopened_action, reopened_risk, reopened_upcoming, still_concluded])
+    session.commit()
+    session.refresh(reopened_action)
+    session.refresh(reopened_risk)
+    session.refresh(reopened_upcoming)
+    session.refresh(still_concluded)
+
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=reopened_action.id,
+                check_in_date=date(2026, 3, 8),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=reopened_action.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.ON_TRACK,
+            ),
+            CheckIn(
+                handoff_id=reopened_risk.id,
+                check_in_date=date(2026, 3, 8),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=reopened_risk.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.DELAYED,
+            ),
+            CheckIn(
+                handoff_id=reopened_upcoming.id,
+                check_in_date=date(2026, 3, 8),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=reopened_upcoming.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.ON_TRACK,
+            ),
+            CheckIn(
+                handoff_id=still_concluded.id,
+                check_in_date=date(2026, 3, 8),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+        ]
+    )
+    session.commit()
+
+    risk_names = {h.need_back for h in data.query_risk_handoffs(deadline_near_days=1)}
+    action_names = {h.need_back for h in data.query_action_handoffs(deadline_near_days=1)}
+    upcoming_names = {h.need_back for h in data.query_upcoming_handoffs(deadline_near_days=1)}
+    concluded_names = {h.need_back for h in data.query_concluded_handoffs()}
+
+    assert "Reopened risk" in risk_names
+    assert "Still concluded" not in risk_names
+
+    assert "Reopened action" in action_names
+    assert "Still concluded" not in action_names
+
+    assert "Reopened upcoming" in upcoming_names
+    assert "Still concluded" not in upcoming_names
+
+    assert "Still concluded" in concluded_names
+    assert "Reopened action" not in concluded_names
+    assert "Reopened risk" not in concluded_names
+    assert "Reopened upcoming" not in concluded_names
+
+
 # ---------------------------------------------------------------------------
 # import_payload tests
 # ---------------------------------------------------------------------------
@@ -1176,8 +1361,16 @@ def test_create_check_in(session, monkeypatch) -> None:
 
 
 def test_handoff_is_open_and_close_date(session, monkeypatch) -> None:
-    """handoff_is_open and get_handoff_close_date work correctly."""
+    """handoff_is_open uses latest check-in while close date tracks last conclusion."""
     _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
     p = Project(name="P")
     session.add(p)
     session.commit()
@@ -1203,4 +1396,12 @@ def test_handoff_is_open_and_close_date(session, monkeypatch) -> None:
     session.refresh(h)
 
     assert data.handoff_is_open(h) is False
+    assert data.get_handoff_close_date(h) == date(2026, 3, 5)
+
+    reopened = data.reopen_handoff(h.id, note="reopen", next_check_date=date(2026, 3, 12))
+    assert reopened.check_in_type == CheckInType.ON_TRACK
+    assert reopened.check_in_date == date(2026, 3, 9)
+
+    session.refresh(h)
+    assert data.handoff_is_open(h) is True
     assert data.get_handoff_close_date(h) == date(2026, 3, 5)
