@@ -231,9 +231,7 @@ def test_m006_existing_handoff_rows_preserved_on_id_conflict(tmp_path: Path) -> 
     engine.dispose()
 
     conn_check = sqlite3.connect(db_path)
-    rows = conn_check.execute(
-        "SELECT id, need_back, pitchman FROM handoff ORDER BY id"
-    ).fetchall()
+    rows = conn_check.execute("SELECT id, need_back, pitchman FROM handoff ORDER BY id").fetchall()
     conn_check.close()
 
     assert rows[0] == (1, "Preexisting handoff", "Preset")
