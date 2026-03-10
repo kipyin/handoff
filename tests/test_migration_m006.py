@@ -200,7 +200,8 @@ def test_m006_existing_handoff_rows_preserved_on_id_conflict(tmp_path: Path) -> 
     db_path = str(tmp_path / "existing_handoff_rows.db")
     _make_old_schema_db(db_path)
 
-    # Simulate partial migration state where handoff already has one copied row.
+    # Simulate partial migration state where handoff already has a different row
+    # with the same id, to exercise ID-collision handling.
     conn_pre = sqlite3.connect(db_path)
     conn_pre.executescript(
         """
