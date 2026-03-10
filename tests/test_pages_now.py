@@ -526,6 +526,101 @@ def test_render_check_in_flow_save_sets_flash_message(monkeypatch: pytest.Monkey
     assert "Checked in today; next check set to" in st_mock.session_state["now_flash_success"]
 
 
+def test_render_check_in_flow_save_concluded_sets_flash_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Saving concluded mode closes the handoff and sets flash feedback."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    st_mock.text_area.return_value = "  wrapped up  "
+    st_mock.form_submit_button.side_effect = [True, False]
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    calls: list[dict[str, object]] = []
+
+    def _fake_conclude_handoff(handoff_id: int, note: str | None = None) -> None:
+        calls.append({"handoff_id": handoff_id, "note": note})
+
+    monkeypatch.setattr("handoff.pages.now.conclude_handoff", _fake_conclude_handoff)
+    handoff = _make_fake_handoff(handoff_id=42, next_check=date(2026, 3, 12))
+    st_mock.session_state["now_action_check_in_mode_42"] = "concluded"
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    assert calls == [{"handoff_id": 42, "note": "wrapped up"}]
+    assert st_mock.session_state["now_flash_success"] == "Checked in today as concluded."
+
+
+def test_render_check_in_flow_delayed_mode_uses_delayed_type(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Delayed mode persists a delayed check-in type."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    st_mock.text_area.return_value = "  waiting on dependency  "
+    st_mock.date_input.return_value = date(2026, 3, 20)
+    st_mock.form_submit_button.side_effect = [True, False]
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    calls: list[dict[str, object]] = []
+
+    def _fake_add_check_in(
+        handoff_id: int,
+        *,
+        check_in_type: CheckInType,
+        note: str | None,
+        next_check_date: date,
+    ) -> None:
+        calls.append(
+            {
+                "handoff_id": handoff_id,
+                "check_in_type": check_in_type,
+                "note": note,
+                "next_check_date": next_check_date,
+            }
+        )
+
+    monkeypatch.setattr("handoff.pages.now.add_check_in", _fake_add_check_in)
+    handoff = _make_fake_handoff(handoff_id=43, next_check=date(2026, 3, 12))
+    st_mock.session_state["now_action_check_in_mode_43"] = "delayed"
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    assert len(calls) == 1
+    assert calls[0]["check_in_type"] is CheckInType.DELAYED
+    assert calls[0]["note"] == "waiting on dependency"
+    assert calls[0]["next_check_date"] == date(2026, 3, 20)
+
+
+def test_render_reopen_flow_save_value_error_shows_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Validation errors from reopen are shown and keep form state active."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    st_mock.form_submit_button.side_effect = [True, False]
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    def _raise_value_error(
+        handoff_id: int,
+        *,
+        note: str | None,
+        next_check_date: date,
+    ) -> None:
+        raise ValueError("Can only reopen concluded handoffs")
+
+    monkeypatch.setattr("handoff.pages.now.reopen_handoff", _raise_value_error)
+    handoff = _make_fake_handoff(handoff_id=19, need_back="Closed")
+    st_mock.session_state["now_concluded_reopen_mode_19"] = "reopen"
+
+    _render_reopen_flow(handoff, key_prefix="now_concluded")
+
+    st_mock.error.assert_called_once_with("Can only reopen concluded handoffs")
+    assert st_mock.session_state["now_concluded_reopen_mode_19"] == "reopen"
+    assert "now_flash_success" not in st_mock.session_state
+    st_mock.rerun.assert_not_called()
+
+
 # --- Unit tests for _check_in_header ---
 
 
