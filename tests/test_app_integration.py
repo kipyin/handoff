@@ -184,10 +184,6 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     Due action items (next_check in the past) use a two-step check-in form:
     1. Click "Conclude" to enter concluded mode.
     2. Submit "Save conclude check-in" to persist and close the handoff.
-
-    Note: the quick "✓ Conclude" button lives inside a st.popover (Actions),
-    which Streamlit's AppTest v1 does not expose; that path is covered by the
-    unit tests in test_pages_now.py instead.
     """
     db.init_db()
     project = data.create_project("Now Conclude Test")
@@ -204,8 +200,7 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    # Due action items show "On-track / Delayed / Conclude" buttons in-line
-    # (not in a popover) via _render_due_check_in_flow.
+    # Due action items show "On-track / Delayed / Conclude" buttons in-line.
     conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "Conclude"]
     assert conclude_buttons, "Expected Conclude button not found on Now page"
     conclude_buttons[0].click().run(timeout=5)
@@ -222,6 +217,54 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     updated = next((h for h in handoffs if h.id == handoff.id), None)
     assert updated is not None
     assert not data.handoff_is_open(updated)
+
+
+def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: Path) -> None:
+    """Conclude then reopen flow moves an item back to the open sections."""
+    db.init_db()
+    project = data.create_project("Now Reopen Test")
+    assert project.id is not None
+    handoff = data.create_handoff(
+        project_id=project.id,
+        need_back="Conclude and reopen this handoff",
+        next_check=date(2000, 1, 1),
+        pitchman="Jordan",
+    )
+    assert handoff.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "Conclude"]
+    assert conclude_buttons, "Expected Conclude button not found on Now page"
+    conclude_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_conclude_buttons = [
+        b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"
+    ]
+    assert save_conclude_buttons, "Expected 'Save conclude check-in' button not found"
+    save_conclude_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
+    assert reopen_buttons, "Expected Reopen button not found in Concluded section"
+    reopen_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Save reopen"]
+    assert save_reopen_buttons, "Expected 'Save reopen' button not found"
+    save_reopen_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    handoffs = data.query_handoffs(project_ids=[project.id], include_concluded=True)
+    updated = next((h for h in handoffs if h.id == handoff.id), None)
+    assert updated is not None
+    assert data.handoff_is_open(updated)
+
+    concluded_names = [h.need_back for h in data.query_concluded_handoffs(project_ids=[project.id])]
+    assert "Conclude and reopen this handoff" not in concluded_names
 
 
 def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:

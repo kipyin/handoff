@@ -12,7 +12,9 @@ from handoff.models import CheckIn, CheckInType
 from handoff.pages.now import (
     _check_in_header,
     _is_check_in_due,
+    _render_check_in_flow,
     _render_check_in_trail,
+    _render_reopen_flow,
     render_now_page,
 )
 
@@ -252,6 +254,65 @@ def test_render_now_page_action_item_shows_check_in_buttons(
     assert "Conclude" in labels
 
 
+def test_render_now_page_risk_item_shows_check_in_buttons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Risk items also render On-track/Delayed/Conclude check-in actions."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
+    risk_handoff = _make_fake_handoff(
+        handoff_id=22,
+        need_back="Risk check",
+        next_check=date(2026, 3, 12),
+        deadline=date(2026, 3, 10),
+    )
+    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [risk_handoff])
+    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+
+    render_now_page()
+
+    labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
+    assert "On-track" in labels
+    assert "Delayed" in labels
+    assert "Conclude" in labels
+
+
+def test_render_now_page_upcoming_item_shows_check_in_buttons(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Upcoming items also render On-track/Delayed/Conclude check-in actions."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
+    upcoming_handoff = _make_fake_handoff(
+        handoff_id=23,
+        need_back="Upcoming check",
+        next_check=date(2026, 4, 1),
+    )
+    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.query_upcoming_handoffs", lambda **kw: [upcoming_handoff]
+    )
+    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+
+    render_now_page()
+
+    labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
+    assert "On-track" in labels
+    assert "Delayed" in labels
+    assert "Conclude" in labels
+
+
 def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.MonkeyPatch) -> None:
     """Concluded handoffs are rendered as item expanders with no dataframe."""
     st_mock = _build_streamlit_mock()
@@ -350,6 +411,119 @@ def test_render_now_page_item_with_context_renders_markdown(
 
     markdown_calls = [str(c) for c in st_mock.markdown.call_args_list]
     assert any("Important context here" in c for c in markdown_calls)
+
+
+def test_render_check_in_flow_due_shows_due_caption(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Due handoffs keep due-state check-in messaging."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=31, next_check=date(2000, 1, 1))
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    captions = [call[0][0] for call in st_mock.caption.call_args_list if call[0]]
+    assert any("Check-in due now" in text for text in captions)
+
+
+def test_render_check_in_flow_non_due_shows_early_caption(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Non-due handoffs offer optional early check-in messaging."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=32, next_check=date(2099, 1, 1))
+
+    _render_check_in_flow(handoff, key_prefix="now_upcoming")
+
+    captions = [call[0][0] for call in st_mock.caption.call_args_list if call[0]]
+    assert any("Optional early check-in" in text for text in captions)
+
+
+def test_render_now_page_concluded_item_shows_reopen_button(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Concluded section renders a dedicated Reopen action."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
+    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.query_concluded_handoffs",
+        lambda **kw: [_make_fake_handoff(handoff_id=15, need_back="Closed item")],
+    )
+
+    render_now_page()
+
+    labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
+    assert "Reopen" in labels
+
+
+def test_render_reopen_flow_save_calls_reopen_handoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Saving reopen appends a reopen check-in and shows updated feedback."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    st_mock.form_submit_button.side_effect = [True, False]
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    calls: list[dict[str, object]] = []
+
+    def _fake_reopen_handoff(handoff_id: int, *, note: str | None, next_check_date: date) -> None:
+        calls.append(
+            {
+                "handoff_id": handoff_id,
+                "note": note,
+                "next_check_date": next_check_date,
+            }
+        )
+
+    monkeypatch.setattr("handoff.pages.now.reopen_handoff", _fake_reopen_handoff)
+    handoff = _make_fake_handoff(handoff_id=19, need_back="Closed")
+    st_mock.session_state["now_concluded_reopen_mode_19"] = "reopen"
+
+    _render_reopen_flow(handoff, key_prefix="now_concluded")
+
+    assert len(calls) == 1
+    assert calls[0]["handoff_id"] == 19
+    assert "Checked in today; next check set to" in st_mock.session_state["now_flash_success"]
+
+
+def test_render_check_in_flow_save_sets_flash_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Saving a non-concluded check-in sets post-rerun success feedback."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    st_mock.form_submit_button.side_effect = [True, False]
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    calls: list[dict[str, object]] = []
+
+    def _fake_add_check_in(
+        handoff_id: int,
+        *,
+        check_in_type: CheckInType,
+        note: str | None,
+        next_check_date: date,
+    ) -> None:
+        calls.append(
+            {
+                "handoff_id": handoff_id,
+                "check_in_type": check_in_type,
+                "note": note,
+                "next_check_date": next_check_date,
+            }
+        )
+
+    monkeypatch.setattr("handoff.pages.now.add_check_in", _fake_add_check_in)
+    handoff = _make_fake_handoff(handoff_id=41, next_check=date(2026, 3, 12))
+    st_mock.session_state["now_action_check_in_mode_41"] = "on_track"
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    assert len(calls) == 1
+    assert calls[0]["handoff_id"] == 41
+    assert "Checked in today; next check set to" in st_mock.session_state["now_flash_success"]
 
 
 # --- Unit tests for _check_in_header ---
