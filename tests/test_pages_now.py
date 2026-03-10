@@ -437,6 +437,41 @@ def test_render_check_in_flow_non_due_shows_early_caption(monkeypatch: pytest.Mo
     assert any("Optional early check-in" in text for text in captions)
 
 
+def test_render_check_in_flow_prefills_future_next_check_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On-track/delayed forms keep a future next_check as the default date input."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=35, next_check=date(2099, 1, 5))
+    st_mock.session_state["now_action_check_in_mode_35"] = "on_track"
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    assert st_mock.date_input.call_count == 1
+    assert st_mock.date_input.call_args.kwargs["value"] == date(2099, 1, 5)
+
+
+def test_render_check_in_flow_prefills_next_business_day_for_due_item(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Overdue next_check values default to the next business day when checking in."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=36, next_check=date(2000, 1, 5))
+    st_mock.session_state["now_action_check_in_mode_36"] = "on_track"
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    from handoff.pages import now as now_page
+
+    expected_default = now_page.add_business_days(date.today(), 1)
+    assert st_mock.date_input.call_count == 1
+    assert st_mock.date_input.call_args.kwargs["value"] == expected_default
+
+
 def test_render_now_page_concluded_item_shows_reopen_button(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
