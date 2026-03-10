@@ -970,6 +970,67 @@ def test_query_upcoming_handoffs_include_archived_projects(session, monkeypatch)
     assert "Archived upcoming" in all_names
 
 
+def test_query_concluded_handoffs_filters_and_ordering(session, monkeypatch) -> None:
+    """Concluded query supports archived toggle, filters, search, and close-date ordering."""
+    _patch_session_context(monkeypatch, session)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    active_older = Handoff(project_id=active.id, need_back="Active older", pitchman="Alice")
+    active_newer = Handoff(project_id=active.id, need_back="Active newer", pitchman="Bob")
+    archived_latest = Handoff(project_id=archived.id, need_back="Archived latest", pitchman="Bob")
+    session.add_all([active_older, active_newer, archived_latest])
+    session.commit()
+    session.refresh(active_older)
+    session.refresh(active_newer)
+    session.refresh(archived_latest)
+
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=active_older.id,
+                check_in_date=date(2026, 3, 1),
+                check_in_type=CheckInType.CONCLUDED,
+                note="wrapped up old item",
+            ),
+            CheckIn(
+                handoff_id=active_newer.id,
+                check_in_date=date(2026, 3, 5),
+                check_in_type=CheckInType.CONCLUDED,
+                note="special token in note",
+            ),
+            CheckIn(
+                handoff_id=archived_latest.id,
+                check_in_date=date(2026, 3, 6),
+                check_in_type=CheckInType.CONCLUDED,
+                note="archived completion",
+            ),
+        ]
+    )
+    session.commit()
+
+    default_results = data.query_concluded_handoffs()
+    assert [h.need_back for h in default_results] == [
+        "Archived latest",
+        "Active newer",
+        "Active older",
+    ]
+
+    active_only_results = data.query_concluded_handoffs(include_archived_projects=False)
+    assert [h.need_back for h in active_only_results] == ["Active newer", "Active older"]
+
+    filtered_results = data.query_concluded_handoffs(
+        project_ids=[active.id],
+        pitchman_names=["  Bob  ", ""],
+        search_text="  special token  ",
+        include_archived_projects=False,
+    )
+    assert [h.need_back for h in filtered_results] == ["Active newer"]
+
+
 # ---------------------------------------------------------------------------
 # import_payload tests
 # ---------------------------------------------------------------------------
