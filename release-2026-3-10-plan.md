@@ -284,10 +284,10 @@ This phase tightens behavior before docs/polish so user expectations match app b
      - Reopen rate
    - Keep export path aligned with the updated metrics model.
 
-### Phase 3.1 execution steps (one agent per step)
+### Phase 3.1 internal sub-steps (single agent run)
 
-Run each step as a separate agent run on top of the previous step's merged branch.
-Each step should produce focused commits, tests, and a short handoff note for the next step.
+Within the single agent run for Phase 3.1, work through the following sub-steps in order on top of the previous phase's merged branch.
+Treat each sub-step as a focused change set with its own tests and a brief handoff note captured in the run summary.
 
 #### Step 3.1-A — Lifecycle predicates + reopen backend
 
