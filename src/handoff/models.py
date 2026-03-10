@@ -43,7 +43,7 @@ if "Handoff" not in globals():
         """A single handoff item belonging to a project.
 
         The pitchman is the person responsible for the deliverable. A handoff
-        is open until it has a check-in with type ``concluded``.
+        is closed when its latest check-in has type ``concluded``.
         """
 
         __tablename__ = "handoff"  # type: ignore[assignment]
@@ -74,7 +74,7 @@ if "CheckIn" not in globals():
         """A check-in entry on a handoff's trail.
 
         The trail records on-track, delayed, and concluded events. A handoff
-        is closed once it has at least one ``concluded`` check-in.
+        is closed when the latest event in the trail is ``concluded``.
         """
 
         __tablename__ = "check_in"  # type: ignore[assignment]

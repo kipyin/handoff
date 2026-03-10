@@ -27,6 +27,7 @@ from handoff.services.handoff_service import (
     query_now_items,
     query_risk_handoffs,
     query_upcoming_handoffs,
+    reopen_handoff,
     snooze_handoff,
     update_handoff,
 )
@@ -76,6 +77,7 @@ __all__ = [
     "query_now_items",
     "query_risk_handoffs",
     "query_upcoming_handoffs",
+    "reopen_handoff",
     "rename_project",
     "set_deadline_near_days",
     "snooze_handoff",
