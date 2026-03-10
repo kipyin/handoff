@@ -2,7 +2,7 @@
 
 import importlib
 from contextlib import contextmanager
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -622,6 +622,131 @@ def test_query_now_items(session, monkeypatch) -> None:
     at_risk_names = [r[0].name for r in results if r[1]]
     assert "Deadline at risk" in at_risk_names
     assert "Check due" not in at_risk_names
+
+
+def test_query_now_items_applies_project_helper_and_search_filters(session, monkeypatch) -> None:
+    """query_now_items applies project/helper filters and trimmed case-insensitive search."""
+    _patch_session_context(monkeypatch, session)
+    p1 = Project(name="Alpha")
+    p2 = Project(name="Beta")
+    session.add_all([p1, p2])
+    session.commit()
+    session.refresh(p1)
+    session.refresh(p2)
+
+    # This is the only row that should survive all filters.
+    matched = Todo(
+        project_id=p1.id,
+        name="Prepare handoff",
+        status=TodoStatus.HANDOFF,
+        next_check=date(2000, 1, 1),
+        helper="Alice",
+        notes="Contains the keyword Needle",
+    )
+    session.add(matched)
+
+    # Excluded by project filter.
+    session.add(
+        Todo(
+            project_id=p2.id,
+            name="Prepare handoff",
+            status=TodoStatus.HANDOFF,
+            next_check=date(2000, 1, 1),
+            helper="Alice",
+            notes="Contains the keyword Needle",
+        )
+    )
+    # Excluded by helper filter.
+    session.add(
+        Todo(
+            project_id=p1.id,
+            name="Prepare handoff",
+            status=TodoStatus.HANDOFF,
+            next_check=date(2000, 1, 1),
+            helper="Bob",
+            notes="Contains the keyword Needle",
+        )
+    )
+    # Excluded by search filter.
+    session.add(
+        Todo(
+            project_id=p1.id,
+            name="Prepare handoff",
+            status=TodoStatus.HANDOFF,
+            next_check=date(2000, 1, 1),
+            helper="Alice",
+            notes="No match here",
+        )
+    )
+    session.commit()
+
+    results = data.query_now_items(
+        project_ids=[p1.id],
+        helper_names=["  Alice  ", "   "],
+        search_text="  needle  ",
+    )
+    assert len(results) == 1
+    assert results[0][0].id == matched.id
+
+
+def test_query_now_items_sorts_risk_first_then_next_check_and_deadline(
+    session, monkeypatch
+) -> None:
+    """query_now_items sorts risk items first, then by next_check/deadline/created_at."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="Sort")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    today = date.today()
+    cutoff = today + timedelta(days=2)
+
+    # Risk items: deadline <= cutoff.
+    risk_earlier_check = Todo(
+        project_id=p.id,
+        name="risk_earlier_check",
+        status=TodoStatus.HANDOFF,
+        next_check=today - timedelta(days=5),
+        deadline=cutoff,
+    )
+    risk_later_check = Todo(
+        project_id=p.id,
+        name="risk_later_check",
+        status=TodoStatus.HANDOFF,
+        next_check=today - timedelta(days=1),
+        deadline=today + timedelta(days=1),
+    )
+
+    # Non-risk items that still qualify via next_check due/null.
+    due_nonrisk = Todo(
+        project_id=p.id,
+        name="due_nonrisk",
+        status=TodoStatus.HANDOFF,
+        next_check=today - timedelta(days=3),
+        deadline=today + timedelta(days=30),
+    )
+    null_next_check_nonrisk = Todo(
+        project_id=p.id,
+        name="null_next_check_nonrisk",
+        status=TodoStatus.HANDOFF,
+        next_check=None,
+        deadline=today + timedelta(days=30),
+    )
+    session.add_all([risk_earlier_check, risk_later_check, due_nonrisk, null_next_check_nonrisk])
+    session.commit()
+
+    results = data.query_now_items(deadline_near_days=2)
+    names_in_order = [todo.name for todo, _ in results]
+    risk_flags = [at_risk for _, at_risk in results]
+
+    assert names_in_order == [
+        "risk_earlier_check",
+        "risk_later_check",
+        "due_nonrisk",
+        "null_next_check_nonrisk",
+    ]
+    assert risk_flags == [True, True, False, False]
 
 
 def test_query_upcoming_handoffs(session, monkeypatch) -> None:
