@@ -240,6 +240,129 @@ Dashboard service: cycle time, on-time rate, throughput, pitchman load from conc
 
 ---
 
+**Phase 3.1 — Lifecycle alignment, reopen flow, and PM metrics**
+
+This phase tightens behavior before docs/polish so user expectations match app behavior.
+
+### Phase 3.1 implementation spec
+
+1. **Append-only reopen (no history deletion)**
+   - Reopen must append a new check-in after a prior `concluded` check-in.
+   - Do **not** delete or mutate existing concluded check-ins.
+   - Reopen note is captured in check-in notes (e.g., "reopen: waiting on revised doc").
+
+2. **Lifecycle semantics update**
+   - Replace "closed if any concluded check-in exists" with:
+     - **Closed** = latest check-in is `concluded`.
+     - **Open** = no check-ins, or latest check-in is `on_track`/`delayed`.
+   - Update all query paths and counters that currently depend on `exists(concluded)`.
+   - Preserve `get_handoff_close_date` semantics for analytics (most recent concluded date).
+
+3. **Check-in flow on all open sections**
+   - Show check-in actions on Risk, Action, and Upcoming items.
+   - Keep due-state emphasis for items with `next_check <= today`.
+   - Support optional early check-ins for non-due items.
+   - Concluded section gets a dedicated reopen action.
+
+4. **Check-in date behavior**
+   - User-triggered check-ins use actual action date (`today`) as `check_in_date`.
+   - `next_check` remains a planning field, not a proxy for check-in date.
+   - Late and early check-ins both record the real check-in date (`today`).
+
+5. **Dashboard PM metrics focus**
+   - Prioritize PM-operational signals over raw throughput deltas:
+     - At risk now
+     - Action overdue
+     - Open aging profile
+     - On-time close rate trend
+     - Cycle time by project (p50/p90)
+     - Reopen rate
+   - Keep export path aligned with the updated metrics model.
+
+### Phase 3.1 execution steps (one agent per step)
+
+Run each step as a separate agent run on top of the previous step's merged branch.
+Each step should produce focused commits, tests, and a short handoff note for the next step.
+
+#### Step 3.1-A — Lifecycle predicates + reopen backend
+
+- **Goal:** Introduce latest-check-in lifecycle semantics and append-only reopen APIs.
+- **Primary files:**
+  - `src/handoff/data.py`
+  - `src/handoff/services/handoff_service.py`
+  - `src/handoff/services/__init__.py`
+  - `tests/test_data.py`
+  - `tests/test_todo_service.py`
+- **Scope:**
+  - Add latest-check-in helper/predicate(s) and replace `exists(concluded)` open/closed logic.
+  - Add `reopen_handoff(...)` service/data functions (append non-concluded check-in, set `next_check`).
+  - Update list/count/query helpers to use current lifecycle state.
+- **Validation target:**
+  - Data/service tests for conclude -> reopen -> open again.
+  - Regression tests for risk/action/upcoming/concluded membership.
+- **Token budget guidance:** ~12k-18k tokens.
+
+#### Step 3.1-B — Now page UX (all-open-section check-ins + reopen action)
+
+- **Goal:** Align interaction model with lifecycle changes and user expectations.
+- **Primary files:**
+  - `src/handoff/pages/now.py`
+  - `tests/test_pages_now.py`
+  - `tests/test_app_integration.py` (Now-page flows only)
+- **Scope:**
+  - Enable check-in controls on Risk, Action, Upcoming sections.
+  - Preserve due messaging for due items; allow optional early check-in on non-due items.
+  - Add reopen action/form in Concluded section using append-only behavior.
+  - Ensure check-in save feedback clarifies "checked in today; next check set to ...".
+- **Validation target:**
+  - Page/unit tests for new controls.
+  - AppTest flow: conclude -> reopen -> item moves out of Concluded.
+- **Token budget guidance:** ~10k-16k tokens.
+
+#### Step 3.1-C — Dashboard PM metric redesign
+
+- **Goal:** Shift analytics from generic counts to PM-operational health metrics.
+- **Primary files:**
+  - `src/handoff/services/dashboard_service.py`
+  - `src/handoff/pages/dashboard.py`
+  - `tests/test_dashboard.py`
+  - `tests/test_dashboard_render.py`
+- **Scope:**
+  - Add PM cards (at-risk now, action overdue, etc.) and aging/reopen metrics.
+  - Rework chart/table sections around reliability and flow.
+  - Keep exports coherent with revised metric definitions.
+- **Validation target:**
+  - Deterministic service tests for each new metric.
+  - Render tests for updated dashboard sections.
+- **Token budget guidance:** ~12k-20k tokens.
+
+#### Step 3.1-D — Integration hardening + release-plan sync
+
+- **Goal:** Ensure cross-module correctness and lock expected behavior.
+- **Primary files:**
+  - `tests/test_app_integration.py`
+  - `tests/test_data.py` (final edge-case additions)
+  - `RELEASE_NOTES.md` (new 2026.3.10 draft block if needed)
+  - `release-2026-3-10-plan.md` (mark step completion notes)
+- **Scope:**
+  - Add end-to-end tests covering late/early check-in, reopen, and dashboard metrics smoke.
+  - Verify archived-project toggle interactions under new lifecycle semantics.
+  - Update plan/release note checkpoints so Phase 4 docs can be finalized quickly.
+- **Validation target:**
+  - Targeted integration tests pass from project root.
+  - No regressions in existing now/dashboard/project workflows.
+- **Token budget guidance:** ~8k-14k tokens.
+
+### Phase 3.1 done criteria
+
+- Reopen is append-only and works functionally.
+- Open/closed state is based on latest check-in, consistently across UI + data + services.
+- Risk/Action/Upcoming support check-in actions with correct "real check-in date is today" behavior.
+- Dashboard emphasizes PM-operational metrics.
+- Targeted tests for data, page render, and app integration are green.
+
+---
+
 **Phase 4 — Documentation and final polish**
 
 AGENTS.md: update terminology (Handoff, pitchman, need_back, check-in trail). README: any user-facing changes. RELEASE_NOTES: entry for paradigm shift. Integration tests. Commit: docs and polish.
