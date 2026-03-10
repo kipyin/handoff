@@ -80,6 +80,42 @@ def test_service_query_action_handoffs(session, monkeypatch) -> None:
     assert "Later" not in names
 
 
+def test_service_query_action_handoffs_include_archived_projects(session, monkeypatch) -> None:
+    """query_action_handoffs includes archived projects when explicitly requested."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    data.create_handoff(
+        project_id=active.id,
+        need_back="Active due",
+        next_check=date(2026, 3, 9),
+    )
+    data.create_handoff(
+        project_id=archived.id,
+        need_back="Archived due",
+        next_check=date(2026, 3, 9),
+    )
+
+    default_names = [h.need_back for h in query_action_handoffs()]
+    assert "Active due" in default_names
+    assert "Archived due" not in default_names
+
+    all_names = [h.need_back for h in query_action_handoffs(include_archived_projects=True)]
+    assert "Active due" in all_names
+    assert "Archived due" in all_names
+
+
 def test_service_snooze_handoff(session, monkeypatch) -> None:
     """snooze_handoff updates next_check through the service boundary."""
     _patch_session_context(monkeypatch, session)
