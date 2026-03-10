@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -164,3 +165,92 @@ def test_build_patch_includes_docs_and_core_files(
         assert "RELEASE_NOTES.md" in written_via_write
         assert "app.py" in written_via_write
         assert "src/handoff/__init__.py" in written_via_write
+
+
+def test_obfuscate_retries_with_trial_fallback_for_out_of_license(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Out-of-license retries with excludes and copies plain fallback modules."""
+    app_build_dir = tmp_path / "build" / "handoff"
+    src_plain_dir = app_build_dir / "src_plain" / "handoff"
+    src_plain_dir.mkdir(parents=True, exist_ok=True)
+    (src_plain_dir / "__init__.py").write_text("x = 1", encoding="utf-8")
+    plain_data = src_plain_dir / "data.py"
+    plain_data.write_text("DATA = 1", encoding="utf-8")
+
+    monkeypatch.setattr(build_full_module, "APP_BUILD_DIR", app_build_dir)
+    monkeypatch.setattr(build_full_module, "SRC_PLAIN_DIR", app_build_dir / "src_plain")
+    monkeypatch.setattr(
+        build_full_module,
+        "PYARMOR_TRIAL_EXCLUDE_FILES",
+        (Path("handoff/data.py"),),
+    )
+    monkeypatch.setattr("shutil.which", lambda name: "/tmp/pyarmor" if name == "pyarmor" else None)
+
+    calls: list[list[str]] = []
+
+    def _fake_run(
+        cmd: list[str],
+        *,
+        check: bool,
+        cwd: Path,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert check is True
+        assert capture_output is True
+        assert text is True
+        assert cwd == app_build_dir / "src_plain"
+        calls.append(cmd)
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(
+                2,
+                cmd,
+                stderr="ERROR out of license",
+            )
+        obf_pkg = app_build_dir / "src" / "handoff"
+        obf_pkg.mkdir(parents=True, exist_ok=True)
+        (obf_pkg / "__init__.py").write_text("# obfuscated", encoding="utf-8")
+        return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+
+    monkeypatch.setattr("subprocess.run", _fake_run)
+
+    build_full_module._obfuscate_app_code_with_pyarmor()
+
+    assert len(calls) == 2
+    assert "--exclude" in calls[1]
+    assert "handoff/data.py" in calls[1]
+    copied_data = app_build_dir / "src" / "handoff" / "data.py"
+    assert copied_data.read_text(encoding="utf-8") == "DATA = 1"
+    assert not (app_build_dir / "src_plain").exists()
+
+
+def test_obfuscate_raises_runtime_error_for_non_license_pyarmor_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-license PyArmor failures raise RuntimeError immediately."""
+    app_build_dir = tmp_path / "build" / "handoff"
+    src_plain_dir = app_build_dir / "src_plain" / "handoff"
+    src_plain_dir.mkdir(parents=True, exist_ok=True)
+    (src_plain_dir / "__init__.py").write_text("x = 1", encoding="utf-8")
+
+    monkeypatch.setattr(build_full_module, "APP_BUILD_DIR", app_build_dir)
+    monkeypatch.setattr(build_full_module, "SRC_PLAIN_DIR", app_build_dir / "src_plain")
+    monkeypatch.setattr("shutil.which", lambda name: "/tmp/pyarmor" if name == "pyarmor" else None)
+
+    def _fake_run(
+        cmd: list[str],
+        *,
+        check: bool,
+        cwd: Path,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(2, cmd, stderr="unexpected failure")
+
+    monkeypatch.setattr("subprocess.run", _fake_run)
+
+    with pytest.raises(RuntimeError, match="PyArmor failed while obfuscating application code"):
+        build_full_module._obfuscate_app_code_with_pyarmor()

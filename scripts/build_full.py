@@ -34,6 +34,7 @@ EMBED_ZIP_URL = f"https://www.python.org/ftp/python/{PY_VERSION}/{EMBED_ZIP_NAME
 EMBED_ZIP_PATH = BUILD_ROOT / EMBED_ZIP_NAME
 
 PBS_VERSION = "20250317"
+PYARMOR_TRIAL_EXCLUDE_FILES = (Path("handoff/data.py"),)
 
 
 def _mac_archive_name() -> str:
@@ -217,6 +218,50 @@ def _copy_docs() -> None:
             shutil.copy2(src, APP_BUILD_DIR / filename)
 
 
+def _run_pyarmor_gen(pyarmor_cmd: list[str], *, cwd: Path) -> None:
+    """Run a PyArmor command and replay captured output to the console."""
+    try:
+        result = subprocess.run(
+            pyarmor_cmd,
+            check=True,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        if exc.stdout:
+            print(exc.stdout, end="")
+        if exc.stderr:
+            print(exc.stderr, end="")
+        raise
+
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="")
+
+
+def _is_pyarmor_out_of_license(exc: subprocess.CalledProcessError) -> bool:
+    """Return True if PyArmor failed because the trial license limit was hit."""
+    combined = "\n".join(
+        part for part in (exc.output, exc.stdout, exc.stderr) if isinstance(part, str) and part
+    )
+    return "out of license" in combined.lower()
+
+
+def _copy_trial_excluded_plain_files(*, obf_root: Path) -> None:
+    """Copy plain modules that were intentionally excluded from trial obfuscation."""
+    for relative_path in PYARMOR_TRIAL_EXCLUDE_FILES:
+        source_path = SRC_PLAIN_DIR / relative_path
+        if not source_path.is_file():
+            raise RuntimeError(
+                f"Expected fallback source file at {source_path}, but it does not exist."
+            )
+        target_path = obf_root / relative_path
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source_path, target_path)
+
+
 def _obfuscate_app_code_with_pyarmor(*, dry_run: bool = False) -> None:
     """Obfuscate the application package in the build directory using PyArmor.
 
@@ -255,12 +300,39 @@ def _obfuscate_app_code_with_pyarmor(*, dry_run: bool = False) -> None:
 
     print("Obfuscating application code with PyArmor...")
     try:
-        subprocess.run(pyarmor_cmd, check=True, cwd=SRC_PLAIN_DIR)
+        _run_pyarmor_gen(pyarmor_cmd, cwd=SRC_PLAIN_DIR)
     except subprocess.CalledProcessError as exc:  # noqa: TRY002
-        raise RuntimeError(
-            "PyArmor failed while obfuscating application code. "
-            "Ensure PyArmor >=9.2.0 is installed in the development environment."
-        ) from exc
+        if _is_pyarmor_out_of_license(exc):
+            excluded = [path.as_posix() for path in PYARMOR_TRIAL_EXCLUDE_FILES]
+            print(
+                "PyArmor reported 'out of license'; retrying with trial fallback for "
+                + ", ".join(excluded)
+                + "."
+            )
+            if obf_root.exists():
+                shutil.rmtree(obf_root, ignore_errors=True)
+            retry_cmd = [
+                pyarmor_exe,
+                "gen",
+                "-r",
+                *[arg for path in excluded for arg in ("--exclude", path)],
+                "-O",
+                str(obf_root),
+                "handoff",
+            ]
+            try:
+                _run_pyarmor_gen(retry_cmd, cwd=SRC_PLAIN_DIR)
+            except subprocess.CalledProcessError as retry_exc:  # noqa: TRY002
+                raise RuntimeError(
+                    "PyArmor failed while obfuscating application code, including trial fallback. "
+                    "Ensure PyArmor >=9.2.0 is installed and check license constraints."
+                ) from retry_exc
+            _copy_trial_excluded_plain_files(obf_root=obf_root)
+        else:
+            raise RuntimeError(
+                "PyArmor failed while obfuscating application code. "
+                "Ensure PyArmor >=9.2.0 is installed in the development environment."
+            ) from exc
 
     # Remove the plain sources so only obfuscated code is shipped.
     shutil.rmtree(SRC_PLAIN_DIR, ignore_errors=True)
