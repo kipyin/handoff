@@ -62,7 +62,8 @@ jobs:
               "src/handoff/updater.py",
               # Project dependencies — can introduce vulnerabilities
               "pyproject.toml",
-              # CI/CD pipeline definitions (prefix match)
+              # Review gate & CI/CD pipeline definitions (prefix match)
+              ".github/CODEOWNERS",
               ".github/workflows/",
           ]
 
