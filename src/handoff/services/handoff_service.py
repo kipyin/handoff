@@ -87,9 +87,9 @@ def list_pitchmen() -> list[str]:
     return _list_pitchmen()
 
 
-def list_pitchmen_with_open_handoffs() -> list[str]:
+def list_pitchmen_with_open_handoffs(*, include_archived_projects: bool = False) -> list[str]:
     """List pitchmen who have at least one open handoff."""
-    return _list_pitchmen_with_open_handoffs()
+    return _list_pitchmen_with_open_handoffs(include_archived_projects=include_archived_projects)
 
 
 def query_now_items(
@@ -130,6 +130,7 @@ def query_action_handoffs(
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
+    include_archived_projects: bool = False,
 ) -> list[Handoff]:
     """Return open handoffs with a due check-in (next_check <= today)."""
     return _query_action_handoffs(
@@ -141,6 +142,7 @@ def query_action_handoffs(
         next_check_max=next_check_max,
         deadline_min=deadline_min,
         deadline_max=deadline_max,
+        include_archived_projects=include_archived_projects,
     )
 
 
@@ -154,6 +156,7 @@ def query_risk_handoffs(
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
+    include_archived_projects: bool = False,
 ) -> list[Handoff]:
     """Return open handoffs that are near deadline and have delayed check-ins."""
     return _query_risk_handoffs(
@@ -165,6 +168,7 @@ def query_risk_handoffs(
         next_check_max=next_check_max,
         deadline_min=deadline_min,
         deadline_max=deadline_max,
+        include_archived_projects=include_archived_projects,
     )
 
 
@@ -179,6 +183,7 @@ def query_upcoming_handoffs(
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
+    include_archived_projects: bool = False,
 ) -> list[Handoff]:
     """Return open handoffs that are not yet action-required (upcoming)."""
     return _query_upcoming_handoffs(
@@ -191,6 +196,7 @@ def query_upcoming_handoffs(
         next_check_max=next_check_max,
         deadline_min=deadline_min,
         deadline_max=deadline_max,
+        include_archived_projects=include_archived_projects,
     )
 
 

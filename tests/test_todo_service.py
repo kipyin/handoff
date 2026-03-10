@@ -88,6 +88,42 @@ def test_service_query_action_handoffs(session, monkeypatch) -> None:
     assert "Later" not in names
 
 
+def test_service_query_action_handoffs_include_archived_projects(session, monkeypatch) -> None:
+    """query_action_handoffs includes archived projects when explicitly requested."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    data.create_handoff(
+        project_id=active.id,
+        need_back="Active due",
+        next_check=date(2026, 3, 9),
+    )
+    data.create_handoff(
+        project_id=archived.id,
+        need_back="Archived due",
+        next_check=date(2026, 3, 9),
+    )
+
+    default_names = [h.need_back for h in query_action_handoffs()]
+    assert "Active due" in default_names
+    assert "Archived due" not in default_names
+
+    all_names = [h.need_back for h in query_action_handoffs(include_archived_projects=True)]
+    assert "Active due" in all_names
+    assert "Archived due" in all_names
+
+
 def test_service_snooze_handoff(session, monkeypatch) -> None:
     """snooze_handoff updates next_check through the service boundary."""
     _patch_session_context(monkeypatch, session)
@@ -277,6 +313,55 @@ def test_service_query_risk_handoffs(session, monkeypatch) -> None:
     assert "At risk" in names
 
 
+def test_service_query_risk_handoffs_include_archived_projects(session, monkeypatch) -> None:
+    """query_risk_handoffs forwards include_archived_projects to data layer."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    active_handoff = data.create_handoff(
+        project_id=active.id,
+        need_back="Active risk",
+        deadline=date(2026, 3, 10),
+    )
+    archived_handoff = data.create_handoff(
+        project_id=archived.id,
+        need_back="Archived risk",
+        deadline=date(2026, 3, 10),
+    )
+    data.create_check_in(
+        handoff_id=active_handoff.id,
+        check_in_type=CheckInType.DELAYED,
+        check_in_date=date(2026, 3, 9),
+    )
+    data.create_check_in(
+        handoff_id=archived_handoff.id,
+        check_in_type=CheckInType.DELAYED,
+        check_in_date=date(2026, 3, 9),
+    )
+
+    default_names = [h.need_back for h in query_risk_handoffs(deadline_near_days=1)]
+    assert "Active risk" in default_names
+    assert "Archived risk" not in default_names
+
+    all_names = [
+        h.need_back
+        for h in query_risk_handoffs(deadline_near_days=1, include_archived_projects=True)
+    ]
+    assert "Active risk" in all_names
+    assert "Archived risk" in all_names
+
+
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:
     """query_upcoming_handoffs returns non-action, non-risk open handoffs.
 
@@ -308,6 +393,52 @@ def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:
     assert "Overdue" not in names
 
 
+def test_service_query_upcoming_and_pitchmen_include_archived(session, monkeypatch) -> None:
+    """Upcoming and pitchman service wrappers include archived when requested."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    data.create_handoff(
+        project_id=active.id,
+        need_back="Active upcoming",
+        next_check=date(2026, 3, 10),
+        pitchman="Alice",
+    )
+    data.create_handoff(
+        project_id=archived.id,
+        need_back="Archived upcoming",
+        next_check=date(2026, 3, 10),
+        pitchman="Bob",
+    )
+
+    default_upcoming = [h.need_back for h in query_upcoming_handoffs()]
+    assert "Active upcoming" in default_upcoming
+    assert "Archived upcoming" not in default_upcoming
+
+    all_upcoming = [h.need_back for h in query_upcoming_handoffs(include_archived_projects=True)]
+    assert "Active upcoming" in all_upcoming
+    assert "Archived upcoming" in all_upcoming
+
+    default_pitchmen = list_pitchmen_with_open_handoffs()
+    assert "Alice" in default_pitchmen
+    assert "Bob" not in default_pitchmen
+
+    all_pitchmen = list_pitchmen_with_open_handoffs(include_archived_projects=True)
+    assert "Alice" in all_pitchmen
+    assert "Bob" in all_pitchmen
+
+
 def test_service_query_concluded_handoffs(session, monkeypatch) -> None:
     """query_concluded_handoffs returns handoffs with a concluded check-in."""
     _patch_session_context(monkeypatch, session)
@@ -323,6 +454,51 @@ def test_service_query_concluded_handoffs(session, monkeypatch) -> None:
     results = query_concluded_handoffs()
     names = [r.need_back for r in results]
     assert "Conclude me" in names
+
+
+def test_service_query_concluded_handoffs_include_archived_projects(session, monkeypatch) -> None:
+    """Concluded wrapper forwards include_archived_projects and search filters."""
+    _patch_session_context(monkeypatch, session)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    active_handoff = data.create_handoff(
+        project_id=active.id,
+        need_back="Active done",
+        pitchman="Alice",
+    )
+    archived_handoff = data.create_handoff(
+        project_id=archived.id,
+        need_back="Archived done",
+        pitchman="Bob",
+    )
+    data.create_check_in(
+        handoff_id=active_handoff.id,
+        check_in_type=CheckInType.CONCLUDED,
+        check_in_date=date(2026, 3, 9),
+        note="release gate complete",
+    )
+    data.create_check_in(
+        handoff_id=archived_handoff.id,
+        check_in_type=CheckInType.CONCLUDED,
+        check_in_date=date(2026, 3, 9),
+    )
+
+    default_names = [h.need_back for h in query_concluded_handoffs()]
+    assert "Active done" in default_names
+    assert "Archived done" in default_names
+
+    active_only_names = [
+        h.need_back
+        for h in query_concluded_handoffs(
+            include_archived_projects=False,
+            search_text="release gate",
+        )
+    ]
+    assert active_only_names == ["Active done"]
 
 
 def test_service_conclude_handoff(session, monkeypatch) -> None:

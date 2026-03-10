@@ -55,6 +55,7 @@ def _build_streamlit_mock() -> MagicMock:
     st_mock.multiselect.return_value = []
     st_mock.text_input.return_value = ""
     st_mock.text_area.return_value = ""
+    st_mock.checkbox.return_value = False
     st_mock.button.return_value = False
     st_mock.form_submit_button.return_value = False
     st_mock.date_input.return_value = date(2026, 3, 10)
@@ -72,11 +73,35 @@ def test_render_now_page_no_projects_shows_info(monkeypatch: pytest.MonkeyPatch)
     """When there are no projects, the Now page shows an info message."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [])
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     render_now_page()
     st_mock.info.assert_called_once()
     assert "No projects" in st_mock.info.call_args[0][0]
+
+
+def test_render_now_page_archived_only_projects_shows_toggle_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When only archived projects exist, the page suggests enabling archived visibility."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    archived_project = SimpleNamespace(id=2, name="Archived")
+    list_project_calls: list[bool] = []
+
+    def _list_projects(**kwargs):
+        include_archived = kwargs["include_archived"]
+        list_project_calls.append(include_archived)
+        return [archived_project] if include_archived else []
+
+    monkeypatch.setattr("handoff.pages.now.list_projects", _list_projects)
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
+
+    render_now_page()
+
+    assert list_project_calls == [False, True]
+    st_mock.info.assert_called_once()
+    assert "No active projects." in st_mock.info.call_args[0][0]
 
 
 def test_render_now_page_queries_phase2_sections(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,8 +109,10 @@ def test_render_now_page_queries_phase2_sections(monkeypatch: pytest.MonkeyPatch
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
-    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda: ["Alice"])
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 3)
 
     risk_calls: list[dict] = []
@@ -116,7 +143,75 @@ def test_render_now_page_queries_phase2_sections(monkeypatch: pytest.MonkeyPatch
     assert len(concluded_calls) == 1
     assert "project_ids" in risk_calls[0]
     assert "pitchman_names" in action_calls[0]
+    assert concluded_calls[0]["include_archived_projects"] is False
+
+
+def test_render_now_page_include_archived_projects_passed_to_queries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Now page passes the include-archived toggle through all section queries."""
+    st_mock = _build_streamlit_mock()
+    st_mock.checkbox.return_value = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 3)
+
+    risk_calls: list[dict] = []
+    action_calls: list[dict] = []
+    upcoming_calls: list[dict] = []
+    concluded_calls: list[dict] = []
+    monkeypatch.setattr(
+        "handoff.pages.now.query_risk_handoffs", lambda **kwargs: risk_calls.append(kwargs) or []
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.query_action_handoffs",
+        lambda **kwargs: action_calls.append(kwargs) or [],
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.query_upcoming_handoffs",
+        lambda **kwargs: upcoming_calls.append(kwargs) or [],
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.query_concluded_handoffs",
+        lambda **kwargs: concluded_calls.append(kwargs) or [],
+    )
+
+    render_now_page()
+
+    assert risk_calls[0]["include_archived_projects"] is True
+    assert action_calls[0]["include_archived_projects"] is True
+    assert upcoming_calls[0]["include_archived_projects"] is True
     assert concluded_calls[0]["include_archived_projects"] is True
+
+
+def test_render_now_page_include_archived_projects_passed_to_pitchmen_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Now page forwards include-archived toggle to pitchman query."""
+    st_mock = _build_streamlit_mock()
+    st_mock.checkbox.return_value = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    pitchmen_calls: list[dict] = []
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs",
+        lambda **kwargs: pitchmen_calls.append(kwargs) or ["Alice"],
+    )
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 3)
+    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+
+    render_now_page()
+
+    assert len(pitchmen_calls) == 1
+    assert pitchmen_calls[0]["include_archived_projects"] is True
 
 
 def test_render_now_page_action_item_shows_check_in_buttons(
@@ -133,8 +228,10 @@ def test_render_now_page_action_item_shows_check_in_buttons(
 
     monkeypatch.setattr("handoff.pages.now.date", FixedDate)
     mock_project = SimpleNamespace(id=1, name="Work")
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
-    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda: ["Alice"])
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 3)
 
     action_handoff = _make_fake_handoff(
@@ -160,8 +257,8 @@ def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.Mon
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
-    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
     monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
@@ -182,8 +279,8 @@ def test_render_now_page_risk_section_renders_items(monkeypatch: pytest.MonkeyPa
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
-    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     risk_handoff = _make_fake_handoff(
         handoff_id=2,
@@ -206,8 +303,8 @@ def test_render_now_page_upcoming_section_renders_items(monkeypatch: pytest.Monk
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
-    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     upcoming_handoff = _make_fake_handoff(
         handoff_id=3,
@@ -234,8 +331,8 @@ def test_render_now_page_item_with_context_renders_markdown(
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda: [mock_project])
-    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda: [])
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
     monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     handoff_with_notes = _make_fake_handoff(
         handoff_id=4,

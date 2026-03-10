@@ -886,6 +886,7 @@ def query_upcoming_handoffs(
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
+    include_archived_projects: bool = False,
 ) -> list[Handoff]:
     """Return open handoffs that are not in Risk or Action sections.
 
@@ -905,6 +906,7 @@ def query_upcoming_handoffs(
         next_check_max: Optional maximum next_check date.
         deadline_min: Optional minimum deadline.
         deadline_max: Optional maximum deadline.
+        include_archived_projects: When True, include archived projects.
 
     Returns:
         List of Handoff models with project loaded, ordered by next_check.
@@ -915,9 +917,10 @@ def query_upcoming_handoffs(
         stmt = (
             select(Handoff)
             .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
-            .where(Handoff.project.has(Project.is_archived.is_(False)))
             .where(~exists(_concluded_subquery()))
         )
+        if not include_archived_projects:
+            stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
         stmt = _apply_handoff_filters(
             stmt,
             project_ids=project_ids,
@@ -954,6 +957,7 @@ def query_action_handoffs(
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
+    include_archived_projects: bool = False,
 ) -> list[Handoff]:
     """Return open handoffs with a due check-in (next_check <= today), excluding Risk."""
     today = date.today()
@@ -962,11 +966,12 @@ def query_action_handoffs(
         stmt = (
             select(Handoff)
             .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
-            .where(Handoff.project.has(Project.is_archived.is_(False)))
             .where(~exists(_concluded_subquery()))
             .where(Handoff.next_check.isnot(None))
             .where(Handoff.next_check <= today)
         )
+        if not include_archived_projects:
+            stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
         stmt = _apply_handoff_filters(
             stmt,
             project_ids=project_ids,
@@ -996,6 +1001,7 @@ def query_risk_handoffs(
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
+    include_archived_projects: bool = False,
 ) -> list[Handoff]:
     """Return open handoffs near deadline where the latest check-in is delayed."""
     cutoff = date.today() + timedelta(days=deadline_near_days)
@@ -1003,11 +1009,12 @@ def query_risk_handoffs(
         stmt = (
             select(Handoff)
             .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
-            .where(Handoff.project.has(Project.is_archived.is_(False)))
             .where(~exists(_concluded_subquery()))
             .where(Handoff.deadline.isnot(None))
             .where(Handoff.deadline <= cutoff)
         )
+        if not include_archived_projects:
+            stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
         stmt = _apply_handoff_filters(
             stmt,
             project_ids=project_ids,
@@ -1105,10 +1112,10 @@ def list_pitchmen() -> list[str]:
         return sorted(canonical_by_lower.values(), key=str.lower)
 
 
-def list_pitchmen_with_open_handoffs() -> list[str]:
+def list_pitchmen_with_open_handoffs(*, include_archived_projects: bool = False) -> list[str]:
     """Return distinct pitchman names who have at least one open handoff.
 
-    Open handoffs have no concluded check-in and belong to non-archived projects.
+    Open handoffs have no concluded check-in.
 
     Returns:
         Sorted list of unique non-empty pitchman names.
@@ -1117,9 +1124,10 @@ def list_pitchmen_with_open_handoffs() -> list[str]:
         stmt = (
             select(Handoff.pitchman)
             .where(Handoff.pitchman.isnot(None))
-            .where(Handoff.project.has(Project.is_archived.is_(False)))
             .where(~exists(_concluded_subquery()))
         )
+        if not include_archived_projects:
+            stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
         raw_values = session.exec(stmt).all()
         canonical_by_lower: dict[str, str] = {}
         for raw in raw_values:
