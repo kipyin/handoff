@@ -17,6 +17,7 @@ from handoff.data import query_handoffs as _query_handoffs
 from handoff.data import query_now_items as _query_now_items
 from handoff.data import query_risk_handoffs as _query_risk_handoffs
 from handoff.data import query_upcoming_handoffs as _query_upcoming_handoffs
+from handoff.data import reopen_handoff as _reopen_handoff
 from handoff.data import snooze_handoff as _snooze_handoff
 from handoff.data import update_handoff as _update_handoff
 from handoff.models import CheckIn, CheckInType, Handoff
@@ -87,9 +88,9 @@ def list_pitchmen() -> list[str]:
     return _list_pitchmen()
 
 
-def list_pitchmen_with_open_handoffs() -> list[str]:
+def list_pitchmen_with_open_handoffs(*, include_archived_projects: bool = False) -> list[str]:
     """List pitchmen who have at least one open handoff."""
-    return _list_pitchmen_with_open_handoffs()
+    return _list_pitchmen_with_open_handoffs(include_archived_projects=include_archived_projects)
 
 
 def query_now_items(
@@ -130,6 +131,7 @@ def query_action_handoffs(
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
+    include_archived_projects: bool = False,
 ) -> list[Handoff]:
     """Return open handoffs with a due check-in (next_check <= today)."""
     return _query_action_handoffs(
@@ -141,6 +143,7 @@ def query_action_handoffs(
         next_check_max=next_check_max,
         deadline_min=deadline_min,
         deadline_max=deadline_max,
+        include_archived_projects=include_archived_projects,
     )
 
 
@@ -154,6 +157,7 @@ def query_risk_handoffs(
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
+    include_archived_projects: bool = False,
 ) -> list[Handoff]:
     """Return open handoffs that are near deadline and have delayed check-ins."""
     return _query_risk_handoffs(
@@ -165,6 +169,7 @@ def query_risk_handoffs(
         next_check_max=next_check_max,
         deadline_min=deadline_min,
         deadline_max=deadline_max,
+        include_archived_projects=include_archived_projects,
     )
 
 
@@ -179,6 +184,7 @@ def query_upcoming_handoffs(
     next_check_max: date | None = None,
     deadline_min: date | None = None,
     deadline_max: date | None = None,
+    include_archived_projects: bool = False,
 ) -> list[Handoff]:
     """Return open handoffs that are not yet action-required (upcoming)."""
     return _query_upcoming_handoffs(
@@ -191,6 +197,7 @@ def query_upcoming_handoffs(
         next_check_max=next_check_max,
         deadline_min=deadline_min,
         deadline_max=deadline_max,
+        include_archived_projects=include_archived_projects,
     )
 
 
@@ -201,7 +208,7 @@ def query_concluded_handoffs(
     search_text: str | None = None,
     include_archived_projects: bool = True,
 ) -> list[Handoff]:
-    """Return handoffs that have at least one concluded check-in."""
+    """Return handoffs whose latest check-in is concluded."""
     return _query_concluded_handoffs(
         project_ids=project_ids,
         pitchman_names=pitchman_names,
@@ -226,6 +233,20 @@ def conclude_handoff(handoff_id: int, note: str | None = None) -> CheckIn:
         The created concluded CheckIn.
     """
     return _conclude_handoff(handoff_id, note=note)
+
+
+def reopen_handoff(
+    handoff_id: int,
+    *,
+    note: str | None = None,
+    next_check_date: date | None = None,
+) -> CheckIn:
+    """Reopen a concluded handoff by appending a new on-track check-in."""
+    return _reopen_handoff(
+        handoff_id,
+        note=note,
+        next_check_date=next_check_date,
+    )
 
 
 def get_handoff_close_date(handoff: Handoff) -> date | None:

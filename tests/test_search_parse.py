@@ -102,3 +102,69 @@ def test_parse_search_query_due_tomorrow(date_mock: object) -> None:
     r = parse_search_query("due tomorrow")
     assert r.deadline_min == date(2026, 3, 10)
     assert r.deadline_max == date(2026, 3, 10)
+
+
+@patch("handoff.search_parse.date")
+def test_parse_search_query_check_tomorrow(date_mock: object) -> None:
+    """check tomorrow and @check tomorrow set next_check to tomorrow."""
+    date_mock.today.return_value = date(2026, 3, 9)
+    for inp in ["check tomorrow", "@check tomorrow", "Check Tomorrow"]:
+        r = parse_search_query(inp)
+        assert r.next_check_min == date(2026, 3, 10)
+        assert r.next_check_max == date(2026, 3, 10)
+        assert r.text_query is None
+
+
+@patch("handoff.search_parse.date")
+def test_parse_search_query_check_next_week(date_mock: object) -> None:
+    """check next week sets next_check range to the following Mon–Sun."""
+    date_mock.today.return_value = date(2026, 3, 9)  # Monday
+    for inp in ["check next week", "@check next week"]:
+        r = parse_search_query(inp)
+        assert r.next_check_min == date(2026, 3, 16)
+        assert r.next_check_max == date(2026, 3, 22)
+        assert r.text_query is None
+
+
+@patch("handoff.search_parse.date")
+def test_parse_search_query_check_next_7_days(date_mock: object) -> None:
+    """check next 7 days sets next_check range from today to today+6."""
+    date_mock.today.return_value = date(2026, 3, 9)
+    for inp in ["check next 7 days", "@check next 7 days"]:
+        r = parse_search_query(inp)
+        assert r.next_check_min == date(2026, 3, 9)
+        assert r.next_check_max == date(2026, 3, 15)
+        assert r.text_query is None
+
+
+@patch("handoff.search_parse.date")
+def test_parse_search_query_due_this_week(date_mock: object) -> None:
+    """due this week and @due this week set deadline to current week Mon–Sun."""
+    date_mock.today.return_value = date(2026, 3, 9)  # Monday
+    for inp in ["due this week", "@due this week"]:
+        r = parse_search_query(inp)
+        assert r.deadline_min == date(2026, 3, 9)
+        assert r.deadline_max == date(2026, 3, 15)
+        assert r.text_query is None
+
+
+@patch("handoff.search_parse.date")
+def test_parse_search_query_due_next_week(date_mock: object) -> None:
+    """due next week and @due next week set deadline to next Mon–Sun."""
+    date_mock.today.return_value = date(2026, 3, 9)  # Monday
+    for inp in ["due next week", "@due next week"]:
+        r = parse_search_query(inp)
+        assert r.deadline_min == date(2026, 3, 16)
+        assert r.deadline_max == date(2026, 3, 22)
+        assert r.text_query is None
+
+
+@patch("handoff.search_parse.date")
+def test_parse_search_query_due_next_7_days(date_mock: object) -> None:
+    """due next 7 days and @due next 7 days set deadline range today to today+6."""
+    date_mock.today.return_value = date(2026, 3, 9)
+    for inp in ["due next 7 days", "@due next 7 days"]:
+        r = parse_search_query(inp)
+        assert r.deadline_min == date(2026, 3, 9)
+        assert r.deadline_max == date(2026, 3, 15)
+        assert r.text_query is None
