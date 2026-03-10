@@ -60,6 +60,7 @@ def test_m006_no_op_when_no_todo_table(tmp_path: Path) -> None:
     with engine.connect() as conn:
         # No todo table → migrate() should return without touching anything.
         _migrate(conn)
+    engine.dispose()
 
     conn_check = sqlite3.connect(db_path)
     tables = {
@@ -80,6 +81,7 @@ def test_m006_creates_handoff_table_from_todo(tmp_path: Path) -> None:
     with engine.connect() as conn:
         _migrate(conn)
         conn.commit()
+    engine.dispose()
 
     conn_check = sqlite3.connect(db_path)
     rows = conn_check.execute("SELECT need_back, pitchman FROM handoff").fetchall()
@@ -100,6 +102,7 @@ def test_m006_creates_check_in_for_done_todos(tmp_path: Path) -> None:
     with engine.connect() as conn:
         _migrate(conn)
         conn.commit()
+    engine.dispose()
 
     conn_check = sqlite3.connect(db_path)
     rows = conn_check.execute("SELECT handoff_id, check_in_type, note FROM check_in").fetchall()
@@ -118,6 +121,7 @@ def test_m006_creates_check_in_for_canceled_todos(tmp_path: Path) -> None:
     with engine.connect() as conn:
         _migrate(conn)
         conn.commit()
+    engine.dispose()
 
     conn_check = sqlite3.connect(db_path)
     rows = conn_check.execute("SELECT note FROM check_in WHERE note='canceled'").fetchall()
@@ -135,6 +139,7 @@ def test_m006_drops_todo_table_after_migration(tmp_path: Path) -> None:
     with engine.connect() as conn:
         _migrate(conn)
         conn.commit()
+    engine.dispose()
 
     conn_check = sqlite3.connect(db_path)
     tables = {
@@ -178,6 +183,7 @@ def test_m006_skips_creating_handoff_table_when_it_already_exists(
     with engine.connect() as conn:
         _migrate(conn)
         conn.commit()
+    engine.dispose()
 
     conn_check = sqlite3.connect(db_path)
     tables = {
@@ -226,6 +232,7 @@ def test_m006_skips_creating_check_in_table_when_it_already_exists(
     with engine.connect() as conn:
         _migrate(conn)
         conn.commit()
+    engine.dispose()
 
     conn_check = sqlite3.connect(db_path)
     tables = {
