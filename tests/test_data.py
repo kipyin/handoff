@@ -711,6 +711,79 @@ def test_reopen_handoff_rejects_non_concluded_latest(session, monkeypatch) -> No
         data.reopen_handoff(already_open.id)
 
 
+def test_reopen_handoff_rejects_missing_handoff(session, monkeypatch) -> None:
+    """reopen_handoff raises when the handoff id does not exist."""
+    _patch_session_context(monkeypatch, session)
+
+    with pytest.raises(ValueError, match="not found for reopen"):
+        data.reopen_handoff(999_999)
+
+
+def test_latest_check_in_tie_breaks_by_id_in_python_and_sql(session, monkeypatch) -> None:
+    """When date+created_at tie, latest check-in is chosen by highest id."""
+    _patch_session_context(monkeypatch, session)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    same_ts = datetime(2026, 3, 9, 10, 0, 0)
+
+    latest_open = Handoff(project_id=p.id, need_back="Latest open by id")
+    latest_concluded = Handoff(project_id=p.id, need_back="Latest concluded by id")
+    session.add_all([latest_open, latest_concluded])
+    session.commit()
+    session.refresh(latest_open)
+    session.refresh(latest_concluded)
+
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=latest_open.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.CONCLUDED,
+                created_at=same_ts,
+            ),
+            CheckIn(
+                handoff_id=latest_open.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.ON_TRACK,
+                created_at=same_ts,
+            ),
+            CheckIn(
+                handoff_id=latest_concluded.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.ON_TRACK,
+                created_at=same_ts,
+            ),
+            CheckIn(
+                handoff_id=latest_concluded.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.CONCLUDED,
+                created_at=same_ts,
+            ),
+        ]
+    )
+    session.commit()
+    session.refresh(latest_open)
+    session.refresh(latest_concluded)
+
+    # Python-side lifecycle helpers should pick the highest-id check-in.
+    assert data.handoff_is_open(latest_open) is True
+    assert data.handoff_is_closed(latest_open) is False
+    assert data.handoff_is_open(latest_concluded) is False
+    assert data.handoff_is_closed(latest_concluded) is True
+
+    # SQL-side lifecycle queries should agree with the Python helpers.
+    open_names = {h.need_back for h in data.query_handoffs(include_concluded=False)}
+    concluded_names = {h.need_back for h in data.query_concluded_handoffs()}
+    assert "Latest open by id" in open_names
+    assert "Latest open by id" not in concluded_names
+    assert "Latest concluded by id" not in open_names
+    assert "Latest concluded by id" in concluded_names
+
+
 def test_query_now_items(session, monkeypatch) -> None:
     """query_now_items returns open handoffs with next_check due or deadline at risk."""
     _patch_session_context(monkeypatch, session)
