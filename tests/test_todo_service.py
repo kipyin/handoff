@@ -12,6 +12,7 @@ from handoff.services import (
     create_handoff,
     list_pitchmen_with_open_handoffs,
     query_action_handoffs,
+    query_concluded_handoffs,
     query_risk_handoffs,
     query_upcoming_handoffs,
     snooze_handoff,
@@ -221,3 +222,48 @@ def test_service_query_upcoming_and_pitchmen_include_archived(session, monkeypat
     all_pitchmen = list_pitchmen_with_open_handoffs(include_archived_projects=True)
     assert "Alice" in all_pitchmen
     assert "Bob" in all_pitchmen
+
+
+def test_service_query_concluded_handoffs_include_archived_projects(session, monkeypatch) -> None:
+    """Concluded wrapper forwards include_archived_projects and search filters."""
+    _patch_session_context(monkeypatch, session)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    active_handoff = data.create_handoff(
+        project_id=active.id,
+        need_back="Active done",
+        pitchman="Alice",
+    )
+    archived_handoff = data.create_handoff(
+        project_id=archived.id,
+        need_back="Archived done",
+        pitchman="Bob",
+    )
+    data.create_check_in(
+        handoff_id=active_handoff.id,
+        check_in_type=CheckInType.CONCLUDED,
+        check_in_date=date(2026, 3, 9),
+        note="release gate complete",
+    )
+    data.create_check_in(
+        handoff_id=archived_handoff.id,
+        check_in_type=CheckInType.CONCLUDED,
+        check_in_date=date(2026, 3, 9),
+    )
+
+    default_names = [h.need_back for h in query_concluded_handoffs()]
+    assert "Active done" in default_names
+    assert "Archived done" in default_names
+
+    active_only_names = [
+        h.need_back
+        for h in query_concluded_handoffs(
+            include_archived_projects=False,
+            search_text="release gate",
+        )
+    ]
+    assert active_only_names == ["Active done"]
