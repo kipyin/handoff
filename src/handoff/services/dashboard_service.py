@@ -13,10 +13,11 @@ from typing import Any
 import pandas as pd
 
 from handoff.data import count_open_handoffs as _count_open_handoffs
-from handoff.data import get_handoff_close_date, query_handoffs
+from handoff.data import get_handoff_close_date, query_handoffs, query_risk_handoffs
 from handoff.data import get_recent_activity as _get_recent_activity
 from handoff.dates import week_bounds
-from handoff.models import Handoff
+from handoff.models import CheckIn, CheckInType, Handoff
+from handoff.services.settings_service import get_deadline_near_days
 
 
 def get_recent_activity(limit: int = 20) -> list[dict[str, Any]]:
@@ -34,6 +35,77 @@ def _project_name(handoff: Handoff) -> str:
 def _pitchman_display(pitchman: str | None) -> str:
     """Return display string for pitchman, handling unassigned."""
     return (pitchman or "").strip() or "(unassigned)"
+
+
+def _check_in_type(check_in: CheckIn) -> CheckInType | None:
+    """Return a normalized check-in type for enum/string test doubles."""
+    raw_type = getattr(check_in, "check_in_type", None)
+    if isinstance(raw_type, CheckInType):
+        return raw_type
+    try:
+        return CheckInType(raw_type)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sorted_check_ins(handoff: Handoff) -> list[CheckIn]:
+    """Return a handoff trail sorted by date, timestamp, and id."""
+    check_ins = getattr(handoff, "check_ins", []) or []
+    return sorted(
+        check_ins,
+        key=lambda ci: (
+            ci.check_in_date,
+            getattr(ci, "created_at", None) or datetime.min,
+            getattr(ci, "id", 0) or 0,
+        ),
+    )
+
+
+def _iter_close_events(
+    handoffs: list[Handoff],
+    *,
+    start: date,
+    end: date,
+) -> list[dict[str, Any]]:
+    """Return close events between dates with reopened/on-time/cycle metadata."""
+    events: list[dict[str, Any]] = []
+    for handoff in handoffs:
+        check_ins = _sorted_check_ins(handoff)
+        for idx, check_in in enumerate(check_ins):
+            if _check_in_type(check_in) != CheckInType.CONCLUDED:
+                continue
+            close_date = check_in.check_in_date
+            if close_date < start or close_date > end:
+                continue
+            reopened = any(
+                _check_in_type(next_check_in) in {CheckInType.ON_TRACK, CheckInType.DELAYED}
+                for next_check_in in check_ins[idx + 1 :]
+            )
+            on_time = (
+                close_date <= handoff.deadline
+                if getattr(handoff, "deadline", None) is not None
+                else None
+            )
+            cycle_days = None
+            created_at = getattr(handoff, "created_at", None)
+            if created_at is not None:
+                cycle_days = max(
+                    (
+                        datetime.combine(close_date, time.min) - created_at.replace(tzinfo=None)
+                    ).total_seconds()
+                    / 86400,
+                    0.0,
+                )
+            iso = close_date.isocalendar()
+            events.append(
+                {
+                    "week_label": f"{iso[0]}-W{iso[1]:02d}",
+                    "on_time": on_time,
+                    "reopened": reopened,
+                    "cycle_days": cycle_days,
+                }
+            )
+    return events
 
 
 def count_open_handoffs() -> int:
@@ -173,7 +245,7 @@ def compute_per_pitchman_throughput(handoffs: list[Handoff], *, today: date) -> 
 
 
 def compute_cycle_time_by_project(handoffs: list[Handoff]) -> pd.DataFrame:
-    """Return median cycle time (days) per project."""
+    """Return p50/p90 cycle time (days) per project."""
     by_project: dict[str, list[float]] = {}
     for h in handoffs:
         close = get_handoff_close_date(h)
@@ -184,73 +256,181 @@ def compute_cycle_time_by_project(handoffs: list[Handoff]) -> pd.DataFrame:
             proj = _project_name(h)
             by_project.setdefault(proj, []).append(max(delta, 0))
     if not by_project:
-        return pd.DataFrame(columns=["project", "median_days", "count"])
+        return pd.DataFrame(columns=["project", "p50_days", "p90_days", "closes"])
     rows = []
     for proj, days in by_project.items():
         s = pd.Series(days)
-        rows.append({"project": proj, "median_days": float(s.median()), "count": len(days)})
+        rows.append(
+            {
+                "project": proj,
+                "p50_days": float(s.quantile(0.5)),
+                "p90_days": float(s.quantile(0.9)),
+                "closes": len(days),
+            }
+        )
     df = pd.DataFrame(rows)
-    return df.sort_values("median_days", ascending=False)
+    return df.sort_values("p90_days", ascending=False)
 
 
-def compute_deadline_adherence_trend(handoffs: list[Handoff], weeks: int = 8) -> pd.DataFrame:
-    """Return on-time rate per week over time."""
-    if weeks <= 0:
-        return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
-    with_deadline = [h for h in handoffs if h.deadline and get_handoff_close_date(h)]
-    if not with_deadline:
-        return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
-    by_week: dict[str, list[bool]] = {}
-    for h in with_deadline:
-        close = get_handoff_close_date(h)
-        assert close is not None
-        iso = close.isocalendar()
-        week_label = f"{iso[0]}-W{iso[1]:02d}"
-        on_time = close <= h.deadline
-        by_week.setdefault(week_label, []).append(on_time)
-    sorted_weeks = sorted(by_week)
-    sorted_weeks = sorted_weeks[-weeks:]
-    rows = []
-    for week_label in sorted_weeks:
-        vals = by_week[week_label]
-        rate = sum(1 for v in vals if v) / len(vals)
-        rows.append({"week_label": week_label, "on_time_rate": rate, "total": len(vals)})
+def compute_open_aging_profile(handoffs: list[Handoff], *, today: date) -> pd.DataFrame:
+    """Return bucketed open handoff aging counts."""
+    if not handoffs:
+        return pd.DataFrame(columns=["aging_bucket", "handoffs"])
+    buckets = {"0-7d": 0, "8-14d": 0, "15-30d": 0, "31+d": 0}
+    for handoff in handoffs:
+        created_at = getattr(handoff, "created_at", None)
+        if created_at is None:
+            continue
+        age_days = max((today - created_at.date()).days, 0)
+        if age_days <= 7:
+            buckets["0-7d"] += 1
+        elif age_days <= 14:
+            buckets["8-14d"] += 1
+        elif age_days <= 30:
+            buckets["15-30d"] += 1
+        else:
+            buckets["31+d"] += 1
+    rows = [{"aging_bucket": bucket, "handoffs": count} for bucket, count in buckets.items()]
     return pd.DataFrame(rows)
 
 
 @dataclass
-class DashboardMetrics:
-    """Core dashboard metrics for the top row."""
+class ReopenRateSummary:
+    """Summary of how often concluded handoffs reopen in a time window."""
 
-    open_count: int
-    done_this_week: int
-    done_week_delta: str
-    median_cycle_time: str
-    on_time_rate: str
+    reopened_closes: int
+    total_closes: int
+
+    @property
+    def rate(self) -> float | None:
+        """Return reopen fraction, or None when there are no closes."""
+        if self.total_closes <= 0:
+            return None
+        return self.reopened_closes / self.total_closes
+
+    @property
+    def rate_display(self) -> str:
+        """Return display-friendly percentage for dashboard cards."""
+        if self.rate is None:
+            return "—"
+        return f"{self.rate * 100:.0f}%"
+
+    @property
+    def detail_display(self) -> str:
+        """Return display-friendly reopen detail for dashboard cards."""
+        if self.total_closes <= 0:
+            return "No closes in window"
+        return f"{self.reopened_closes} of {self.total_closes} closes reopened"
+
+
+def compute_reopen_rate_summary(
+    handoffs: list[Handoff],
+    *,
+    today: date,
+    window_days: int = 90,
+) -> ReopenRateSummary:
+    """Return reopen-rate summary for concluded check-ins in the window."""
+    start = today - timedelta(days=max(window_days, 1))
+    events = _iter_close_events(handoffs, start=start, end=today)
+    total_closes = len(events)
+    reopened_closes = sum(1 for event in events if bool(event["reopened"]))
+    return ReopenRateSummary(reopened_closes=reopened_closes, total_closes=total_closes)
+
+
+def compute_on_time_close_rate_trend(
+    handoffs: list[Handoff],
+    *,
+    today: date,
+    weeks: int = 8,
+) -> pd.DataFrame:
+    """Return weekly on-time close trend for the requested window."""
+    if weeks <= 0:
+        return pd.DataFrame(columns=["week_label", "on_time_rate", "total", "on_time_rate_pct"])
+    start = today - timedelta(weeks=max(weeks, 1))
+    events = _iter_close_events(handoffs, start=start, end=today)
+    by_week: dict[str, list[bool]] = {}
+    for event in events:
+        on_time = event["on_time"]
+        if on_time is None:
+            continue
+        by_week.setdefault(event["week_label"], []).append(bool(on_time))
+    if not by_week:
+        return pd.DataFrame(columns=["week_label", "on_time_rate", "total", "on_time_rate_pct"])
+    rows = []
+    for week_label in sorted(by_week)[-weeks:]:
+        values = by_week[week_label]
+        rate = sum(1 for value in values if value) / len(values)
+        rows.append(
+            {
+                "week_label": week_label,
+                "on_time_rate": rate,
+                "total": len(values),
+                "on_time_rate_pct": f"{rate * 100:.0f}%",
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def compute_deadline_adherence_trend(handoffs: list[Handoff], weeks: int = 8) -> pd.DataFrame:
+    """Compatibility wrapper for the on-time close trend helper."""
+    trend = compute_on_time_close_rate_trend(handoffs, today=date.today(), weeks=weeks)
+    if trend.empty:
+        return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
+    return trend[["week_label", "on_time_rate", "total"]]
+
+
+@dataclass
+class DashboardMetrics:
+    """Core PM-operational metrics for the top row."""
+
+    at_risk_now: int
+    action_overdue: int
+    action_due_today: int
+    open_handoffs: int
+    reopen_rate: str
+    reopen_rate_detail: str
 
 
 def get_dashboard_metrics(today: date) -> DashboardMetrics:
-    """Return core metrics for the dashboard top row."""
-    open_count = count_open_handoffs()
-    this_mon, this_sun = week_bounds(today)
-    last_mon = this_mon - timedelta(days=7)
-    done_this_week = completed_in_range(this_mon, this_sun)
-    done_last_week = completed_in_range(last_mon, this_mon - timedelta(days=1))
-    delta = len(done_this_week) - len(done_last_week)
-    done_week_delta = f"{delta:+d} vs last week" if delta else "same as last week"
-
-    done_recent = completed_in_range(today - timedelta(days=28), today)
-    cycle_stats = compute_cycle_time_stats(done_recent)
-    overdue_rate = compute_overdue_rate(done_recent)
-    median_cycle_time = f"{cycle_stats[1]:.1f}d" if cycle_stats else "—"
-    on_time_rate = f"{(1 - overdue_rate) * 100:.0f}%" if overdue_rate is not None else "—"
+    """Return PM-operations dashboard cards for current state."""
+    deadline_near_days = get_deadline_near_days()
+    open_handoffs = query_handoffs(
+        include_concluded=False,
+        include_archived_projects=False,
+    )
+    at_risk_now = len(
+        query_risk_handoffs(
+            deadline_near_days=deadline_near_days,
+            include_archived_projects=False,
+        )
+    )
+    action_overdue = sum(
+        1
+        for handoff in open_handoffs
+        if handoff.next_check is not None and handoff.next_check < today
+    )
+    action_due_today = sum(
+        1
+        for handoff in open_handoffs
+        if handoff.next_check is not None and handoff.next_check == today
+    )
+    analytics_handoffs = query_handoffs(
+        include_concluded=True,
+        include_archived_projects=False,
+    )
+    reopen_summary = compute_reopen_rate_summary(
+        analytics_handoffs,
+        today=today,
+        window_days=90,
+    )
 
     return DashboardMetrics(
-        open_count=open_count,
-        done_this_week=len(done_this_week),
-        done_week_delta=done_week_delta,
-        median_cycle_time=median_cycle_time,
-        on_time_rate=on_time_rate,
+        at_risk_now=at_risk_now,
+        action_overdue=action_overdue,
+        action_due_today=action_due_today,
+        open_handoffs=len(open_handoffs),
+        reopen_rate=reopen_summary.rate_display,
+        reopen_rate_detail=reopen_summary.detail_display,
     )
 
 
@@ -280,14 +460,29 @@ def get_per_pitchman_throughput(today: date, *, weeks: int = 8) -> pd.DataFrame:
 def get_cycle_time_by_project(
     today: date,
     *,
-    days: int = 28,
+    days: int = 90,
     project_ids: list[int] | None = None,
 ) -> pd.DataFrame:
-    """Return median cycle time per project for the last N days."""
+    """Return p50/p90 cycle time per project for the last N days."""
     done = completed_in_range(today - timedelta(days=days), today)
     if project_ids:
         done = [h for h in done if h.project_id in project_ids]
     return compute_cycle_time_by_project(done)
+
+
+def get_open_aging_profile(today: date) -> pd.DataFrame:
+    """Return current open-handoff aging buckets."""
+    open_handoffs = query_handoffs(
+        include_concluded=False,
+        include_archived_projects=False,
+    )
+    return compute_open_aging_profile(open_handoffs, today=today)
+
+
+def get_on_time_close_rate_trend(today: date, *, weeks: int = 8) -> pd.DataFrame:
+    """Return weekly on-time close trend for recent concluded check-ins."""
+    done = completed_in_range(today - timedelta(weeks=max(weeks, 1)), today)
+    return compute_on_time_close_rate_trend(done, today=today, weeks=weeks)
 
 
 def get_deadline_adherence_trend(
@@ -300,7 +495,10 @@ def get_deadline_adherence_trend(
     done = completed_in_range(today - timedelta(weeks=weeks), today)
     if project_ids:
         done = [h for h in done if h.project_id in project_ids]
-    return compute_deadline_adherence_trend(done, weeks=weeks)
+    trend = compute_on_time_close_rate_trend(done, today=today, weeks=weeks)
+    if trend.empty:
+        return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
+    return trend[["week_label", "on_time_rate", "total"]]
 
 
 def get_pitchman_load() -> pd.DataFrame:
@@ -309,31 +507,49 @@ def get_pitchman_load() -> pd.DataFrame:
     return compute_pitchman_load(handoffs)
 
 
-def _build_export_rows(handoffs: list[Handoff], weeks: int = 12) -> list[dict[str, Any]]:
-    """Return aggregated weekly stats for external reporting (CSV/JSON)."""
+def _build_export_rows(
+    handoffs: list[Handoff],
+    *,
+    today: date,
+    weeks: int = 12,
+) -> list[dict[str, Any]]:
+    """Return PM-focused weekly export rows (reliability + flow)."""
     if not handoffs:
         return []
-    weekly = compute_weekly_counts(handoffs)
-    adherence = compute_deadline_adherence_trend(handoffs, weeks=weeks)
-    adherence_by_week = adherence.set_index("week_label").to_dict("index")
+    end = today
+    start = end - timedelta(weeks=max(weeks, 1))
+    events = _iter_close_events(handoffs, start=start, end=end)
+    if not events:
+        return []
+    by_week: dict[str, list[dict[str, Any]]] = {}
+    for event in events:
+        by_week.setdefault(event["week_label"], []).append(event)
 
-    rows = []
-    for _, row in weekly.iterrows():
-        wl = row["week_label"]
-        completed = int(row["completed"])
-        week_handoffs = [
-            h for h in handoffs if get_handoff_close_date(h) and _week_label_for(h) == wl
+    rows: list[dict[str, Any]] = []
+    for week_label in sorted(by_week)[-weeks:]:
+        week_events = by_week[week_label]
+        total_closes = len(week_events)
+        on_time_events = [e for e in week_events if e["on_time"] is not None]
+        on_time_rate = (
+            sum(1 for event in on_time_events if bool(event["on_time"])) / len(on_time_events)
+            if on_time_events
+            else None
+        )
+        reopened_closes = sum(1 for event in week_events if bool(event["reopened"]))
+        cycle_days = [
+            event["cycle_days"] for event in week_events if event["cycle_days"] is not None
         ]
-        cycle = compute_cycle_time_stats(week_handoffs)
-        median_cycle = float(cycle[1]) if cycle else None
-        adj = adherence_by_week.get(wl, {})
-        on_time = adj.get("on_time_rate")
+        cycle_series = pd.Series(cycle_days) if cycle_days else None
+        p50_cycle_days = float(cycle_series.quantile(0.5)) if cycle_series is not None else None
+        p90_cycle_days = float(cycle_series.quantile(0.9)) if cycle_series is not None else None
         rows.append(
             {
-                "week_label": wl,
-                "completed": completed,
-                "on_time_rate": on_time,
-                "median_cycle_days": median_cycle,
+                "week_label": week_label,
+                "closed": total_closes,
+                "on_time_rate": on_time_rate,
+                "reopen_rate": reopened_closes / total_closes if total_closes else None,
+                "p50_cycle_days": p50_cycle_days,
+                "p90_cycle_days": p90_cycle_days,
             }
         )
     return rows
@@ -360,7 +576,7 @@ def get_exportable_metrics(
     done = completed_in_range(today - timedelta(weeks=weeks), today)
     if project_ids:
         done = [h for h in done if h.project_id in project_ids]
-    rows = _build_export_rows(done, weeks=weeks)
+    rows = _build_export_rows(done, today=today, weeks=weeks)
     if not rows:
         return {"csv": "", "json": ""}
     df = pd.DataFrame(rows)
