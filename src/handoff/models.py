@@ -3,6 +3,7 @@
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
+from sqlalchemy import Column, Enum
 from sqlmodel import Field, Relationship, SQLModel
 
 if "CheckInType" not in globals():
@@ -84,7 +85,16 @@ if "CheckIn" not in globals():
         handoff_id: int = Field(foreign_key="handoff.id", index=True)
         check_in_date: date
         note: str | None = Field(default=None)
-        check_in_type: CheckInType = Field(index=True)
+        check_in_type: CheckInType = Field(
+            sa_column=Column(
+                Enum(
+                    CheckInType,
+                    values_callable=lambda x: [e.value for e in x],
+                ),
+                index=True,
+                nullable=False,
+            ),
+        )
         created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
         handoff: Handoff | None = Relationship(back_populates="check_ins")

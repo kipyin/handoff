@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from handoff.db import DatabaseInitializationError
+from handoff.models import CheckInType
 
 
 def _reload_db_module(db_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -156,6 +157,80 @@ def test_init_db_migrates_from_old_todo_schema(
     assert len(check_ins) == 1
     assert check_ins[0][0] == 2
     assert check_ins[0][1] == "concluded"
+
+
+def test_migrated_data_readable_via_data_layer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Migrated data can be read through the ORM/data layer (enum hydration)."""
+    db_path = tmp_path / "todo.db"
+    db = _reload_db_module(db_path, monkeypatch)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            """
+            CREATE TABLE todo (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'handoff',
+                deadline DATE NULL,
+                helper TEXT NULL,
+                notes TEXT NULL,
+                created_at TIMESTAMP NOT NULL,
+                completed_at TIMESTAMP NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0,
+                next_check DATE NULL
+            )
+            """,
+        )
+        conn.execute(
+            """
+            CREATE TABLE project (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0
+            )
+            """,
+        )
+        conn.execute(
+            "INSERT INTO project (id, name, created_at, is_archived) "
+            "VALUES (1, 'My Project', '2026-01-01 00:00:00', 0)"
+        )
+        conn.execute(
+            "INSERT INTO todo (id, project_id, name, status, helper, created_at, is_archived) "
+            "VALUES (1, 1, 'Open task', 'handoff', 'Alice', '2026-01-01 00:00:00', 0)"
+        )
+        conn.execute(
+            "INSERT INTO todo (id, project_id, name, status, helper, created_at, "
+            "completed_at, is_archived) "
+            "VALUES (2, 1, 'Done task', 'done', 'Bob', '2026-01-01 00:00:00', "
+            "'2026-01-15 00:00:00', 0)"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    db.init_db()
+
+    from handoff.data import query_concluded_handoffs
+
+    concluded = query_concluded_handoffs()
+    assert len(concluded) == 1
+    assert concluded[0].need_back == "Done task"
+    assert len(concluded[0].check_ins) >= 1
+    for ci in concluded[0].check_ins:
+        # Ensure the enum is hydrated correctly, not stored as a raw string.
+        assert isinstance(ci.check_in_type, CheckInType)
+    # query_concluded_handoffs() guarantees at least one concluded check-in,
+    # not that all related check-ins are concluded.
+    assert any(
+        ci.check_in_type is CheckInType.CONCLUDED
+        for ci in concluded[0].check_ins
+    )
 
 
 def test_init_db_is_idempotent(
