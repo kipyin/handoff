@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
 
-from handoff.pages.now import render_now_page
+from handoff.pages.now import _closed_sort_key, render_now_page
 
 
 def _make_fake_todo(
@@ -31,6 +31,22 @@ def _make_fake_todo(
         deadline=deadline,
         notes=notes,
     )
+
+
+def test_closed_sort_key_handles_mixed_naive_and_aware_datetimes() -> None:
+    """Closed sort key should not crash when datetimes mix timezone awareness."""
+    done = SimpleNamespace(
+        completed_at=datetime(2026, 1, 20, 10, 0, tzinfo=UTC),
+        created_at=datetime(2026, 1, 10, 9, 0, tzinfo=UTC),
+    )
+    canceled = SimpleNamespace(
+        completed_at=None,
+        created_at=datetime(2026, 1, 19, 12, 0),  # naive datetime from legacy/imported data
+    )
+
+    # Regression check: this used to raise TypeError during Closed section sorting.
+    ordered = sorted([done, canceled], key=_closed_sort_key, reverse=True)
+    assert ordered[0] is done
 
 
 def test_render_now_page_no_projects_shows_info(monkeypatch: pytest.MonkeyPatch) -> None:
