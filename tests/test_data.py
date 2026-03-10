@@ -1031,6 +1031,85 @@ def test_query_concluded_handoffs_filters_and_ordering(session, monkeypatch) -> 
     assert [h.need_back for h in filtered_results] == ["Active newer"]
 
 
+def test_query_concluded_handoffs_orders_by_close_date_not_created_at(
+    session, monkeypatch
+) -> None:
+    """Concluded query sorts by latest conclude date, not handoff creation order."""
+    _patch_session_context(monkeypatch, session)
+
+    project = Project(name="Main")
+    session.add(project)
+    session.commit()
+
+    created_first_closed_latest = Handoff(project_id=project.id, need_back="Close latest")
+    created_second_closed_earlier = Handoff(project_id=project.id, need_back="Close earlier")
+    session.add_all([created_first_closed_latest, created_second_closed_earlier])
+    session.commit()
+    session.refresh(created_first_closed_latest)
+    session.refresh(created_second_closed_earlier)
+
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=created_first_closed_latest.id,
+                check_in_date=date(2026, 3, 20),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=created_second_closed_earlier.id,
+                check_in_date=date(2026, 3, 5),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=created_second_closed_earlier.id,
+                check_in_date=date(2026, 3, 10),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+        ]
+    )
+    session.commit()
+
+    results = data.query_concluded_handoffs(include_archived_projects=False)
+    assert [h.need_back for h in results] == ["Close latest", "Close earlier"]
+
+
+def test_count_open_handoffs_excludes_concluded_and_archived(session, monkeypatch) -> None:
+    """Open count includes only non-concluded handoffs in active projects."""
+    _patch_session_context(monkeypatch, session)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    open_one = Handoff(project_id=active.id, need_back="Open one")
+    open_with_non_concluded_checkin = Handoff(project_id=active.id, need_back="Open two")
+    concluded = Handoff(project_id=active.id, need_back="Concluded")
+    archived_open = Handoff(project_id=archived.id, need_back="Archived open")
+    session.add_all([open_one, open_with_non_concluded_checkin, concluded, archived_open])
+    session.commit()
+    session.refresh(open_with_non_concluded_checkin)
+    session.refresh(concluded)
+
+    session.add(
+        CheckIn(
+            handoff_id=open_with_non_concluded_checkin.id,
+            check_in_date=date(2026, 3, 9),
+            check_in_type=CheckInType.DELAYED,
+        )
+    )
+    session.add(
+        CheckIn(
+            handoff_id=concluded.id,
+            check_in_date=date(2026, 3, 9),
+            check_in_type=CheckInType.CONCLUDED,
+        )
+    )
+    session.commit()
+
+    assert data.count_open_handoffs() == 2
+
+
 # ---------------------------------------------------------------------------
 # import_payload tests
 # ---------------------------------------------------------------------------
