@@ -30,13 +30,38 @@ from handoff.services import (
 
 
 def _patch_session_context(monkeypatch, session) -> None:
-    """Patch data module session context to reuse the test session."""
+    """Patch session_context in all data sub-modules to reuse the test session.
+
+    Each sub-module imports session_context directly, so all five must be
+    patched: activity (log_activity), handoffs (CRUD), io (import/export),
+    projects (project CRUD), queries (queries).
+    """
+    import handoff.data.activity as _da
+    import handoff.data.handoffs as _dh
+    import handoff.data.io as _dio
+    import handoff.data.projects as _dp
+    import handoff.data.queries as _dq
 
     @contextmanager
     def _session_context():
         yield session
 
-    monkeypatch.setattr(data, "session_context", _session_context)
+    for mod in (_da, _dh, _dio, _dp, _dq):
+        monkeypatch.setattr(mod, "session_context", _session_context)
+
+
+def _patch_date(monkeypatch, fixed_date_class) -> None:
+    """Patch date.today() in sub-modules that call it directly.
+
+    Only handoffs (conclude_handoff, reopen_handoff) and queries
+    (query_now_items, query_upcoming_handoffs, query_action_handoffs,
+    query_risk_handoffs) call date.today(); the other sub-modules do not.
+    """
+    import handoff.data.handoffs as _dh
+    import handoff.data.queries as _dq
+
+    monkeypatch.setattr(_dh, "date", fixed_date_class)
+    monkeypatch.setattr(_dq, "date", fixed_date_class)
 
 
 def test_service_create_handoff_with_next_check(session, monkeypatch) -> None:
@@ -67,7 +92,7 @@ def test_service_query_action_handoffs(session, monkeypatch) -> None:
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -100,7 +125,7 @@ def test_service_query_action_handoffs_include_archived_projects(session, monkey
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     active = Project(name="Active")
     archived = Project(name="Archived", is_archived=True)
@@ -265,7 +290,7 @@ def test_service_query_now_items(session, monkeypatch) -> None:
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -290,7 +315,7 @@ def test_service_reopen_handoff_conclude_then_open_again(session, monkeypatch) -
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -345,7 +370,7 @@ def test_service_query_risk_handoffs(session, monkeypatch) -> None:
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -380,7 +405,7 @@ def test_service_query_risk_handoffs_include_archived_projects(session, monkeypa
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     active = Project(name="Active")
     archived = Project(name="Archived", is_archived=True)
@@ -433,7 +458,7 @@ def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -460,7 +485,7 @@ def test_service_query_upcoming_and_pitchmen_include_archived(session, monkeypat
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     active = Project(name="Active")
     archived = Project(name="Archived", is_archived=True)

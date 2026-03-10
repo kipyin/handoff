@@ -11,6 +11,7 @@ from . import ROOT
 from . import build_full as build_full_module
 from . import build_patch as build_patch_module
 from . import bump_version as bump_version_module
+from . import sizecheck as sizecheck_module
 from .subprocess_utils import run_cmd
 
 
@@ -80,10 +81,16 @@ def _format_and_lint(extra_args: list[str] | None = None, *, fix: bool) -> None:
 
 
 def _ci_run(extra_args: list[str] | None = None) -> None:
-    """Run checks/typecheck/tests, allowing optional Ruff fixes via ``--fix``."""
+    """Run checks/typecheck/sizecheck/tests, allowing optional Ruff fixes via ``--fix``."""
     extra_args, fix = _extract_fix_flag(extra_args)
     _format_and_lint(extra_args=extra_args, fix=fix)
     typecheck(extra_args=extra_args)
+    sizecheck(
+        extra_args=[],
+        path="src",
+        max_bytes=32 * 1024,
+        warn_threshold=0.9,
+    )  # Always check src/; do not forward test paths
     test(extra_args=extra_args)
 
 
@@ -158,6 +165,46 @@ def typecheck(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
         cwd=ROOT,
         description="Running pyright type checking...",
     )
+
+
+@app.command("sizecheck", context_settings={"allow_extra_args": True})
+def sizecheck(
+    extra_args: list[str] = EXTRA_ARGS_ARG,
+    path: str = typer.Option(
+        "src",
+        "--path",
+        "-p",
+        help="Default directory to check when no paths given.",
+    ),
+    max_bytes: int = typer.Option(
+        32 * 1024,
+        "--max-bytes",
+        help="Max file size in bytes.",
+    ),
+    warn_threshold: float = typer.Option(
+        0.9,
+        "--warn-threshold",
+        help="Warn when file reaches this fraction of limit (0-1).",
+    ),
+) -> None:
+    """Check .py files under size limit. Defaults to src/; with args, checks given paths."""
+    extra_args = list(extra_args) if extra_args else []
+    ok, violations, warnings_list = sizecheck_module.run_sizecheck(
+        extra_args if extra_args else None,
+        default_path=path,
+        max_bytes=max_bytes,
+        warn_threshold=warn_threshold,
+    )
+    for w in warnings_list:
+        console.print(f"warning: {w}", style="bold yellow")
+    if not ok:
+        console.print(
+            f"The following files exceed the limit ({max_bytes:,} bytes):\n"
+            + "\n".join(f"  {v}" for v in violations),
+            style="bold red",
+        )
+        raise typer.Exit(code=1)
+    console.print(f"All files under {max_bytes:,} bytes.", style="bold green")
 
 
 @app.command("ci", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})

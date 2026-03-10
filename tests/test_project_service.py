@@ -6,19 +6,29 @@ from contextlib import contextmanager
 
 from sqlmodel import select
 
-import handoff.data as data
 from handoff.models import Project
 from handoff.services import project_service
 
 
 def _patch_session_context(monkeypatch, session) -> None:
-    """Patch data module session context to reuse the test session."""
+    """Patch session_context in all data sub-modules to reuse the test session.
+
+    Each sub-module imports session_context directly, so all five must be
+    patched: activity (log_activity), handoffs (CRUD), io (import/export),
+    projects (project CRUD), queries (queries).
+    """
+    import handoff.data.activity as _da
+    import handoff.data.handoffs as _dh
+    import handoff.data.io as _dio
+    import handoff.data.projects as _dp
+    import handoff.data.queries as _dq
 
     @contextmanager
     def _session_context():
         yield session
 
-    monkeypatch.setattr(data, "session_context", _session_context)
+    for mod in (_da, _dh, _dio, _dp, _dq):
+        monkeypatch.setattr(mod, "session_context", _session_context)
 
 
 def test_create_project_via_service(session, monkeypatch) -> None:
