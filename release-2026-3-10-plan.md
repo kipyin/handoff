@@ -247,9 +247,14 @@ This phase tightens behavior before docs/polish so user expectations match app b
 ### Phase 3.1 implementation spec
 
 1. **Append-only reopen (no history deletion)**
-   - Reopen must append a new check-in after a prior `concluded` check-in.
-   - Do **not** delete or mutate existing concluded check-ins.
-   - Reopen note is captured in check-in notes (e.g., "reopen: waiting on revised doc").
+   - Reopen is only valid when the **latest** check-in is `concluded`.
+   - Reopen must append a new **non-concluded** check-in **after** that concluded check-in:
+     - Service behavior: create a new check-in with `check_in_type = on_track` and `check_in_date = today`.
+     - UI may capture a free-text reason; the service persists this as the new check-in's `note`
+       (e.g., "reopen: waiting on revised doc").
+   - If the latest check-in is already `on_track` or `delayed`, reopen must be rejected or treated as
+     a no-op (must **not** append another reopen check-in).
+   - Do **not** delete or mutate any existing concluded check-ins.
 
 2. **Lifecycle semantics update**
    - Replace "closed if any concluded check-in exists" with:
