@@ -1525,6 +1525,11 @@ def test_create_check_in(session, monkeypatch) -> None:
     assert ci.id is not None
     assert ci.check_in_type == CheckInType.ON_TRACK
     assert ci.handoff_id == h.id
+    raw_check_in_type = session.connection().exec_driver_sql(
+        "SELECT check_in_type FROM check_in WHERE id = ?",
+        (ci.id,),
+    ).scalar_one()
+    assert raw_check_in_type == "on_track"
     refreshed = session.get(Handoff, h.id)
     assert refreshed is not None
     assert refreshed.next_check == date(2026, 3, 8)
