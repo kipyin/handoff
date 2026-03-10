@@ -74,6 +74,30 @@ def test_render_now_page_no_projects_shows_info(monkeypatch: pytest.MonkeyPatch)
     assert "No projects" in st_mock.info.call_args[0][0]
 
 
+def test_render_now_page_archived_only_projects_shows_toggle_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When only archived projects exist, the page suggests enabling archived visibility."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    archived_project = SimpleNamespace(id=2, name="Archived")
+    list_project_calls: list[bool] = []
+
+    def _list_projects(**kwargs):
+        include_archived = kwargs["include_archived"]
+        list_project_calls.append(include_archived)
+        return [archived_project] if include_archived else []
+
+    monkeypatch.setattr("handoff.pages.now.list_projects", _list_projects)
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
+
+    render_now_page()
+
+    assert list_project_calls == [False, True]
+    st_mock.info.assert_called_once()
+    assert "No active projects." in st_mock.info.call_args[0][0]
+
+
 def test_render_now_page_queries_phase2_sections(monkeypatch: pytest.MonkeyPatch) -> None:
     """Now page calls risk/action/upcoming/concluded query functions."""
     st_mock = _build_streamlit_mock()
@@ -156,6 +180,32 @@ def test_render_now_page_include_archived_projects_passed_to_queries(
     assert action_calls[0]["include_archived_projects"] is True
     assert upcoming_calls[0]["include_archived_projects"] is True
     assert concluded_calls[0]["include_archived_projects"] is True
+
+
+def test_render_now_page_include_archived_projects_passed_to_pitchmen_query(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Now page forwards include-archived toggle to pitchman query."""
+    st_mock = _build_streamlit_mock()
+    st_mock.checkbox.return_value = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    pitchmen_calls: list[dict] = []
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs",
+        lambda **kwargs: pitchmen_calls.append(kwargs) or ["Alice"],
+    )
+    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 3)
+    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
+    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+
+    render_now_page()
+
+    assert len(pitchmen_calls) == 1
+    assert pitchmen_calls[0]["include_archived_projects"] is True
 
 
 def test_render_now_page_action_item_shows_check_in_buttons(
