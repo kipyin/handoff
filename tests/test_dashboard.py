@@ -6,6 +6,7 @@ import json
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from handoff.models import CheckInType
@@ -16,8 +17,11 @@ from handoff.services.dashboard_service import (
     compute_on_time_close_rate_trend,
     compute_open_aging_profile,
     compute_reopen_rate_summary,
+    get_cycle_time_by_project,
     get_dashboard_metrics,
+    get_deadline_adherence_trend,
     get_exportable_metrics,
+    get_open_aging_profile,
     get_on_time_close_rate_trend,
 )
 
@@ -376,3 +380,124 @@ def test_get_exportable_metrics_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     export_data = get_exportable_metrics(today, weeks=12)
     assert export_data["csv"] == ""
     assert export_data["json"] == ""
+
+
+def test_get_cycle_time_by_project_filters_selected_project_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    today = date(2026, 3, 10)
+    project_a = _make_handoff(
+        id=1,
+        created_at=datetime(2026, 2, 20),
+        check_ins=[_make_check_in(date(2026, 3, 2), CheckInType.CONCLUDED, id=1)],
+    )
+    project_b = _make_handoff(
+        id=2,
+        created_at=datetime(2026, 2, 20),
+        check_ins=[_make_check_in(date(2026, 3, 2), CheckInType.CONCLUDED, id=2)],
+    )
+    project_b.project_id = 2
+    query_windows: list[tuple[date, date]] = []
+    captured_ids: list[int] = []
+    sentinel = object()
+
+    def fake_completed_in_range(start: date, end: date):
+        query_windows.append((start, end))
+        return [project_a, project_b]
+
+    def fake_compute_cycle_time_by_project(handoffs):
+        captured_ids.extend(h.id for h in handoffs)
+        return sentinel
+
+    monkeypatch.setattr(
+        "handoff.services.dashboard_service.completed_in_range",
+        fake_completed_in_range,
+    )
+    monkeypatch.setattr(
+        "handoff.services.dashboard_service.compute_cycle_time_by_project",
+        fake_compute_cycle_time_by_project,
+    )
+
+    result = get_cycle_time_by_project(today, days=30, project_ids=[2])
+
+    assert result is sentinel
+    assert query_windows == [(today - timedelta(days=30), today)]
+    assert captured_ids == [2]
+
+
+def test_get_open_aging_profile_queries_open_handoffs(monkeypatch: pytest.MonkeyPatch) -> None:
+    today = date(2026, 3, 10)
+    open_handoffs = [_make_handoff(id=1, created_at=datetime(2026, 3, 1))]
+    query_calls: list[dict[str, object]] = []
+    sentinel = object()
+
+    def fake_query_handoffs(**kwargs):
+        query_calls.append(kwargs)
+        return open_handoffs
+
+    def fake_compute_open_aging_profile(handoffs, *, today):
+        assert handoffs == open_handoffs
+        assert today == date(2026, 3, 10)
+        return sentinel
+
+    monkeypatch.setattr("handoff.services.dashboard_service.query_handoffs", fake_query_handoffs)
+    monkeypatch.setattr(
+        "handoff.services.dashboard_service.compute_open_aging_profile",
+        fake_compute_open_aging_profile,
+    )
+
+    result = get_open_aging_profile(today)
+
+    assert result is sentinel
+    assert query_calls == [{"include_concluded": False, "include_archived_projects": False}]
+
+
+def test_get_deadline_adherence_trend_filters_selected_project_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    today = date(2026, 3, 10)
+    project_a = _make_handoff(
+        id=1,
+        created_at=datetime(2026, 2, 20),
+        deadline=date(2026, 3, 3),
+        check_ins=[_make_check_in(date(2026, 3, 2), CheckInType.CONCLUDED, id=1)],
+    )
+    project_b = _make_handoff(
+        id=2,
+        created_at=datetime(2026, 2, 20),
+        deadline=date(2026, 3, 3),
+        check_ins=[_make_check_in(date(2026, 3, 2), CheckInType.CONCLUDED, id=2)],
+    )
+    project_b.project_id = 2
+    captured_ids: list[int] = []
+
+    monkeypatch.setattr(
+        "handoff.services.dashboard_service.completed_in_range",
+        lambda start, end: [project_a, project_b],
+    )
+
+    def fake_compute_on_time_close_rate_trend(handoffs, *, today, weeks):
+        assert today == date(2026, 3, 10)
+        assert weeks == 6
+        captured_ids.extend(h.id for h in handoffs)
+        return pd.DataFrame(
+            [
+                {
+                    "week_label": "2026-W10",
+                    "on_time_rate": 1.0,
+                    "total": 1,
+                    "on_time_rate_pct": "100%",
+                }
+            ]
+        )
+
+    monkeypatch.setattr(
+        "handoff.services.dashboard_service.compute_on_time_close_rate_trend",
+        fake_compute_on_time_close_rate_trend,
+    )
+
+    trend = get_deadline_adherence_trend(today, weeks=6, project_ids=[2])
+
+    assert captured_ids == [2]
+    assert list(trend.columns) == ["week_label", "on_time_rate", "total"]
+    assert trend.iloc[0]["total"] == 1
