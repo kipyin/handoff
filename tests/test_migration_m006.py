@@ -195,6 +195,51 @@ def test_m006_skips_creating_handoff_table_when_it_already_exists(
     assert "todo" not in tables
 
 
+def test_m006_existing_handoff_rows_preserved_on_id_conflict(tmp_path: Path) -> None:
+    """Existing handoff rows are kept when todo ids collide during copy."""
+    db_path = str(tmp_path / "existing_handoff_rows.db")
+    _make_old_schema_db(db_path)
+
+    # Simulate partial migration state where handoff already has a different row
+    # with the same id, to exercise ID-collision handling.
+    conn_pre = sqlite3.connect(db_path)
+    conn_pre.executescript(
+        """
+        CREATE TABLE handoff (
+            id INTEGER PRIMARY KEY,
+            project_id INTEGER NOT NULL REFERENCES project(id),
+            need_back TEXT NOT NULL,
+            pitchman TEXT,
+            next_check DATE,
+            deadline DATE,
+            notes TEXT,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO handoff (
+            id, project_id, need_back, pitchman, next_check, deadline, notes, created_at
+        ) VALUES (
+            1, 1, 'Preexisting handoff', 'Preset', '2026-01-20', NULL, 'keep', '2026-01-01 00:00:00'
+        );
+        """
+    )
+    conn_pre.commit()
+    conn_pre.close()
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.connect() as conn:
+        _migrate(conn)
+        conn.commit()
+    engine.dispose()
+
+    conn_check = sqlite3.connect(db_path)
+    rows = conn_check.execute("SELECT id, need_back, pitchman FROM handoff ORDER BY id").fetchall()
+    conn_check.close()
+
+    assert rows[0] == (1, "Preexisting handoff", "Preset")
+    assert {row[0] for row in rows} == {1, 2, 3}
+    assert any(row[0] == 2 and row[1] == "Done thing" for row in rows)
+
+
 def test_m006_skips_creating_check_in_table_when_it_already_exists(
     tmp_path: Path,
 ) -> None:
@@ -243,3 +288,45 @@ def test_m006_skips_creating_check_in_table_when_it_already_exists(
     assert "check_in" in tables
     assert "handoff" in tables
     assert "todo" not in tables
+
+
+def test_m006_status_is_case_insensitive_and_completed_at_falls_back_to_created_at(
+    tmp_path: Path,
+) -> None:
+    """DONE/CANCELED with null completed_at still create concluded check-ins."""
+    db_path = str(tmp_path / "status_case_and_fallback.db")
+    _make_old_schema_db(db_path)
+
+    conn_seed = sqlite3.connect(db_path)
+    conn_seed.executescript(
+        """
+        INSERT INTO todo (id, project_id, name, helper, status, created_at, completed_at)
+            VALUES (4, 1, 'Upper done', 'Casey', 'DONE', '2026-03-10 08:15:00', NULL);
+        INSERT INTO todo (id, project_id, name, helper, status, created_at, completed_at)
+            VALUES (5, 1, 'Upper canceled', 'Dana', 'CANCELED', '2026-03-11 09:45:00', NULL);
+        """
+    )
+    conn_seed.commit()
+    conn_seed.close()
+
+    engine = create_engine(f"sqlite:///{db_path}")
+    with engine.connect() as conn:
+        _migrate(conn)
+        conn.commit()
+    engine.dispose()
+
+    conn_check = sqlite3.connect(db_path)
+    rows = conn_check.execute(
+        """
+        SELECT handoff_id, check_in_date, note, check_in_type, created_at
+        FROM check_in
+        WHERE handoff_id IN (4, 5)
+        ORDER BY handoff_id
+        """
+    ).fetchall()
+    conn_check.close()
+
+    assert rows == [
+        (4, "2026-03-10", None, "concluded", "2026-03-10 08:15:00"),
+        (5, "2026-03-11", "canceled", "concluded", "2026-03-11 09:45:00"),
+    ]
