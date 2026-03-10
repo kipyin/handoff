@@ -1,0 +1,29 @@
+# CODEOWNERS — Critical areas that always require @kipyin review.
+#
+# These paths map to the "agent-unsafe" categories defined in AGENTS.md:
+# data model migrations, DB schema, core data layer, update logic,
+# dependency changes, and CI/CD pipelines.
+#
+# Syntax: <path-pattern>  <owner>
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# --- Data model & schema ---
+src/handoff/models.py                   @kipyin
+src/handoff/db.py                       @kipyin
+src/handoff/backup_schema.py            @kipyin
+src/handoff/migrations/                 @kipyin
+
+# --- Core data-access layer ---
+src/handoff/data.py                     @kipyin
+
+# --- Update / patch logic (security boundary) ---
+src/handoff/updater.py                  @kipyin
+src/handoff/autosave.py                 @kipyin
+src/handoff/paths.py                    @kipyin
+
+# --- Project dependencies ---
+pyproject.toml                          @kipyin
+uv.lock                                 @kipyin
+
+# --- CI/CD pipelines ---
+.github/workflows/                      @kipyin
