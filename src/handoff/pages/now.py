@@ -424,12 +424,26 @@ def render_now_page() -> None:
         "Use Snooze to follow up later, or Conclude when done."
     )
 
-    projects = list_projects()
+    include_archived_projects = st.checkbox(
+        "Include archived projects",
+        value=False,
+        key="now_include_archived_projects",
+    )
+    projects = list_projects(include_archived=include_archived_projects)
     if not projects:
-        st.info("No projects yet. Create one on the Projects page.")
+        if include_archived_projects:
+            st.info("No projects yet. Create one on the Projects page.")
+        else:
+            all_projects = list_projects(include_archived=True)
+            if all_projects:
+                st.info(
+                    "No active projects. Turn on 'Include archived projects' to view archived work."
+                )
+            else:
+                st.info("No projects yet. Create one on the Projects page.")
         return
 
-    pitchmen = list_pitchmen_with_open_handoffs()
+    pitchmen = list_pitchmen_with_open_handoffs(include_archived_projects=include_archived_projects)
     project_by_name = {p.name: p for p in projects}
     project_ids, pitchman_names, search_text = _render_filters(
         project_by_name=project_by_name,
@@ -448,6 +462,7 @@ def render_now_page() -> None:
         next_check_max=parsed.next_check_max,
         deadline_min=parsed.deadline_min,
         deadline_max=parsed.deadline_max,
+        include_archived_projects=include_archived_projects,
     )
 
     action = query_action_handoffs(
@@ -459,6 +474,7 @@ def render_now_page() -> None:
         next_check_max=parsed.next_check_max,
         deadline_min=parsed.deadline_min,
         deadline_max=parsed.deadline_max,
+        include_archived_projects=include_archived_projects,
     )
     upcoming = query_upcoming_handoffs(
         project_ids=project_ids,
@@ -469,12 +485,13 @@ def render_now_page() -> None:
         next_check_max=parsed.next_check_max,
         deadline_min=parsed.deadline_min,
         deadline_max=parsed.deadline_max,
+        include_archived_projects=include_archived_projects,
     )
     concluded = query_concluded_handoffs(
         project_ids=project_ids,
         pitchman_names=pitchman_names,
         search_text=parsed.text_query,
-        include_archived_projects=True,
+        include_archived_projects=include_archived_projects,
     )
 
     _render_add_form(project_by_name, pitchmen, "now")
