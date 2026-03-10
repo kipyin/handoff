@@ -223,7 +223,14 @@ def test_migrated_data_readable_via_data_layer(
     assert concluded[0].need_back == "Done task"
     assert len(concluded[0].check_ins) >= 1
     for ci in concluded[0].check_ins:
-        assert ci.check_in_type == CheckInType.CONCLUDED
+        # Ensure the enum is hydrated correctly, not stored as a raw string.
+        assert isinstance(ci.check_in_type, CheckInType)
+    # query_concluded_handoffs() guarantees at least one concluded check-in,
+    # not that all related check-ins are concluded.
+    assert any(
+        ci.check_in_type is CheckInType.CONCLUDED
+        for ci in concluded[0].check_ins
+    )
 
 
 def test_init_db_is_idempotent(
