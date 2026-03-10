@@ -9,6 +9,6 @@
 - **Architecture rule:** `pages/` must import from `services/`, never from `handoff.data` directly (enforced by `tests/test_services_architecture.py`).
 - **Linter/formatter:** Ruff (`uv run handoff check --fix`). **Type checker:** Pyright (`uv run handoff typecheck`).
 - **Tests:** `uv run handoff test` (pytest). Full CI: `uv run handoff ci`.
-- **DB migrations:** Add numbered scripts under `src/handoff/migrations/scripts/`; `db.init_db()` runs them automatically.
+- **DB migrations:** Add numbered scripts under `src/handoff/migrations/scripts/` **and** register them in `handoff.migrations.scripts.ALL`; `db.init_db()` then runs them automatically.
 - **Version sync:** `src/handoff/version.py` and `pyproject.toml` must always match (enforced by `tests/test_version_sync.py`).
 - **Dev DB:** `HANDOFF_DB_PATH=/tmp/handoff-dev.db uv run handoff run`.
