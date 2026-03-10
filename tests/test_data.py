@@ -689,7 +689,9 @@ def test_query_now_items_applies_project_helper_and_search_filters(session, monk
     assert results[0][0].id == matched.id
 
 
-def test_query_now_items_sorts_risk_first_then_next_check_and_deadline(session, monkeypatch) -> None:
+def test_query_now_items_sorts_risk_first_then_next_check_and_deadline(
+    session, monkeypatch
+) -> None:
     """query_now_items sorts risk items first, then by next_check/deadline/created_at."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="Sort")
