@@ -57,7 +57,7 @@ handoff = "scripts.cli:main"
 [tool.pyright]
 include = ["src", "scripts"]
 exclude = [
-    "src/handoff/data.py",
+    "src/handoff/data/",
     "src/handoff/pages/dashboard.py",
     "src/handoff/services/dashboard_service.py",
 ]

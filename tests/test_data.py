@@ -13,13 +13,38 @@ from handoff.models import CheckIn, CheckInType, Handoff, Project
 
 
 def _patch_session_context(monkeypatch, session) -> None:
-    """Patch data module session context to reuse the test session."""
+    """Patch session_context in all data sub-modules to reuse the test session.
+
+    Each sub-module imports session_context directly, so all five must be
+    patched: activity (log_activity), handoffs (CRUD), io (import/export),
+    projects (project CRUD), queries (queries).
+    """
+    import handoff.data.activity as _da
+    import handoff.data.handoffs as _dh
+    import handoff.data.io as _dio
+    import handoff.data.projects as _dp
+    import handoff.data.queries as _dq
 
     @contextmanager
     def _session_context():
         yield session
 
-    monkeypatch.setattr(data, "session_context", _session_context)
+    for mod in (_da, _dh, _dio, _dp, _dq):
+        monkeypatch.setattr(mod, "session_context", _session_context)
+
+
+def _patch_date(monkeypatch, fixed_date_class) -> None:
+    """Patch date.today() in sub-modules that call it directly.
+
+    Only handoffs (conclude_handoff, reopen_handoff) and queries
+    (query_now_items, query_upcoming_handoffs, query_action_handoffs,
+    query_risk_handoffs) call date.today(); the other sub-modules do not.
+    """
+    import handoff.data.handoffs as _dh
+    import handoff.data.queries as _dq
+
+    monkeypatch.setattr(_dh, "date", fixed_date_class)
+    monkeypatch.setattr(_dq, "date", fixed_date_class)
 
 
 def test_update_handoff_allows_clearing_fields(session, monkeypatch) -> None:
@@ -640,7 +665,7 @@ def test_reopen_handoff_appends_on_track_and_sets_next_check(session, monkeypatc
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -683,7 +708,7 @@ def test_reopen_handoff_rejects_non_concluded_latest(session, monkeypatch) -> No
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -843,7 +868,7 @@ def test_query_action_handoffs(session, monkeypatch) -> None:
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -897,7 +922,7 @@ def test_query_action_handoffs_include_archived_projects(session, monkeypatch) -
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     active = Project(name="Active")
     archived = Project(name="Archived", is_archived=True)
@@ -930,7 +955,7 @@ def test_query_action_handoffs_search_includes_check_in_notes(session, monkeypat
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -975,7 +1000,7 @@ def test_query_risk_handoffs(session, monkeypatch) -> None:
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -1061,7 +1086,7 @@ def test_query_risk_handoffs_include_archived_projects(session, monkeypatch) -> 
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     active = Project(name="Active")
     archived = Project(name="Archived", is_archived=True)
@@ -1117,7 +1142,7 @@ def test_query_upcoming_handoffs(session, monkeypatch) -> None:
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -1194,7 +1219,7 @@ def test_query_upcoming_handoffs_include_archived_projects(session, monkeypatch)
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     active = Project(name="Active")
     archived = Project(name="Archived", is_archived=True)
@@ -1359,7 +1384,7 @@ def test_section_queries_use_latest_check_in_lifecycle(session, monkeypatch) -> 
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)
@@ -1464,7 +1489,7 @@ def test_archived_toggle_respects_latest_lifecycle_after_reopen(session, monkeyp
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     active = Project(name="Active")
     archived = Project(name="Archived", is_archived=True)
@@ -1759,7 +1784,7 @@ def test_handoff_is_open_and_close_date(session, monkeypatch) -> None:
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr(data, "date", FixedDate)
+    _patch_date(monkeypatch, FixedDate)
 
     p = Project(name="P")
     session.add(p)

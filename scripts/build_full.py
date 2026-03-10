@@ -217,6 +217,37 @@ def _copy_docs() -> None:
             shutil.copy2(src, APP_BUILD_DIR / filename)
 
 
+def _run_pyarmor_gen(pyarmor_cmd: list[str], *, cwd: Path) -> None:
+    """Run a PyArmor command and replay captured output to the console."""
+    try:
+        result = subprocess.run(
+            pyarmor_cmd,
+            check=True,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError as exc:
+        if exc.stdout:
+            print(exc.stdout, end="")
+        if exc.stderr:
+            print(exc.stderr, end="")
+        raise
+
+    if result.stdout:
+        print(result.stdout, end="")
+    if result.stderr:
+        print(result.stderr, end="")
+
+
+def _is_pyarmor_out_of_license(exc: subprocess.CalledProcessError) -> bool:
+    """Return True if PyArmor failed because of a license error."""
+    combined = "\n".join(
+        part for part in (exc.output, exc.stdout, exc.stderr) if isinstance(part, str) and part
+    )
+    return "out of license" in combined.lower()
+
+
 def _obfuscate_app_code_with_pyarmor(*, dry_run: bool = False) -> None:
     """Obfuscate the application package in the build directory using PyArmor.
 
@@ -255,8 +286,14 @@ def _obfuscate_app_code_with_pyarmor(*, dry_run: bool = False) -> None:
 
     print("Obfuscating application code with PyArmor...")
     try:
-        subprocess.run(pyarmor_cmd, check=True, cwd=SRC_PLAIN_DIR)
+        _run_pyarmor_gen(pyarmor_cmd, cwd=SRC_PLAIN_DIR)
     except subprocess.CalledProcessError as exc:  # noqa: TRY002
+        if _is_pyarmor_out_of_license(exc):
+            raise RuntimeError(
+                "PyArmor reported 'out of license'. All source modules must stay under "
+                "32KB so they can be obfuscated with the trial license. "
+                "Run `uv run handoff sizecheck` to find oversized files."
+            ) from exc
         raise RuntimeError(
             "PyArmor failed while obfuscating application code. "
             "Ensure PyArmor >=9.2.0 is installed in the development environment."

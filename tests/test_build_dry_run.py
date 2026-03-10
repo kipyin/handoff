@@ -8,6 +8,7 @@ import pytest
 
 import scripts.build_full as build_full_module
 import scripts.build_patch as build_patch_module
+from handoff.version import __version__
 
 
 def test_build_full_dry_run_creates_build_structure(
@@ -62,11 +63,15 @@ def test_build_patch_dry_run_completes(
     """build --patch --dry-run runs copy/obfuscate-stub/docs and returns path."""
     root = Path(__file__).resolve().parents[1]
     monkeypatch.chdir(root)
+    expected_path = root / "dist" / f"handoff-{__version__}-patch.zip"
+    if expected_path.exists():
+        expected_path.unlink()
 
     path = build_patch_module.build_patch(dry_run=True)
 
     assert path is not None
     assert path.name.endswith("-patch.zip")
+    assert path == expected_path
     # Dry run does not create the zip
     assert not path.exists()
 

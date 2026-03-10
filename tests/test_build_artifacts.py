@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -164,3 +165,67 @@ def test_build_patch_includes_docs_and_core_files(
         assert "RELEASE_NOTES.md" in written_via_write
         assert "app.py" in written_via_write
         assert "src/handoff/__init__.py" in written_via_write
+
+
+def test_obfuscate_raises_runtime_error_for_out_of_license(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Out-of-license PyArmor failure raises RuntimeError directing dev to fix file size."""
+    app_build_dir = tmp_path / "build" / "handoff"
+    src_plain_dir = app_build_dir / "src_plain" / "handoff"
+    src_plain_dir.mkdir(parents=True, exist_ok=True)
+    (src_plain_dir / "__init__.py").write_text("x = 1", encoding="utf-8")
+
+    monkeypatch.setattr(build_full_module, "APP_BUILD_DIR", app_build_dir)
+    monkeypatch.setattr(build_full_module, "SRC_PLAIN_DIR", app_build_dir / "src_plain")
+    monkeypatch.setattr("shutil.which", lambda name: "/tmp/pyarmor" if name == "pyarmor" else None)
+
+    def _fake_run(
+        cmd: list[str],
+        *,
+        check: bool,
+        cwd: Path,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(
+            2,
+            cmd,
+            stderr="ERROR out of license",
+        )
+
+    monkeypatch.setattr("subprocess.run", _fake_run)
+
+    with pytest.raises(RuntimeError, match="out of license"):
+        build_full_module._obfuscate_app_code_with_pyarmor()
+
+
+def test_obfuscate_raises_runtime_error_for_non_license_pyarmor_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-license PyArmor failures raise RuntimeError immediately."""
+    app_build_dir = tmp_path / "build" / "handoff"
+    src_plain_dir = app_build_dir / "src_plain" / "handoff"
+    src_plain_dir.mkdir(parents=True, exist_ok=True)
+    (src_plain_dir / "__init__.py").write_text("x = 1", encoding="utf-8")
+
+    monkeypatch.setattr(build_full_module, "APP_BUILD_DIR", app_build_dir)
+    monkeypatch.setattr(build_full_module, "SRC_PLAIN_DIR", app_build_dir / "src_plain")
+    monkeypatch.setattr("shutil.which", lambda name: "/tmp/pyarmor" if name == "pyarmor" else None)
+
+    def _fake_run(
+        cmd: list[str],
+        *,
+        check: bool,
+        cwd: Path,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        raise subprocess.CalledProcessError(2, cmd, stderr="unexpected failure")
+
+    monkeypatch.setattr("subprocess.run", _fake_run)
+
+    with pytest.raises(RuntimeError, match="PyArmor failed while obfuscating application code"):
+        build_full_module._obfuscate_app_code_with_pyarmor()
