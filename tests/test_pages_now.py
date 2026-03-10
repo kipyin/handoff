@@ -243,7 +243,7 @@ def test_render_now_page_action_item_shows_check_in_buttons(
     labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
     assert "On-track" in labels
     assert "Delayed" in labels
-    assert "Conclude" in labels
+    assert "✓ Conclude" in labels
 
 
 def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.MonkeyPatch) -> None:

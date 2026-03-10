@@ -1031,9 +1031,7 @@ def test_query_concluded_handoffs_filters_and_ordering(session, monkeypatch) -> 
     assert [h.need_back for h in filtered_results] == ["Active newer"]
 
 
-def test_query_concluded_handoffs_orders_by_close_date_not_created_at(
-    session, monkeypatch
-) -> None:
+def test_query_concluded_handoffs_orders_by_close_date_not_created_at(session, monkeypatch) -> None:
     """Concluded query sorts by latest conclude date, not handoff creation order."""
     _patch_session_context(monkeypatch, session)
 
@@ -1041,27 +1039,52 @@ def test_query_concluded_handoffs_orders_by_close_date_not_created_at(
     session.add(project)
     session.commit()
 
-    created_first_closed_latest = Handoff(project_id=project.id, need_back="Close latest")
-    created_second_closed_earlier = Handoff(project_id=project.id, need_back="Close earlier")
-    session.add_all([created_first_closed_latest, created_second_closed_earlier])
+    created_middle_closed_latest = Handoff(
+        project_id=project.id,
+        need_back="Close latest",
+        created_at=datetime(2026, 1, 2, 12, 0, 0),
+    )
+    created_first_closed_middle = Handoff(
+        project_id=project.id,
+        need_back="Close middle",
+        created_at=datetime(2026, 1, 1, 12, 0, 0),
+    )
+    created_last_closed_earliest = Handoff(
+        project_id=project.id,
+        need_back="Close earliest",
+        created_at=datetime(2026, 1, 3, 12, 0, 0),
+    )
+    session.add_all(
+        [
+            created_middle_closed_latest,
+            created_first_closed_middle,
+            created_last_closed_earliest,
+        ]
+    )
     session.commit()
-    session.refresh(created_first_closed_latest)
-    session.refresh(created_second_closed_earlier)
+    session.refresh(created_middle_closed_latest)
+    session.refresh(created_first_closed_middle)
+    session.refresh(created_last_closed_earliest)
 
     session.add_all(
         [
             CheckIn(
-                handoff_id=created_first_closed_latest.id,
+                handoff_id=created_middle_closed_latest.id,
                 check_in_date=date(2026, 3, 20),
                 check_in_type=CheckInType.CONCLUDED,
             ),
             CheckIn(
-                handoff_id=created_second_closed_earlier.id,
+                handoff_id=created_first_closed_middle.id,
                 check_in_date=date(2026, 3, 5),
                 check_in_type=CheckInType.CONCLUDED,
             ),
             CheckIn(
-                handoff_id=created_second_closed_earlier.id,
+                handoff_id=created_first_closed_middle.id,
+                check_in_date=date(2026, 3, 15),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=created_last_closed_earliest.id,
                 check_in_date=date(2026, 3, 10),
                 check_in_type=CheckInType.CONCLUDED,
             ),
@@ -1070,7 +1093,7 @@ def test_query_concluded_handoffs_orders_by_close_date_not_created_at(
     session.commit()
 
     results = data.query_concluded_handoffs(include_archived_projects=False)
-    assert [h.need_back for h in results] == ["Close latest", "Close earlier"]
+    assert [h.need_back for h in results] == ["Close latest", "Close middle", "Close earliest"]
 
 
 def test_count_open_handoffs_excludes_concluded_and_archived(session, monkeypatch) -> None:

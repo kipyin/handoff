@@ -128,48 +128,50 @@ def _render_due_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
             st.session_state[mode_key] = "delayed"
             st.rerun()
     with c3:
-        if st.button("Conclude", key=f"{key_prefix}_conclude_btn_{handoff_id}"):
-            st.session_state[mode_key] = "concluded"
+        if st.button("✓ Conclude", key=f"{key_prefix}_conclude_btn_{handoff_id}"):
+            conclude_handoff(handoff_id)
+            st.success("Concluded.")
+            st.session_state.pop(mode_key, None)
             st.rerun()
 
-    if selected_mode not in {"on_track", "delayed", "concluded"}:
+    snooze_date = st.date_input(
+        "Snooze to",
+        value=add_business_days(date.today(), 1),
+        key=f"{key_prefix}_snooze_date_{handoff_id}",
+    )
+    if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{handoff_id}"):
+        snooze_handoff(handoff_id, to_date=snooze_date)
+        st.success("Snoozed.")
+        st.session_state.pop(mode_key, None)
+        st.rerun()
+
+    if selected_mode not in {"on_track", "delayed"}:
         return
 
     form_key = f"{key_prefix}_check_in_form_{handoff_id}_{selected_mode}"
     with st.form(key=form_key):
-        if selected_mode == "concluded":
-            note = st.text_area(
-                "Conclusion note (optional)",
-                key=f"{form_key}_note",
-            )
-            save = st.form_submit_button("Save conclude check-in")
-        else:
-            note_label = "Note (optional)" if selected_mode == "on_track" else "Reason (optional)"
-            note = st.text_area(note_label, key=f"{form_key}_note")
-            next_check = st.date_input(
-                "Next check-in",
-                value=add_business_days(date.today(), 1),
-                key=f"{form_key}_next_check",
-            )
-            save = st.form_submit_button("Save check-in")
+        note_label = "Note (optional)" if selected_mode == "on_track" else "Reason (optional)"
+        note = st.text_area(note_label, key=f"{form_key}_note")
+        next_check = st.date_input(
+            "Next check-in",
+            value=add_business_days(date.today(), 1),
+            key=f"{form_key}_next_check",
+        )
+        save = st.form_submit_button("Save check-in")
         cancel = st.form_submit_button("Cancel")
 
         if save:
             note_value = note.strip() or None
-            if selected_mode == "concluded":
-                conclude_handoff(handoff_id, note=note_value)
-                st.success("Concluded.")
-            else:
-                check_in_type = (
-                    CheckInType.ON_TRACK if selected_mode == "on_track" else CheckInType.DELAYED
-                )
-                add_check_in(
-                    handoff_id,
-                    check_in_type=check_in_type,
-                    note=note_value,
-                    next_check_date=next_check,
-                )
-                st.success("Check-in saved.")
+            check_in_type = (
+                CheckInType.ON_TRACK if selected_mode == "on_track" else CheckInType.DELAYED
+            )
+            add_check_in(
+                handoff_id,
+                check_in_type=check_in_type,
+                note=note_value,
+                next_check_date=next_check,
+            )
+            st.success("Check-in saved.")
             st.session_state.pop(mode_key, None)
             st.rerun()
         if cancel:
