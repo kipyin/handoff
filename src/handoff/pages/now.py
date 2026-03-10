@@ -6,7 +6,7 @@ Each item is in an expander with Snooze, Edit, and Close actions.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import pandas as pd
 import streamlit as st
@@ -349,6 +349,24 @@ def _closed_to_dataframe(todos: list[Todo]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _to_utc_datetime(value: datetime) -> datetime:
+    """Normalize naive/aware datetimes to UTC-aware for safe comparisons."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _closed_sort_key(todo: Todo) -> tuple[datetime, datetime]:
+    """Stable descending sort key for closed todos."""
+    completed = (
+        _to_utc_datetime(todo.completed_at)
+        if todo.completed_at
+        else datetime.min.replace(tzinfo=UTC)
+    )
+    created = _to_utc_datetime(todo.created_at)
+    return (completed, created)
+
+
 def render_now_page() -> None:
     """Render the Now page (control tower for action-required handoffs)."""
     st.subheader("Now")
@@ -436,10 +454,7 @@ def render_now_page() -> None:
         else:
             closed_sorted = sorted(
                 closed,
-                key=lambda t: (
-                    t.completed_at or datetime.min.replace(tzinfo=None),
-                    t.created_at,
-                ),
+                key=_closed_sort_key,
                 reverse=True,
             )
             df = _closed_to_dataframe(closed_sorted)
