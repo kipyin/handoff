@@ -1451,6 +1451,76 @@ def test_section_queries_use_latest_check_in_lifecycle(session, monkeypatch) -> 
     assert "Reopened upcoming" not in concluded_names
 
 
+def test_archived_toggle_respects_latest_lifecycle_after_reopen(session, monkeypatch) -> None:
+    """Archived include toggle honors latest open/concluded lifecycle semantics."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    archived_reopened = Handoff(
+        project_id=archived.id,
+        need_back="Archived reopened upcoming",
+        next_check=date(2026, 3, 10),
+    )
+    archived_still_concluded = Handoff(
+        project_id=archived.id,
+        need_back="Archived still concluded",
+        next_check=date(2026, 3, 10),
+    )
+    session.add_all([archived_reopened, archived_still_concluded])
+    session.commit()
+    session.refresh(archived_reopened)
+    session.refresh(archived_still_concluded)
+
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=archived_reopened.id,
+                check_in_date=date(2026, 3, 8),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=archived_reopened.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.ON_TRACK,
+            ),
+            CheckIn(
+                handoff_id=archived_still_concluded.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+        ]
+    )
+    session.commit()
+
+    assert data.query_upcoming_handoffs(include_archived_projects=False) == []
+    assert data.query_concluded_handoffs(include_archived_projects=False) == []
+
+    upcoming_all = {
+        handoff.need_back
+        for handoff in data.query_upcoming_handoffs(include_archived_projects=True)
+    }
+    concluded_all = {
+        handoff.need_back
+        for handoff in data.query_concluded_handoffs(include_archived_projects=True)
+    }
+
+    assert "Archived reopened upcoming" in upcoming_all
+    assert "Archived still concluded" not in upcoming_all
+    assert "Archived still concluded" in concluded_all
+    assert "Archived reopened upcoming" not in concluded_all
+
+
 # ---------------------------------------------------------------------------
 # import_payload tests
 # ---------------------------------------------------------------------------
