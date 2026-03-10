@@ -30,7 +30,7 @@ jobs:
           python-version: "3.13"
 
       - name: Sync project dependencies
-        run: uv sync --dev
+        run: uv sync
 
       - name: Smoke-check handoff CLI entrypoints
         run: |
