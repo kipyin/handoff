@@ -269,6 +269,8 @@ def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: 
 
 def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db: Path) -> None:
     """Late (due) check-in records today's check-in date."""
+    today = date.today()
+    expected_next_check = add_business_days(today, 1)
     db.init_db()
     project = data.create_project("Now Due Check-in Test")
     assert project.id is not None
@@ -301,18 +303,19 @@ def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db:
     )
     latest = max(updated.check_ins, key=lambda ci: (ci.check_in_date, ci.created_at, ci.id or 0))
     assert latest.check_in_type == data.CheckInType.ON_TRACK
-    assert latest.check_in_date == date.today()
-    assert updated.next_check == add_business_days(date.today(), 1)
+    assert latest.check_in_date == today
+    assert updated.next_check == expected_next_check
 
 
 def test_now_page_early_check_in_records_today_and_keeps_planned_next_check(
     app_test_db: Path,
 ) -> None:
     """Early (not due yet) check-in still records today's check-in date."""
+    today = date.today()
     db.init_db()
     project = data.create_project("Now Early Check-in Test")
     assert project.id is not None
-    planned_next_check = add_business_days(date.today(), 5)
+    planned_next_check = add_business_days(today, 5)
     handoff = data.create_handoff(
         project_id=project.id,
         need_back="Early check-in should use today",
@@ -342,7 +345,7 @@ def test_now_page_early_check_in_records_today_and_keeps_planned_next_check(
     )
     latest = max(updated.check_ins, key=lambda ci: (ci.check_in_date, ci.created_at, ci.id or 0))
     assert latest.check_in_type == data.CheckInType.ON_TRACK
-    assert latest.check_in_date == date.today()
+    assert latest.check_in_date == today
     assert updated.next_check == planned_next_check
 
 
