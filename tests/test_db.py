@@ -214,8 +214,6 @@ def test_migrated_data_readable_via_data_layer(
     finally:
         conn.close()
 
-    import handoff.db as db
-
     db.init_db()
 
     from handoff.data import query_concluded_handoffs
