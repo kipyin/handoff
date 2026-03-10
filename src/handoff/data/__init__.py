@@ -1,11 +1,11 @@
 """Data access helpers for projects, handoffs, check-ins and query workflows.
 
-This module re-exports the public API from focused sub-modules so that existing
+This package re-exports the public API from focused sub-modules so that existing
 ``from handoff.data import ...`` call sites continue to work without change.
 """
 
-from handoff.data_activity import get_recent_activity, log_activity
-from handoff.data_handoffs import (
+from handoff.data.activity import get_recent_activity, log_activity
+from handoff.data.handoffs import (
     _UNSET,
     CheckInType,
     _latest_check_in,
@@ -22,8 +22,8 @@ from handoff.data_handoffs import (
     snooze_handoff,
     update_handoff,
 )
-from handoff.data_io import get_export_payload, import_payload
-from handoff.data_projects import (
+from handoff.data.io import get_export_payload, import_payload
+from handoff.data.projects import (
     archive_project,
     create_project,
     delete_project,
@@ -32,7 +32,7 @@ from handoff.data_projects import (
     rename_project,
     unarchive_project,
 )
-from handoff.data_queries import (
+from handoff.data.queries import (
     _apply_handoff_filters,
     _check_in_note_subquery,
     _is_risk_handoff,

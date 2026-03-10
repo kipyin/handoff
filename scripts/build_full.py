@@ -291,8 +291,8 @@ def _obfuscate_app_code_with_pyarmor(*, dry_run: bool = False) -> None:
         if _is_pyarmor_out_of_license(exc):
             raise RuntimeError(
                 "PyArmor reported 'out of license'. All source modules must stay under "
-                "750 lines so they can be obfuscated with the trial license. "
-                "Run `uv run pytest tests/test_module_size.py` to find oversized files."
+                "32KB so they can be obfuscated with the trial license. "
+                "Run `uv run handoff sizecheck` to find oversized files."
             ) from exc
         raise RuntimeError(
             "PyArmor failed while obfuscating application code. "

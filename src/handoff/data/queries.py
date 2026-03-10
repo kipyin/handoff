@@ -10,7 +10,7 @@ from sqlalchemy import exists, func
 from sqlalchemy.orm import selectinload
 from sqlmodel import or_, select
 
-from handoff.data_handoffs import _latest_check_in, handoff_is_open
+from handoff.data.handoffs import _latest_check_in, handoff_is_open
 from handoff.db import session_context
 from handoff.models import CheckIn, CheckInType, Handoff, Project
 from handoff.page_models import HandoffQuery
@@ -643,7 +643,7 @@ def get_projects_with_handoff_summary(*, include_archived: bool = False) -> list
     Returns:
         List of dicts with project, total, open, and concluded keys.
     """
-    from handoff.data_projects import list_projects
+    from handoff.data.projects import list_projects
 
     projects = list_projects(include_archived=include_archived)
     if not projects:

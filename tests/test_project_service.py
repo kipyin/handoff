@@ -14,14 +14,14 @@ def _patch_session_context(monkeypatch, session) -> None:
     """Patch session_context in all data sub-modules to reuse the test session.
 
     Each sub-module imports session_context directly, so all five must be
-    patched: data_activity (log_activity), data_handoffs (CRUD),
-    data_io (import/export), data_projects (project CRUD), data_queries (queries).
+    patched: activity (log_activity), handoffs (CRUD), io (import/export),
+    projects (project CRUD), queries (queries).
     """
-    import handoff.data_activity as _da
-    import handoff.data_handoffs as _dh
-    import handoff.data_io as _dio
-    import handoff.data_projects as _dp
-    import handoff.data_queries as _dq
+    import handoff.data.activity as _da
+    import handoff.data.handoffs as _dh
+    import handoff.data.io as _dio
+    import handoff.data.projects as _dp
+    import handoff.data.queries as _dq
 
     @contextmanager
     def _session_context():

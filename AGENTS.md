@@ -55,6 +55,7 @@ The goal is not maximal abstraction or maximal cleverness. The goal is code that
 | Run app | `uv run handoff` (Streamlit on port 8501) |
 | Lint + format | `uv run handoff check` (`--fix` to apply Ruff changes) |
 | Type check | `uv run handoff typecheck` |
+| Size check | `uv run handoff sizecheck` (optional: path or dir) |
 | Tests | `uv run handoff test` |
 | Full CI suite | `uv run handoff ci` (`--fix` to apply Ruff changes first) |
 | Bump version | `uv run handoff bump 2026.M.P` |

@@ -8,7 +8,7 @@ from datetime import date
 from loguru import logger
 from sqlmodel import select
 
-from handoff.data_activity import log_activity
+from handoff.data.activity import log_activity
 from handoff.db import session_context
 from handoff.models import CheckIn, CheckInType, Handoff
 

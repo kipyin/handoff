@@ -11,6 +11,7 @@ from . import ROOT
 from . import build_full as build_full_module
 from . import build_patch as build_patch_module
 from . import bump_version as bump_version_module
+from . import sizecheck as sizecheck_module
 from .subprocess_utils import run_cmd
 
 
@@ -80,10 +81,11 @@ def _format_and_lint(extra_args: list[str] | None = None, *, fix: bool) -> None:
 
 
 def _ci_run(extra_args: list[str] | None = None) -> None:
-    """Run checks/typecheck/tests, allowing optional Ruff fixes via ``--fix``."""
+    """Run checks/typecheck/sizecheck/tests, allowing optional Ruff fixes via ``--fix``."""
     extra_args, fix = _extract_fix_flag(extra_args)
     _format_and_lint(extra_args=extra_args, fix=fix)
     typecheck(extra_args=extra_args)
+    sizecheck(extra_args=extra_args)
     test(extra_args=extra_args)
 
 
@@ -158,6 +160,21 @@ def typecheck(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
         cwd=ROOT,
         description="Running pyright type checking...",
     )
+
+
+@app.command("sizecheck", context_settings={"allow_extra_args": True})
+def sizecheck(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
+    """Check that all .py files under src/ (or given paths) are under 32KB."""
+    extra_args = list(extra_args) if extra_args else []
+    ok, violations = sizecheck_module.run_sizecheck(extra_args if extra_args else None)
+    if not ok:
+        console.print(
+            "The following files exceed the PyArmor trial limit (32KB):\n"
+            + "\n".join(f"  {v}" for v in violations),
+            style="bold red",
+        )
+        raise typer.Exit(code=1)
+    console.print("All files under 32KB.", style="bold green")
 
 
 @app.command("ci", context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
