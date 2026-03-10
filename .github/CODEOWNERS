@@ -27,3 +27,6 @@ uv.lock                                 @kipyin
 
 # --- CI/CD pipelines ---
 .github/workflows/                      @kipyin
+
+# --- Review gate policy ---
+.github/CODEOWNERS                      @kipyin

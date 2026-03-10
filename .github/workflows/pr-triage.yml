@@ -30,12 +30,12 @@ jobs:
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
-          EVENT_ACTION: ${{ github.event.action }}
         run: |
           python3 - <<'PYEOF'
           import json
           import os
           import sys
+          import textwrap
           import urllib.error
           import urllib.parse
           import urllib.request
@@ -44,7 +44,6 @@ jobs:
           REPO = os.environ["REPO"]
           PR_NUMBER = os.environ["PR_NUMBER"]
           PR_AUTHOR = os.environ["PR_AUTHOR"]
-          EVENT_ACTION = os.environ["EVENT_ACTION"]
 
           OWNER_LOGIN = "kipyin"
           TRIAGE_MARKER = "<!-- pr-triage-comment -->"
@@ -67,6 +66,8 @@ jobs:
               # Project dependencies
               "pyproject.toml",
               "uv.lock",
+              # Review gate and CI/CD pipeline definitions
+              ".github/CODEOWNERS",
               # CI/CD pipeline definitions (prefix match)
               ".github/workflows/",
           ]
@@ -88,7 +89,11 @@ jobs:
               )
               try:
                   with urllib.request.urlopen(req) as resp:
-                      return json.loads(resp.read())
+                      status = resp.getcode()
+                      raw = resp.read()
+                      if status in (204, 205) or not raw:
+                          return None
+                      return json.loads(raw)
               except urllib.error.HTTPError as exc:
                   if ignore_404 and exc.code == 404:
                       return None
@@ -131,11 +136,20 @@ jobs:
               encoded = urllib.parse.quote(name, safe="")
               existing = api("GET", f"/repos/{REPO}/labels/{encoded}", ignore_404=True)
               if existing is None:
-                  api("POST", f"/repos/{REPO}/labels", {
-                      "name": name,
-                      "color": color,
-                      "description": description,
-                  })
+                  try:
+                      api(
+                          "POST",
+                          f"/repos/{REPO}/labels",
+                          {
+                              "name": name,
+                              "color": color,
+                              "description": description,
+                          },
+                      )
+                  except urllib.error.HTTPError as exc:
+                      # Another run may create the label after our GET returns 404.
+                      if exc.code not in (409, 422):
+                          raise
 
           def get_pr_label_names():
               pr = api("GET", f"/repos/{REPO}/pulls/{PR_NUMBER}")
@@ -148,8 +162,9 @@ jobs:
           def add_label(name):
               api("POST", f"/repos/{REPO}/issues/{PR_NUMBER}/labels", {"labels": [name]})
 
-          def find_triage_comment():
-              """Return the comment id of an existing triage comment, or None."""
+          def find_triage_comment_ids():
+              """Return all issue comment ids that contain TRIAGE_MARKER."""
+              ids = []
               page = 1
               while True:
                   comments = api("GET", f"/repos/{REPO}/issues/{PR_NUMBER}/comments?per_page=100&page={page}")
@@ -157,17 +172,20 @@ jobs:
                       break
                   for c in comments:
                       if TRIAGE_MARKER in c.get("body", ""):
-                          return c["id"]
+                          ids.append(c["id"])
                   if len(comments) < 100:
                       break
                   page += 1
-              return None
+              return ids
 
           def upsert_comment(body):
               full_body = f"{TRIAGE_MARKER}\n{body}"
-              comment_id = find_triage_comment()
-              if comment_id:
-                  api("PATCH", f"/repos/{REPO}/issues/comments/{comment_id}", {"body": full_body})
+              comment_ids = find_triage_comment_ids()
+              if comment_ids:
+                  keep_id = comment_ids[0]
+                  api("PATCH", f"/repos/{REPO}/issues/comments/{keep_id}", {"body": full_body})
+                  for duplicate_id in comment_ids[1:]:
+                      api("DELETE", f"/repos/{REPO}/issues/comments/{duplicate_id}", ignore_404=True)
               else:
                   api("POST", f"/repos/{REPO}/issues/{PR_NUMBER}/comments", {"body": full_body})
 
@@ -209,40 +227,41 @@ jobs:
               trigger_list = "\n".join(f"- `{f}`" for f in trigger_files[:20])
               if len(trigger_files) > 20:
                   trigger_list += f"\n- … and {len(trigger_files) - 20} more"
-              comment = f"""\
-          ## 🔴 risk:high — Manual review required
+              comment = textwrap.dedent(f"""\
+                  ## 🔴 risk:high — Manual review required
 
-          This PR touches one or more **critical paths** that must be reviewed by @{OWNER_LOGIN} before merging:
+                  This PR touches one or more **critical paths** that must be reviewed by @{OWNER_LOGIN} before merging:
 
-          {trigger_list}
+                  {trigger_list}
 
-          **Why these files are critical:**
-          | Path | Reason |
-          |------|--------|
-          | `src/handoff/models.py` | Data model — schema changes affect every layer |
-          | `src/handoff/db.py` | Database initialization and migration runner |
-          | `src/handoff/backup_schema.py` | Backup/restore contract |
-          | `src/handoff/migrations/` | DB migrations — irreversible in production |
-          | `src/handoff/data.py` | Core data-access layer |
-          | `src/handoff/updater.py` | Patch/update logic — security boundary |
-          | `src/handoff/autosave.py` | Shared mutable state |
-          | `src/handoff/paths.py` | File-system paths — path-traversal risk |
-          | `pyproject.toml` / `uv.lock` | Dependency changes |
-          | `.github/workflows/` | CI/CD pipeline — can affect all automation |
+                  **Why these files are critical:**
+                  | Path | Reason |
+                  |------|--------|
+                  | `src/handoff/models.py` | Data model — schema changes affect every layer |
+                  | `src/handoff/db.py` | Database initialization and migration runner |
+                  | `src/handoff/backup_schema.py` | Backup/restore contract |
+                  | `src/handoff/migrations/` | DB migrations — irreversible in production |
+                  | `src/handoff/data.py` | Core data-access layer |
+                  | `src/handoff/updater.py` | Patch/update logic — security boundary |
+                  | `src/handoff/autosave.py` | Shared mutable state |
+                  | `src/handoff/paths.py` | File-system paths — path-traversal risk |
+                  | `pyproject.toml` / `uv.lock` | Dependency changes |
+                  | `.github/CODEOWNERS` | Review gate ownership policy |
+                  | `.github/workflows/` | CI/CD pipeline — can affect all automation |
 
-          A review from @{OWNER_LOGIN} has been requested automatically.
-          """
+                  A review from @{OWNER_LOGIN} has been requested automatically.
+                  """).strip()
               request_review()
           else:
-              comment = f"""\
-          ## 🟢 risk:low — Agent-safe change
+              comment = textwrap.dedent(f"""\
+                  ## 🟢 risk:low — Agent-safe change
 
-          All {len(filenames)} changed file(s) in this PR are in **agent-safe paths** \
-          (tests, docs, UI pages, service layer) and do not touch any critical code areas. \
-          This PR can be merged without a manual review by @{OWNER_LOGIN} if CI is green.
+                  All {len(filenames)} changed file(s) in this PR are in **agent-safe paths**
+                  (tests, docs, UI pages, service layer) and do not touch any critical code areas.
+                  This PR can be merged without a manual review by @{OWNER_LOGIN} if CI is green.
 
-          > If you believe this classification is wrong, add the `risk:high` label manually.
-          """
+                  > If you believe this classification is wrong, add the `risk:high` label manually.
+                  """).strip()
 
           upsert_comment(comment)
           print(f"PR #{PR_NUMBER} classified as risk:{risk_level}.")
