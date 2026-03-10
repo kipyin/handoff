@@ -21,8 +21,8 @@ from handoff.services.dashboard_service import (
     get_dashboard_metrics,
     get_deadline_adherence_trend,
     get_exportable_metrics,
-    get_open_aging_profile,
     get_on_time_close_rate_trend,
+    get_open_aging_profile,
 )
 
 
