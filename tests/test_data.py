@@ -937,29 +937,33 @@ def test_query_action_handoffs_search_includes_check_in_notes(session, monkeypat
     session.commit()
     session.refresh(p)
 
-    h = Handoff(
-        project_id=p.id,
-        need_back="Unrelated title",
-        next_check=date(2026, 3, 9),
-        notes="none",
-    )
-    session.add(h)
+    h_match = Handoff(project_id=p.id, need_back="Follow up A", next_check=date(2026, 3, 9))
+    h_other = Handoff(project_id=p.id, need_back="Follow up B", next_check=date(2026, 3, 9))
+    session.add_all([h_match, h_other])
     session.commit()
-    session.refresh(h)
+    session.refresh(h_match)
+    session.refresh(h_other)
 
-    session.add(
-        CheckIn(
-            handoff_id=h.id,
-            check_in_date=date(2026, 3, 9),
-            check_in_type=CheckInType.ON_TRACK,
-            note="Need assumption doc X before proceeding",
-        )
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=h_match.id,
+                check_in_date=date(2026, 3, 8),
+                check_in_type=CheckInType.ON_TRACK,
+                note="Customer waiting on assumption doc X",
+            ),
+            CheckIn(
+                handoff_id=h_other.id,
+                check_in_date=date(2026, 3, 8),
+                check_in_type=CheckInType.ON_TRACK,
+                note="No blockers",
+            ),
+        ]
     )
     session.commit()
 
     results = data.query_action_handoffs(search_text="assumption doc X")
-    assert len(results) == 1
-    assert results[0].id == h.id
+    assert [h.id for h in results] == [h_match.id]
 
 
 def test_query_risk_handoffs(session, monkeypatch) -> None:
@@ -1672,6 +1676,78 @@ def test_create_check_in(session, monkeypatch) -> None:
     refreshed = session.get(Handoff, h.id)
     assert refreshed is not None
     assert refreshed.next_check == date(2026, 3, 8)
+
+
+def test_create_check_in_concluded_does_not_update_next_check(session, monkeypatch) -> None:
+    """Concluded check-ins must not change handoff.next_check."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    h = Handoff(project_id=p.id, need_back="Task", next_check=date(2026, 3, 8))
+    session.add(h)
+    session.commit()
+    session.refresh(h)
+
+    data.create_check_in(
+        handoff_id=h.id,
+        check_in_type=CheckInType.CONCLUDED,
+        check_in_date=date(2026, 3, 9),
+        next_check_date=date(2026, 3, 15),
+    )
+    refreshed = session.get(Handoff, h.id)
+    assert refreshed is not None
+    assert refreshed.next_check == date(2026, 3, 8)
+
+
+def test_create_check_in_missing_handoff_raises(session, monkeypatch) -> None:
+    """create_check_in raises ValueError when handoff id does not exist."""
+    _patch_session_context(monkeypatch, session)
+    with pytest.raises(ValueError, match="not found for check-in"):
+        data.create_check_in(
+            handoff_id=99999,
+            check_in_type=CheckInType.ON_TRACK,
+            check_in_date=date(2026, 3, 9),
+        )
+
+
+def test_query_concluded_handoffs_search_includes_check_in_notes(session, monkeypatch) -> None:
+    """query_concluded_handoffs search text matches concluded check-in notes."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    h_match = Handoff(project_id=p.id, need_back="Closed A")
+    h_other = Handoff(project_id=p.id, need_back="Closed B")
+    session.add_all([h_match, h_other])
+    session.commit()
+    session.refresh(h_match)
+    session.refresh(h_other)
+
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=h_match.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.CONCLUDED,
+                note="Wrapped after assumption doc X arrived",
+            ),
+            CheckIn(
+                handoff_id=h_other.id,
+                check_in_date=date(2026, 3, 9),
+                check_in_type=CheckInType.CONCLUDED,
+                note="Routine close-out",
+            ),
+        ]
+    )
+    session.commit()
+
+    results = data.query_concluded_handoffs(search_text="assumption doc X")
+    assert [h.id for h in results] == [h_match.id]
 
 
 def test_handoff_is_open_and_close_date(session, monkeypatch) -> None:
