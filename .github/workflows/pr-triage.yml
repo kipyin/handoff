@@ -2,10 +2,11 @@
 # matching label, post (or update) an explanatory comment, and — for
 # risk:high PRs — request a review from @kipyin.
 #
-# Risk criteria (mirrors CODEOWNERS and AGENTS.md "agent-unsafe" list):
-#   risk:high  — any change touches data model, migrations, DB layer,
-#                update/patch logic, dependencies, or CI pipelines.
-#   risk:low   — all changes are in tests, docs, or pure UI/service code.
+# Risk criteria (mirrors CODEOWNERS):
+#   risk:high  — any change touches models.py, migrations/, updater.py,
+#                pyproject.toml, or .github/workflows/.
+#   risk:low   — all other changes (data.py, db.py, services, pages,
+#                tests, docs, autosave.py, paths.py, uv.lock, …).
 
 name: PR Triage – Risk Classification
 
@@ -50,24 +51,17 @@ jobs:
 
           # ── Path patterns ──────────────────────────────────────────────────
           # Any changed file matching one of these forces a risk:high rating.
+          # Everything else is agent-safe (data.py, db.py, services, pages,
+          # tests, docs, autosave.py, paths.py, uv.lock …).
           HIGH_RISK_PATTERNS = [
-              # Data model & schema
+              # Data model — schema changes are irreversible and affect every layer
               "src/handoff/models.py",
-              "src/handoff/db.py",
-              "src/handoff/backup_schema.py",
-              # DB migrations (prefix match)
+              # DB migrations — irreversible in production (prefix match)
               "src/handoff/migrations/",
-              # Core data-access layer
-              "src/handoff/data.py",
-              # Update / patch / path logic (security boundary)
+              # Patch / update logic — security boundary
               "src/handoff/updater.py",
-              "src/handoff/autosave.py",
-              "src/handoff/paths.py",
-              # Project dependencies
+              # Project dependencies — can introduce vulnerabilities
               "pyproject.toml",
-              "uv.lock",
-              # Review gate and CI/CD pipeline definitions
-              ".github/CODEOWNERS",
               # CI/CD pipeline definitions (prefix match)
               ".github/workflows/",
           ]
@@ -237,17 +231,11 @@ jobs:
                   **Why these files are critical:**
                   | Path | Reason |
                   |------|--------|
-                  | `src/handoff/models.py` | Data model — schema changes affect every layer |
-                  | `src/handoff/db.py` | Database initialization and migration runner |
-                  | `src/handoff/backup_schema.py` | Backup/restore contract |
+                  | `src/handoff/models.py` | Data model — schema changes are irreversible and affect every layer |
                   | `src/handoff/migrations/` | DB migrations — irreversible in production |
-                  | `src/handoff/data.py` | Core data-access layer |
                   | `src/handoff/updater.py` | Patch/update logic — security boundary |
-                  | `src/handoff/autosave.py` | Shared mutable state |
-                  | `src/handoff/paths.py` | File-system paths — path-traversal risk |
-                  | `pyproject.toml` / `uv.lock` | Dependency changes |
-                  | `.github/CODEOWNERS` | Review gate ownership policy |
-                  | `.github/workflows/` | CI/CD pipeline — can affect all automation |
+                  | `pyproject.toml` | Dependency changes — can introduce vulnerabilities |
+                  | `.github/workflows/` | CI/CD pipeline — changes affect all automation |
 
                   A review from @{OWNER_LOGIN} has been requested automatically.
                   """).strip()
