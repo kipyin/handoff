@@ -7,12 +7,13 @@ from datetime import date, datetime
 import pytest
 
 from handoff.backup_schema import (
+    BackupCheckInRecord,
+    BackupHandoffRecord,
     BackupPayload,
     BackupProjectRecord,
-    BackupTodoRecord,
     _require_model_id,
 )
-from handoff.models import Project, Todo, TodoStatus
+from handoff.models import CheckIn, CheckInType, Handoff, Project
 
 
 def test_require_model_id_returns_value_when_present() -> None:
@@ -20,8 +21,8 @@ def test_require_model_id_returns_value_when_present() -> None:
 
 
 def test_require_model_id_raises_on_none() -> None:
-    with pytest.raises(ValueError, match="Cannot serialize todo without a persisted id"):
-        _require_model_id(None, label="todo")
+    with pytest.raises(ValueError, match="Cannot serialize handoff without a persisted id"):
+        _require_model_id(None, label="handoff")
 
 
 class TestBackupProjectRecord:
@@ -63,181 +64,223 @@ class TestBackupProjectRecord:
             BackupProjectRecord.from_model(project)
 
 
-class TestBackupTodoRecord:
+class TestBackupHandoffRecord:
     def test_from_dict_full(self) -> None:
         raw = {
             "id": 10,
             "project_id": 1,
-            "name": "Fix bug",
-            "status": "handoff",
+            "need_back": "Fix bug",
             "deadline": "2026-04-01",
-            "helper": "Alice",
+            "pitchman": "Alice",
             "notes": "Important",
             "created_at": "2026-03-01T09:00:00",
-            "completed_at": "2026-03-15T17:00:00",
-            "is_archived": False,
         }
-        record = BackupTodoRecord.from_dict(raw)
+        record = BackupHandoffRecord.from_dict(raw)
         assert record.id == 10
-        assert record.status == TodoStatus.HANDOFF
+        assert record.need_back == "Fix bug"
         assert record.deadline == date(2026, 4, 1)
-        assert record.helper == "Alice"
-        assert record.completed_at == datetime(2026, 3, 15, 17, 0)
-
-    def test_from_dict_legacy_delegated_status(self) -> None:
-        raw = {
-            "id": 11,
-            "project_id": 1,
-            "name": "Old task",
-            "status": "delegated",
-            "created_at": "2026-01-01T00:00:00",
-        }
-        record = BackupTodoRecord.from_dict(raw)
-        assert record.status == TodoStatus.HANDOFF
+        assert record.pitchman == "Alice"
 
     def test_from_dict_null_optional_fields(self) -> None:
         raw = {
             "id": 12,
             "project_id": 1,
-            "name": "Minimal",
-            "status": "done",
+            "need_back": "Minimal",
             "created_at": "2026-01-01T00:00:00",
         }
-        record = BackupTodoRecord.from_dict(raw)
+        record = BackupHandoffRecord.from_dict(raw)
         assert record.deadline is None
-        assert record.helper is None
+        assert record.pitchman is None
         assert record.notes is None
-        assert record.completed_at is None
 
     def test_to_dict_round_trip(self) -> None:
-        record = BackupTodoRecord(
+        record = BackupHandoffRecord(
             id=20,
             project_id=3,
-            name="Task",
-            status=TodoStatus.DONE,
+            need_back="Task",
+            pitchman="Bob",
             next_check=date(2026, 5, 15),
             deadline=date(2026, 6, 1),
-            helper="Bob",
             notes="Done!",
             created_at=datetime(2026, 5, 1),
-            completed_at=datetime(2026, 5, 30),
-            is_archived=True,
         )
         d = record.to_dict()
-        assert d["status"] == "done"
         assert d["deadline"] == "2026-06-01"
-        assert d["completed_at"] == "2026-05-30T00:00:00"
-        assert d["is_archived"] is True
-        roundtripped = BackupTodoRecord.from_dict(d)
+        roundtripped = BackupHandoffRecord.from_dict(d)
         assert roundtripped == record
 
     def test_to_dict_null_fields(self) -> None:
-        record = BackupTodoRecord(
+        record = BackupHandoffRecord(
             id=21,
             project_id=1,
-            name="Bare",
-            status=TodoStatus.HANDOFF,
+            need_back="Bare",
+            pitchman=None,
             next_check=None,
             deadline=None,
-            helper=None,
             notes=None,
             created_at=datetime(2026, 1, 1),
-            completed_at=None,
         )
         d = record.to_dict()
         assert d["deadline"] is None
-        assert d["completed_at"] is None
+        assert d["pitchman"] is None
 
     def test_from_model(self) -> None:
-        todo = Todo(
+        handoff = Handoff(
             id=30,
             project_id=1,
-            name="Test",
-            status=TodoStatus.CANCELED,
+            need_back="Test",
+            pitchman="Carol",
             deadline=date(2026, 7, 1),
-            helper="Carol",
-            notes="cancelled",
+            notes="testing",
             created_at=datetime(2026, 6, 1),
-            completed_at=None,
-            is_archived=False,
         )
-        record = BackupTodoRecord.from_model(todo)
+        record = BackupHandoffRecord.from_model(handoff)
         assert record.id == 30
-        assert record.status == TodoStatus.CANCELED
+        assert record.need_back == "Test"
 
     def test_from_model_raises_on_none_id(self) -> None:
-        todo = Todo(
+        handoff = Handoff(
             id=None,
             project_id=1,
-            name="No ID",
-            status=TodoStatus.HANDOFF,
+            need_back="No ID",
             created_at=datetime(2026, 1, 1),
         )
-        with pytest.raises(ValueError, match="Cannot serialize todo"):
-            BackupTodoRecord.from_model(todo)
+        with pytest.raises(ValueError, match="Cannot serialize handoff"):
+            BackupHandoffRecord.from_model(handoff)
+
+
+class TestBackupCheckInRecord:
+    def test_from_dict_round_trip(self) -> None:
+        raw = {
+            "id": 1,
+            "handoff_id": 10,
+            "check_in_date": "2026-03-01",
+            "note": "All good",
+            "check_in_type": "on_track",
+            "created_at": "2026-03-01T09:00:00",
+        }
+        record = BackupCheckInRecord.from_dict(raw)
+        assert record.id == 1
+        assert record.check_in_type == CheckInType.ON_TRACK
+        assert record.check_in_date == date(2026, 3, 1)
+
+        d = record.to_dict()
+        roundtripped = BackupCheckInRecord.from_dict(d)
+        assert roundtripped == record
+
+    def test_from_model(self) -> None:
+        ci = CheckIn(
+            id=5,
+            handoff_id=10,
+            check_in_date=date(2026, 3, 5),
+            check_in_type=CheckInType.CONCLUDED,
+            note="Done",
+            created_at=datetime(2026, 3, 5),
+        )
+        record = BackupCheckInRecord.from_model(ci)
+        assert record.id == 5
+        assert record.check_in_type == CheckInType.CONCLUDED
 
 
 class TestBackupPayload:
     def test_from_dict_valid(self) -> None:
         raw = {
             "projects": [{"id": 1, "name": "P", "created_at": "2026-01-01T00:00:00"}],
-            "todos": [
+            "handoffs": [
                 {
                     "id": 1,
                     "project_id": 1,
-                    "name": "T",
-                    "status": "handoff",
+                    "need_back": "T",
                     "created_at": "2026-01-01T00:00:00",
                 }
             ],
+            "check_ins": [],
         }
         payload = BackupPayload.from_dict(raw)
         assert len(payload.projects) == 1
-        assert len(payload.todos) == 1
+        assert len(payload.handoffs) == 1
+        assert len(payload.check_ins) == 0
 
     def test_from_dict_rejects_non_dict(self) -> None:
         with pytest.raises(ValueError, match="must be a JSON object"):
             BackupPayload.from_dict("not a dict")  # type: ignore[arg-type]
 
     def test_from_dict_rejects_missing_keys(self) -> None:
-        with pytest.raises(KeyError, match="projects.*todos"):
+        with pytest.raises(KeyError, match="projects.*handoffs"):
             BackupPayload.from_dict({"projects": []})
 
     def test_from_dict_rejects_non_list_values(self) -> None:
-        with pytest.raises(ValueError, match="must both be lists"):
-            BackupPayload.from_dict({"projects": "nope", "todos": "nope"})
+        with pytest.raises(ValueError, match="must be a list"):
+            BackupPayload.from_dict({"projects": "nope", "handoffs": "nope"})
 
     def test_to_dict_round_trip(self) -> None:
+        raw = {
+            "projects": [{"id": 1, "name": "P", "created_at": "2026-01-01T00:00:00"}],
+            "handoffs": [
+                {
+                    "id": 1,
+                    "project_id": 1,
+                    "need_back": "T",
+                    "created_at": "2026-01-01T00:00:00",
+                }
+            ],
+            "check_ins": [],
+        }
+        payload = BackupPayload.from_dict(raw)
+        d = payload.to_dict()
+        assert len(d["projects"]) == 1
+        assert len(d["handoffs"]) == 1
+        roundtripped = BackupPayload.from_dict(d)
+        assert roundtripped == payload
+
+    def test_from_models(self) -> None:
+        project = Project(id=1, name="P", created_at=datetime(2026, 1, 1), is_archived=False)
+        handoff = Handoff(
+            id=1,
+            project_id=1,
+            need_back="T",
+            created_at=datetime(2026, 1, 1),
+        )
+        ci = CheckIn(
+            id=1,
+            handoff_id=1,
+            check_in_date=date(2026, 1, 5),
+            check_in_type=CheckInType.ON_TRACK,
+            created_at=datetime(2026, 1, 5),
+        )
+        payload = BackupPayload.from_models([project], [handoff], [ci])
+        assert len(payload.projects) == 1
+        assert len(payload.handoffs) == 1
+        assert len(payload.check_ins) == 1
+        assert payload.handoffs[0].need_back == "T"
+
+    def test_legacy_todo_format(self) -> None:
+        """Legacy 'todos' key is converted to handoffs and check-ins."""
         raw = {
             "projects": [{"id": 1, "name": "P", "created_at": "2026-01-01T00:00:00"}],
             "todos": [
                 {
                     "id": 1,
                     "project_id": 1,
-                    "name": "T",
-                    "status": "handoff",
+                    "name": "Done task",
+                    "status": "done",
+                    "helper": "Alice",
                     "created_at": "2026-01-01T00:00:00",
-                }
+                    "completed_at": "2026-01-15T00:00:00",
+                },
+                {
+                    "id": 2,
+                    "project_id": 1,
+                    "name": "Open task",
+                    "status": "handoff",
+                    "helper": "Bob",
+                    "created_at": "2026-01-01T00:00:00",
+                },
             ],
         }
         payload = BackupPayload.from_dict(raw)
-        d = payload.to_dict()
-        assert len(d["projects"]) == 1
-        assert len(d["todos"]) == 1
-        roundtripped = BackupPayload.from_dict(d)
-        assert roundtripped == payload
-
-    def test_from_models(self) -> None:
-        project = Project(id=1, name="P", created_at=datetime(2026, 1, 1), is_archived=False)
-        todo = Todo(
-            id=1,
-            project_id=1,
-            name="T",
-            status=TodoStatus.HANDOFF,
-            created_at=datetime(2026, 1, 1),
-        )
-        payload = BackupPayload.from_models([project], [todo])
-        assert len(payload.projects) == 1
-        assert len(payload.todos) == 1
-        assert payload.projects[0].name == "P"
-        assert payload.todos[0].name == "T"
+        assert len(payload.handoffs) == 2
+        assert payload.handoffs[0].need_back == "Done task"
+        assert payload.handoffs[0].pitchman == "Alice"
+        assert len(payload.check_ins) == 1
+        assert payload.check_ins[0].check_in_type == CheckInType.CONCLUDED

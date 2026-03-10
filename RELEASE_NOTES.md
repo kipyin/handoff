@@ -25,6 +25,20 @@ Apply tags in this order. Use the first tag that matches.
   - Ruff/formatting cleanup, pyright fixes
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
 
+## 2026.3.10 [Recommended]
+
+- **Feature**
+  - **Todo -> Handoff paradigm shift:** Data and UI now operate on handoffs plus append-only check-ins (`on_track`, `delayed`, `concluded`) with latest-check-in lifecycle semantics.
+  - **Now board reorganization:** Main workflow is Risk | Action required | Upcoming | Concluded with check-in trail visibility on each item.
+  - **Latest-check-in lifecycle + append-only reopen:** Open/closed state now follows the latest check-in; reopen appends a new on-track check-in instead of mutating history.
+  - **Now page check-in flow expansion:** Risk, Action, and Upcoming all support On-track/Delayed/Conclude actions; Concluded items support Reopen.
+- **Improvement**
+  - **Check-in date semantics:** User-triggered check-ins always record the real action date (today), while `next_check` remains planning-only.
+  - **Dashboard PM metrics:** Dashboard cards and analytics focus on operational signals (at-risk now, overdue action, aging, on-time trend, cycle-time profile, reopen rate).
+  - **Documentation refresh:** README and AGENTS terminology now align with handoff/pitchman/need_back/check-in trail behavior.
+- **Internal**
+  - **Integration hardening:** Added end-to-end coverage for late/early check-ins, conclude→reopen lifecycle behavior, archived-project toggle interactions, and dashboard metrics smoke paths.
+
 ## 2026.3.9 [Recommended]
 
 - **Feature**

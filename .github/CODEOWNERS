@@ -1,0 +1,24 @@
+# CODEOWNERS — Critical areas that always require @kipyin review.
+#
+# Only the five paths below are protected; everything else (data.py,
+# services, pages, tests, docs, db.py, autosave.py, paths.py, uv.lock …)
+# is agent-safe and can be merged without a manual review when CI is green.
+#
+# Syntax: <path-pattern>  <owner>
+# Docs: https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Data model — schema changes are irreversible and affect every layer
+src/handoff/models.py                   @kipyin
+
+# DB migrations — irreversible in production
+src/handoff/migrations/                 @kipyin
+
+# Patch / update logic — security boundary
+src/handoff/updater.py                  @kipyin
+
+# Project dependencies — can introduce vulnerabilities
+pyproject.toml                          @kipyin
+
+# CI/CD pipelines — changes affect all automation
+.github/workflows/                      @kipyin
+.github/CODEOWNDERS                     @kipyin

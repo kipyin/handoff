@@ -19,3 +19,33 @@ def test_get_logs_dir_returns_path_and_creates_it(
     assert logs_dir.exists()
     assert logs_dir == tmp_path / "logs"
     assert logs_dir.name == "logs"
+
+
+def test_configure_logging_writes_sinks(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """configure_logging sets up stdout + file sinks and marks _CONFIGURED."""
+    import handoff.logging as log_mod
+
+    monkeypatch.setattr("handoff.logging.user_data_dir", lambda app, author: str(tmp_path))
+    # Force fresh configuration regardless of previous test runs.
+    monkeypatch.setattr(log_mod, "_CONFIGURED", False)
+
+    log_mod.configure_logging()
+
+    assert log_mod._CONFIGURED is True
+    # Log file should be created inside logs/
+    log_file = tmp_path / "logs" / "handoff.log"
+    assert log_file.exists()
+
+
+def test_configure_logging_is_idempotent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Calling configure_logging() twice does not raise and honours _CONFIGURED guard."""
+    import handoff.logging as log_mod
+
+    monkeypatch.setattr("handoff.logging.user_data_dir", lambda app, author: str(tmp_path))
+    monkeypatch.setattr(log_mod, "_CONFIGURED", False)
+
+    log_mod.configure_logging()
+    # Second call should be a no-op (returns early, no exception).
+    log_mod.configure_logging()
+
+    assert log_mod._CONFIGURED is True

@@ -49,5 +49,5 @@ def test_render_data_import_section_rejects_invalid_backup_shape(monkeypatch) ->
     _render_data_import_section()
 
     st_mock.error.assert_called_once_with(
-        "Invalid backup file. Expected a Handoff backup with 'projects' and 'todos' lists."
+        "Invalid backup file. Expected a Handoff backup with 'projects' and 'handoffs' lists."
     )

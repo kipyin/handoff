@@ -1,0 +1,142 @@
+name: Release CD
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "RELEASE_NOTES.md"
+      - "pyproject.toml"
+      - "src/handoff/version.py"
+      - ".github/workflows/release-cd.yml"
+  workflow_dispatch:
+    inputs:
+      impact_override:
+        description: "Optional override for testing (breaking/recommended/optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  detect-release-impact:
+    name: Detect release impact tag
+    runs-on: ubuntu-latest
+    outputs:
+      impact: ${{ steps.detect.outputs.impact }}
+      version: ${{ steps.detect.outputs.version }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Detect impact from latest release heading
+        id: detect
+        shell: bash
+        env:
+          IMPACT_OVERRIDE: ${{ github.event.inputs.impact_override || '' }}
+        run: |
+          python - <<'PY'
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          release_notes_path = Path("RELEASE_NOTES.md")
+          text = release_notes_path.read_text(encoding="utf-8")
+
+          match = re.search(
+              r"^##\s+(\d+\.\d+\.\d+)\s+\[(Breaking|Recommended|Optional)\]\s*$",
+              text,
+              re.MULTILINE,
+          )
+          if match is None:
+              print(
+                  "Could not find a release heading like '## YYYY.M.P [Recommended]' "
+                  "in RELEASE_NOTES.md.",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          version, impact = match.group(1), match.group(2).lower()
+          override = os.environ.get("IMPACT_OVERRIDE", "").strip().lower()
+          allowed = {"breaking", "recommended", "optional"}
+          if override:
+              if override not in allowed:
+                  print(
+                      f"Invalid impact override: {override}. Expected one of {sorted(allowed)}.",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+              impact = override
+
+          print(f"Detected release {version} with impact [{impact.title()}].")
+          output_path = Path(os.environ["GITHUB_OUTPUT"])
+          output_path.write_text(
+              f"impact={impact}\nversion={version}\n",
+              encoding="utf-8",
+          )
+          PY
+
+  build-patch:
+    name: Build patch artifact
+    needs: detect-release-impact
+    if: needs.detect-release-impact.outputs.impact == 'recommended' || needs.detect-release-impact.outputs.impact == 'optional'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build patch
+        run: uv run handoff build --patch
+
+      - name: Upload patch artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: handoff-${{ needs.detect-release-impact.outputs.version }}-patch
+          path: dist/*-patch.zip
+          if-no-files-found: error
+
+  build-full:
+    name: Build full artifact
+    needs: detect-release-impact
+    if: needs.detect-release-impact.outputs.impact == 'breaking'
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Build full release
+        run: uv run handoff build --full
+
+      - name: Upload full artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: handoff-${{ needs.detect-release-impact.outputs.version }}-full
+          path: dist/*-windows-embed.zip
+          if-no-files-found: error

@@ -20,7 +20,7 @@ from streamlit.testing.v1 import AppTest
 import handoff.data as data
 import handoff.db as db
 from handoff.dates import add_business_days
-from handoff.models import TodoStatus
+from handoff.services import snooze_handoff
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 
@@ -161,15 +161,15 @@ def test_now_page_renders_with_app_test(app_test_db: Path) -> None:
 
 
 def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None:
-    """Now page shows items when project + handoff todo exist with next_check due."""
+    """Now page shows items when project + handoff exist with next_check due."""
     db.init_db()
     project = data.create_project("Test Project")
     assert project.id is not None
-    data.create_todo(
+    data.create_handoff(
         project_id=project.id,
-        name="Follow up with Alice",
+        need_back="Follow up with Alice",
         next_check=date(2000, 1, 1),
-        helper="Alice",
+        pitchman="Alice",
     )
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=5)
@@ -178,67 +178,273 @@ def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None
     assert len(at.get("expander")) >= 1
 
 
-def test_now_page_close_button_marks_todo_done(app_test_db: Path) -> None:
-    """Clicking Close on a Now item marks it done."""
+def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
+    """Conclude flow on a due action item adds a concluded check-in.
+
+    Due action items (next_check in the past) use a two-step check-in form:
+    1. Click "Conclude" to enter concluded mode.
+    2. Submit "Save conclude check-in" to persist and close the handoff.
+    """
     db.init_db()
-    project = data.create_project("Now Close Test")
+    project = data.create_project("Now Conclude Test")
     assert project.id is not None
-    todo = data.create_todo(
+    handoff = data.create_handoff(
         project_id=project.id,
-        name="Close this handoff",
+        need_back="Conclude this handoff",
         next_check=date(2000, 1, 1),
-        helper="Alex",
+        pitchman="Alex",
     )
-    assert todo.id is not None
+    assert handoff.id is not None
 
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    close_buttons = [b for b in at.button if getattr(b, "label", None) == "✓ Close"]
-    assert close_buttons, "Expected Close button not found on Now page"
-    close_buttons[0].click().run(timeout=5)
+    # Due action items show "On-track / Delayed / Conclude" buttons in-line.
+    conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "Conclude"]
+    assert conclude_buttons, "Expected Conclude button not found on Now page"
+    conclude_buttons[0].click().run(timeout=5)
     assert len(at.exception) == 0
 
-    todos = data.query_todos(project_ids=[project.id])
-    updated = next((t for t in todos if t.id == todo.id), None)
+    # After clicking Conclude, a save form appears.
+    save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"]
+    assert save_buttons, "Expected 'Save conclude check-in' button not found"
+    save_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    # Handoff should no longer be open (concluded check-in was persisted).
+    handoffs = data.query_handoffs(project_ids=[project.id], include_concluded=True)
+    updated = next((h for h in handoffs if h.id == handoff.id), None)
     assert updated is not None
-    assert updated.status == TodoStatus.DONE
-    assert updated.completed_at is not None
+    assert not data.handoff_is_open(updated)
+
+
+def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: Path) -> None:
+    """Conclude then reopen flow moves an item back to the open sections."""
+    db.init_db()
+    project = data.create_project("Now Reopen Test")
+    assert project.id is not None
+    handoff = data.create_handoff(
+        project_id=project.id,
+        need_back="Conclude and reopen this handoff",
+        next_check=date(2000, 1, 1),
+        pitchman="Jordan",
+    )
+    assert handoff.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "Conclude"]
+    assert conclude_buttons, "Expected Conclude button not found on Now page"
+    conclude_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_conclude_buttons = [
+        b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"
+    ]
+    assert save_conclude_buttons, "Expected 'Save conclude check-in' button not found"
+    save_conclude_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
+    assert reopen_buttons, "Expected Reopen button not found in Concluded section"
+    reopen_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Save reopen"]
+    assert save_reopen_buttons, "Expected 'Save reopen' button not found"
+    save_reopen_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    handoffs = data.query_handoffs(project_ids=[project.id], include_concluded=True)
+    updated = next((h for h in handoffs if h.id == handoff.id), None)
+    assert updated is not None
+    assert data.handoff_is_open(updated)
+
+    concluded_names = [h.need_back for h in data.query_concluded_handoffs(project_ids=[project.id])]
+    assert "Conclude and reopen this handoff" not in concluded_names
+
+
+def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db: Path) -> None:
+    """Late (due) check-in records today's check-in date."""
+    today = date.today()
+    expected_next_check = add_business_days(today, 1)
+    db.init_db()
+    project = data.create_project("Now Due Check-in Test")
+    assert project.id is not None
+    handoff = data.create_handoff(
+        project_id=project.id,
+        need_back="Due check-in should use today",
+        next_check=date(2000, 1, 1),
+        pitchman="Jamie",
+    )
+    assert handoff.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    on_track_buttons = [b for b in at.button if getattr(b, "label", None) == "On-track"]
+    assert on_track_buttons, "Expected On-track button not found on Now page"
+    on_track_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
+    assert save_buttons, "Expected 'Save check-in' button not found"
+    save_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    updated = next(
+        h
+        for h in data.query_handoffs(project_ids=[project.id], include_concluded=True)
+        if h.id == handoff.id
+    )
+    latest = max(updated.check_ins, key=lambda ci: (ci.check_in_date, ci.created_at, ci.id or 0))
+    assert latest.check_in_type == data.CheckInType.ON_TRACK
+    assert latest.check_in_date == today
+    assert updated.next_check == expected_next_check
+
+
+def test_now_page_early_check_in_records_today_and_keeps_planned_next_check(
+    app_test_db: Path,
+) -> None:
+    """Early (not due yet) check-in still records today's check-in date."""
+    today = date.today()
+    db.init_db()
+    project = data.create_project("Now Early Check-in Test")
+    assert project.id is not None
+    planned_next_check = add_business_days(today, 5)
+    handoff = data.create_handoff(
+        project_id=project.id,
+        need_back="Early check-in should use today",
+        next_check=planned_next_check,
+        pitchman="Morgan",
+    )
+    assert handoff.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    on_track_buttons = [b for b in at.button if getattr(b, "label", None) == "On-track"]
+    assert on_track_buttons, "Expected On-track button not found on Now page"
+    on_track_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
+    assert save_buttons, "Expected 'Save check-in' button not found"
+    save_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    updated = next(
+        h
+        for h in data.query_handoffs(project_ids=[project.id], include_concluded=True)
+        if h.id == handoff.id
+    )
+    latest = max(updated.check_ins, key=lambda ci: (ci.check_in_date, ci.created_at, ci.id or 0))
+    assert latest.check_in_type == data.CheckInType.ON_TRACK
+    assert latest.check_in_date == today
+    assert updated.next_check == planned_next_check
+
+
+def test_now_page_archived_toggle_allows_reopen_under_latest_lifecycle(app_test_db: Path) -> None:
+    """Archived concluded handoffs are reopenable only when archived toggle is enabled."""
+    db.init_db()
+    active = data.create_project("Active")
+    archived = data.create_project("Archived")
+    assert active.id is not None
+    assert archived.id is not None
+    assert data.archive_project(archived.id) is True
+
+    data.create_handoff(
+        project_id=active.id,
+        need_back="Active open handoff",
+        next_check=date(2000, 1, 1),
+        pitchman="Alex",
+    )
+    archived_handoff = data.create_handoff(
+        project_id=archived.id,
+        need_back="Archived concluded handoff",
+        next_check=date(2000, 1, 1),
+        pitchman="Taylor",
+    )
+    assert archived_handoff.id is not None
+    data.conclude_handoff(archived_handoff.id, note="Done in archived project")
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+    assert not [b for b in at.button if getattr(b, "label", None) == "Reopen"]
+
+    assert len(at.checkbox) >= 1
+    at.checkbox[0].check().run(timeout=5)
+    assert len(at.exception) == 0
+
+    reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
+    assert reopen_buttons, "Expected Reopen button once archived projects are included"
+    reopen_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Save reopen"]
+    assert save_reopen_buttons, "Expected Save reopen button after clicking Reopen"
+    save_reopen_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    archived_concluded_names = [
+        h.need_back
+        for h in data.query_concluded_handoffs(
+            project_ids=[archived.id],
+            include_archived_projects=True,
+        )
+    ]
+    assert "Archived concluded handoff" not in archived_concluded_names
+
+    archived_open_names = [
+        h.need_back
+        for h in data.query_upcoming_handoffs(
+            project_ids=[archived.id],
+            include_archived_projects=True,
+        )
+    ]
+    assert "Archived concluded handoff" in archived_open_names
 
 
 def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
-    """Clicking Snooze updates the todo next_check to the date input default (next business day)."""
+    """Snooze updates a handoff's next_check date.
+
+    The "Snooze" button lives inside a st.popover (Actions), which
+    Streamlit's AppTest v1 does not expose.  This test therefore verifies the
+    service-layer path directly: the Now page renders cleanly when the handoff
+    is in the upcoming section, and snooze_handoff() updates the DB.
+    """
     db.init_db()
     project = data.create_project("Now Snooze Test")
     assert project.id is not None
-    todo = data.create_todo(
+    handoff = data.create_handoff(
         project_id=project.id,
-        name="Snooze this handoff",
-        next_check=date(2000, 1, 1),
-        helper="Riley",
+        need_back="Snooze this handoff",
+        next_check=add_business_days(date.today(), 5),
+        pitchman="Riley",
     )
-    assert todo.id is not None
+    assert handoff.id is not None
 
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=5)
     assert len(at.exception) == 0
+    # The handoff appears in the upcoming section (next_check is in the future).
+    assert len(at.get("expander")) >= 1
 
-    snooze_buttons = [b for b in at.button if getattr(b, "label", None) == "Snooze"]
-    assert snooze_buttons, "Expected Snooze button not found on Now page"
-    snooze_buttons[0].click().run(timeout=5)
-    assert len(at.exception) == 0
-
-    todos = data.query_todos(project_ids=[project.id])
-    updated = next((t for t in todos if t.id == todo.id), None)
+    # Simulate what the Snooze button would do via the service boundary.
+    snooze_target = add_business_days(date.today(), 1)
+    updated = snooze_handoff(handoff.id, to_date=snooze_target)
     assert updated is not None
-    # UI default for Snooze date is add_business_days(today, 1)
-    assert updated.next_check == add_business_days(date.today(), 1)
-    assert updated.status == TodoStatus.HANDOFF
+    assert updated.next_check == snooze_target
 
 
-def test_now_page_add_form_creates_todo(app_test_db: Path) -> None:
-    """Submitting the Add handoff form creates a new todo."""
+def test_now_page_add_form_creates_handoff(app_test_db: Path) -> None:
+    """Submitting the Add handoff form creates a new handoff."""
     db.init_db()
     project = data.create_project("Add Form Test")
     assert project.id is not None
@@ -260,10 +466,64 @@ def test_now_page_add_form_creates_todo(app_test_db: Path) -> None:
     add_buttons[0].click().run(timeout=5)
     assert len(at.exception) == 0
 
-    todos = data.query_todos(project_ids=[project.id])
-    created = next((t for t in todos if t.name == "New handoff from add form"), None)
+    handoffs = data.query_handoffs(project_ids=[project.id], include_concluded=True)
+    created = next((h for h in handoffs if h.need_back == "New handoff from add form"), None)
     assert created is not None
-    assert created.status == TodoStatus.HANDOFF
+
+
+def test_dashboard_page_pm_metrics_smoke_with_seed_data(app_test_db: Path) -> None:
+    """Dashboard renders PM cards for seeded lifecycle data."""
+    db.init_db()
+    project = data.create_project("Dashboard PM Test")
+    assert project.id is not None
+    today = date.today()
+
+    risk = data.create_handoff(
+        project_id=project.id,
+        need_back="Risk handoff",
+        next_check=today,
+        deadline=today,
+        pitchman="R1",
+    )
+    overdue = data.create_handoff(
+        project_id=project.id,
+        need_back="Overdue action",
+        next_check=add_business_days(today, -1),
+        pitchman="R2",
+    )
+    due_today = data.create_handoff(
+        project_id=project.id,
+        need_back="Due today action",
+        next_check=today,
+        pitchman="R3",
+    )
+    reopened = data.create_handoff(
+        project_id=project.id,
+        need_back="Recently reopened",
+        next_check=today,
+        pitchman="R4",
+    )
+    assert all(h.id is not None for h in [risk, overdue, due_today, reopened])
+
+    data.create_check_in(
+        handoff_id=risk.id,
+        check_in_type=data.CheckInType.DELAYED,
+        check_in_date=today,
+    )
+    data.conclude_handoff(reopened.id, note="initial conclude")
+    data.reopen_handoff(
+        reopened.id, note="reopen for follow-up", next_check_date=add_business_days(today, 1)
+    )
+
+    at = AppTest.from_function(_dashboard_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    metric_labels = [getattr(metric, "label", None) for metric in at.metric]
+    assert "At risk now" in metric_labels
+    assert "Action overdue" in metric_labels
+    assert "Open handoffs" in metric_labels
+    assert "Reopen rate (90d)" in metric_labels
 
 
 def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
@@ -271,7 +531,6 @@ def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
     at = AppTest.from_file(str(WORKSPACE / "app.py"))
     at.run(timeout=5)
     assert len(at.exception) == 0
-    # First page (Now) should render; we expect at least a subheader or info
     assert len(at.get("subheader")) >= 1 or len(at.get("info")) >= 1
 
 
@@ -281,9 +540,6 @@ def test_projects_create_form_submit_no_error(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    # Fill project name and submit. The Projects page always renders a project-name
-    # text input and a Create submit button. Target them by label/key so the test
-    # fails if the UI contract breaks.
     project_name_inputs = [
         ti
         for ti in at.text_input
@@ -308,5 +564,5 @@ def test_about_page_tab_switch_no_error(app_test_db: Path) -> None:
 
     tabs = at.tabs
     assert len(tabs) == 2, f"Expected exactly 2 tabs on About page, got {len(tabs)}"
-    tabs[1].run(timeout=5)  # Switch to Release notes tab
+    tabs[1].run(timeout=5)
     assert len(at.exception) == 0

@@ -1,8 +1,8 @@
 ## Handoff
 
 Handoff helps you see who is on the hook across all your projects. It is a local
-to‑do app for juggling tasks across different engagements (projects). The app is
-designed for personal use and runs locally with SQLite.
+handoff tracker for juggling follow-ups across different engagements (projects).
+The app is designed for personal use and runs locally with SQLite.
 
 ## Quickstart
 
@@ -14,16 +14,17 @@ uv sync
 uv run handoff
 ```
 
-You get a local, single-user to-do app backed by SQLite, with a unified view
-across projects and helpers, and an in-app update flow.
+You get a local, single-user handoff tracker backed by SQLite, with a unified
+view across projects and pitchmen, plus an in-app update flow.
 
 ## Who is this for?
 
-Handoff is designed for a single person managing multiple projects and helpers,
+Handoff is designed for a single person managing multiple projects and follow-up
+owners (pitchmen),
 not for a multi-user team deployment. Typical use cases include:
 
 - Tracking work across several client engagements or internal projects.
-- Seeing, at a glance, what you owe to different people (helpers) this week.
+- Seeing, at a glance, what you owe to different people this week.
 - Planning near-term deadlines without maintaining multiple spreadsheets.
 
 The app is intentionally simple and local-only: you run it on your own machine
@@ -32,21 +33,19 @@ and keep control of your data.
 ## Why this over a spreadsheet?
 
 Unlike an ad-hoc Excel or Sheets tracker, this app is opinionated around
-**multi-project, helper-centric work**:
+multi-project handoff follow-up:
 
-- **Cross-project view**: All todos live in a single table so you can see your
-  entire workload across engagements at once, without maintaining separate tabs.
-- **Helper dimension**: The `helper` field treats "who is on the hook" as a
-  first-class axis for filtering and planning (for example, "what have I
-  delegated to Alice this week?").
-- **Deadlines & focus presets**: Deadline filters (today, tomorrow, this week,
-  custom ranges) are tuned for short-horizon planning rather than long-term
-  Gantt charts.
-- **Lightweight history & backups**: Todos and projects are stored in a local
-  SQLite database with a built-in JSON/CSV export, so you can safely experiment
-  without losing data.
-- **Streamlit-native UX**: The UI is optimised for quick inline editing,
-  filtering, and saving, not for cell-by-cell formulas or complex formatting.
+- **Check-in lifecycle**: A handoff is open until its latest check-in is
+  `concluded`. Check-ins are append-only (`on_track`, `delayed`, `concluded`),
+  so you keep a compact decision trail instead of mutating history.
+- **Operational Now board**: The main workflow is split into Risk, Action
+  required, Upcoming, and Concluded so attention goes to what needs action now.
+- **Pitchman dimension**: "Who is on the hook" is first-class for filtering and
+  planning (for example, "what do I need back from Alice this week?").
+- **Lightweight local data + backups**: Handoffs, check-ins, and projects are
+  stored in local SQLite with built-in JSON/CSV exports.
+- **Streamlit-native UX**: The UI is optimized for quick inline edits,
+  check-ins, filtering, and follow-up updates.
 
 If you find yourself stitching together multiple sheets or constantly
 re-filtering to answer "what must ship this week across all projects?", this app
@@ -64,35 +63,36 @@ To keep the app simple and robust, some things are intentionally out of scope:
 
 ## Features
 
-1. **Projects** — Create and manage engagements/projects on the Projects page.
-2. **Todos per project** — Each project has many todos. Each todo has:
-   - Name
-   - Next check (optional follow-up date)
+1. **Projects** - Create and manage engagements/projects on the Projects page,
+   including archive/unarchive.
+2. **Handoffs + check-ins** - Each handoff tracks:
+   - Need back (`need_back`)
+   - Who owns it (`pitchman`)
+   - Next check (planning date)
    - Deadline (optional)
-   - Creation timestamp (auto)
-   - Status: `handoff` | `done` | `canceled`
-   - Helper (assignee)
-   - Notes (text; you can paste links, file paths, etc.)
-3. **Now page** — Control-tower view for action-required handoffs. Shows items
-   that need attention (next check due today or earlier, or deadline at risk).
-   Add new handoffs, edit existing ones, Snooze to a specific follow-up date
-   using a date picker, or Close when done. Upcoming section lists handoffs not
-   yet due. Filter by project, helper, or search. Search supports natural-language
-   date filters: `@today` (check due/overdue), `@due today`, `overdue`, `check
-   this week`, `due next 7 days`. Who dropdown lists only helpers with open
-   handoffs.
-4. **Dashboard** — At-a-glance metrics: open handoffs, completed this week vs
-   last, median cycle time, and on-time rate. Plus a weekly throughput chart
-   and current helper load.
-5. **Updates and backups** — An in-app System Settings page lets you apply code-only
-   patch zips and restore from backups created before each update.
+   - Context notes (optional, markdown-friendly)
+   - Check-in trail (`on_track`, `delayed`, `concluded`) with optional notes
+3. **Now page** - Main control tower with four sections:
+   - **Risk**: deadline near and delayed
+   - **Action required**: next check due/overdue
+   - **Upcoming**: open and not in Risk/Action
+   - **Concluded**: latest check-in is concluded
+   You can add/edit handoffs, check in early or when due, conclude, and reopen
+   from Concluded (append-only history). Filters: Project, Who, Search, and
+   "Include archived projects".
+4. **Dashboard** - PM-operational metrics focused on execution reliability:
+   at-risk now, action overdue, open aging profile, on-time close trend, cycle
+   time by project (p50/p90), and reopen rate.
+5. **Updates and backups** - System Settings lets you apply code-only patch zips
+   and restore from backups created before each update.
 
 ## Where your data lives
 
 By default, the SQLite database is stored in your per-user data directory so app
 updates do not overwrite your data (for example on Windows:
-`%APPDATA%\handoff\todo.db`). You can override the location by setting the
-`HANDOFF_DB_PATH` environment variable before starting the app.
+`%APPDATA%\handoff\todo.db`, retained for backward compatibility). You can
+override the location by setting the `HANDOFF_DB_PATH` environment variable
+before starting the app.
 
 > **Migrating from `TODO_APP_DB_PATH`:** The legacy `TODO_APP_DB_PATH`
 > environment variable is no longer recognised. If you were using it to point
@@ -137,8 +137,8 @@ What gets logged (non-exhaustive):
 
 - Database initialisation and file location.
 - Project creation, rename, and delete operations.
-- Creating, updating, and deleting todos (with context, row number, and todo
-  id).
+- Creating, updating, and deleting handoffs (with context and ids).
+- Recording check-ins and lifecycle transitions (conclude/reopen).
 - Save summary counts and high-level query info.
 
 For deeper diagnostics you can extend the existing `loguru` calls in

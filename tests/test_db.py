@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from handoff.db import DatabaseInitializationError
+from handoff.models import CheckInType
 
 
 def _reload_db_module(db_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -52,79 +53,35 @@ def _table_exists(sqlite_path: str, table: str) -> bool:
         conn.close()
 
 
-def test_init_db_creates_tables_and_completed_at(
+def test_init_db_creates_tables(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """init_db creates tables and includes the completed_at column on a fresh DB."""
+    """init_db creates handoff, check_in, project, and activity_log tables on a fresh DB."""
     db_path = tmp_path / "todo.db"
     db = _reload_db_module(db_path, monkeypatch)
 
     db.init_db()
 
     sqlite_path = _get_sqlite_path(db.get_database_url())
-    todo_columns = _fetch_columns(sqlite_path, "todo")
+    handoff_columns = _fetch_columns(sqlite_path, "handoff")
+    check_in_columns = _fetch_columns(sqlite_path, "check_in")
     project_columns = _fetch_columns(sqlite_path, "project")
-    # Sanity-check core columns plus the migration columns.
-    assert {"id", "project_id", "name"}.issubset(todo_columns)
-    assert "completed_at" in todo_columns
-    assert "is_archived" in todo_columns
-    assert "next_check" in todo_columns
+    assert {"id", "project_id", "need_back"}.issubset(handoff_columns)
+    assert "pitchman" in handoff_columns
+    assert "next_check" in handoff_columns
+    assert {"id", "handoff_id", "check_in_date", "check_in_type"}.issubset(check_in_columns)
     assert "is_archived" in project_columns
     assert _table_exists(sqlite_path, "schema_version")
     assert _table_exists(sqlite_path, "activity_log")
+    assert not _table_exists(sqlite_path, "todo")
 
 
-def test_init_db_adds_completed_at_to_existing_schema(
+def test_init_db_migrates_from_old_todo_schema(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """init_db applies the completed_at migration for an older todo schema."""
-    db_path = tmp_path / "todo.db"
-    db = _reload_db_module(db_path, monkeypatch)
-
-    sqlite_path = _get_sqlite_path(db.get_database_url())
-    # Simulate an older schema that predates the completed_at/is_archived columns.
-    conn = sqlite3.connect(sqlite_path)
-    try:
-        conn.execute(
-            """
-            CREATE TABLE todo (
-                id INTEGER PRIMARY KEY,
-                project_id INTEGER NOT NULL,
-                name TEXT NOT NULL
-            )
-            """,
-        )
-        conn.execute(
-            """
-            CREATE TABLE project (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL
-            )
-            """,
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    # Running init_db again should leave the existing table in place but add
-    # the completed_at column via the lightweight migration.
-    db.init_db()
-
-    todo_columns = _fetch_columns(sqlite_path, "todo")
-    project_columns = _fetch_columns(sqlite_path, "project")
-    assert "completed_at" in todo_columns
-    assert "is_archived" in todo_columns
-    assert "next_check" in todo_columns
-    assert "is_archived" in project_columns
-
-
-def test_init_db_adds_next_check_to_existing_schema(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """init_db applies the next_check migration for a todo schema that lacks it."""
+    """init_db migrates an older schema with todo table to handoff + check_in."""
     db_path = tmp_path / "todo.db"
     db = _reload_db_module(db_path, monkeypatch)
 
@@ -143,7 +100,8 @@ def test_init_db_adds_next_check_to_existing_schema(
                 notes TEXT NULL,
                 created_at TIMESTAMP NOT NULL,
                 completed_at TIMESTAMP NULL,
-                is_archived INTEGER NOT NULL DEFAULT 0
+                is_archived INTEGER NOT NULL DEFAULT 0,
+                next_check DATE NULL
             )
             """,
         )
@@ -157,17 +115,119 @@ def test_init_db_adds_next_check_to_existing_schema(
             )
             """,
         )
+        conn.execute(
+            "INSERT INTO project (id, name, created_at, is_archived) "
+            "VALUES (1, 'My Project', '2026-01-01 00:00:00', 0)"
+        )
+        conn.execute(
+            "INSERT INTO todo (id, project_id, name, status, helper, created_at, is_archived) "
+            "VALUES (1, 1, 'Open task', 'handoff', 'Alice', '2026-01-01 00:00:00', 0)"
+        )
+        conn.execute(
+            "INSERT INTO todo (id, project_id, name, status, helper, created_at, "
+            "completed_at, is_archived) "
+            "VALUES (2, 1, 'Done task', 'done', 'Bob', '2026-01-01 00:00:00', "
+            "'2026-01-15 00:00:00', 0)"
+        )
         conn.commit()
     finally:
         conn.close()
 
-    todo_columns_before = _fetch_columns(sqlite_path, "todo")
-    assert "next_check" not in todo_columns_before
+    db.init_db()
+
+    assert _table_exists(sqlite_path, "handoff")
+    assert _table_exists(sqlite_path, "check_in")
+    assert not _table_exists(sqlite_path, "todo")
+
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        handoffs = conn.execute(
+            "SELECT id, need_back, pitchman FROM handoff ORDER BY id"
+        ).fetchall()
+        check_ins = conn.execute("SELECT handoff_id, check_in_type FROM check_in").fetchall()
+    finally:
+        conn.close()
+
+    assert len(handoffs) == 2
+    assert handoffs[0][1] == "Open task"
+    assert handoffs[0][2] == "Alice"
+    assert handoffs[1][1] == "Done task"
+    assert handoffs[1][2] == "Bob"
+
+    assert len(check_ins) == 1
+    assert check_ins[0][0] == 2
+    assert check_ins[0][1] == "concluded"
+
+
+def test_migrated_data_readable_via_data_layer(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Migrated data can be read through the ORM/data layer (enum hydration)."""
+    db_path = tmp_path / "todo.db"
+    db = _reload_db_module(db_path, monkeypatch)
+
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute(
+            """
+            CREATE TABLE todo (
+                id INTEGER PRIMARY KEY,
+                project_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'handoff',
+                deadline DATE NULL,
+                helper TEXT NULL,
+                notes TEXT NULL,
+                created_at TIMESTAMP NOT NULL,
+                completed_at TIMESTAMP NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0,
+                next_check DATE NULL
+            )
+            """,
+        )
+        conn.execute(
+            """
+            CREATE TABLE project (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                is_archived INTEGER NOT NULL DEFAULT 0
+            )
+            """,
+        )
+        conn.execute(
+            "INSERT INTO project (id, name, created_at, is_archived) "
+            "VALUES (1, 'My Project', '2026-01-01 00:00:00', 0)"
+        )
+        conn.execute(
+            "INSERT INTO todo (id, project_id, name, status, helper, created_at, is_archived) "
+            "VALUES (1, 1, 'Open task', 'handoff', 'Alice', '2026-01-01 00:00:00', 0)"
+        )
+        conn.execute(
+            "INSERT INTO todo (id, project_id, name, status, helper, created_at, "
+            "completed_at, is_archived) "
+            "VALUES (2, 1, 'Done task', 'done', 'Bob', '2026-01-01 00:00:00', "
+            "'2026-01-15 00:00:00', 0)"
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
     db.init_db()
 
-    todo_columns_after = _fetch_columns(sqlite_path, "todo")
-    assert "next_check" in todo_columns_after
+    from handoff.data import query_concluded_handoffs
+
+    concluded = query_concluded_handoffs()
+    assert len(concluded) == 1
+    assert concluded[0].need_back == "Done task"
+    assert len(concluded[0].check_ins) >= 1
+    for ci in concluded[0].check_ins:
+        # Ensure the enum is hydrated correctly, not stored as a raw string.
+        assert isinstance(ci.check_in_type, CheckInType)
+    # query_concluded_handoffs() guarantees at least one concluded check-in,
+    # not that all related check-ins are concluded.
+    assert any(ci.check_in_type is CheckInType.CONCLUDED for ci in concluded[0].check_ins)
 
 
 def test_init_db_is_idempotent(
@@ -179,22 +239,22 @@ def test_init_db_is_idempotent(
     db = _reload_db_module(db_path, monkeypatch)
 
     db.init_db()
-    todo_columns_first = _fetch_columns(_get_sqlite_path(db.get_database_url()), "todo")
+    handoff_columns_first = _fetch_columns(_get_sqlite_path(db.get_database_url()), "handoff")
 
     db.init_db()
-    todo_columns_second = _fetch_columns(_get_sqlite_path(db.get_database_url()), "todo")
+    handoff_columns_second = _fetch_columns(_get_sqlite_path(db.get_database_url()), "handoff")
 
-    assert todo_columns_first == todo_columns_second
-    assert "next_check" in todo_columns_second
-    assert "completed_at" in todo_columns_second
-    assert "is_archived" in todo_columns_second
+    assert handoff_columns_first == handoff_columns_second
+    assert "next_check" in handoff_columns_second
+    assert "need_back" in handoff_columns_second
+    assert "pitchman" in handoff_columns_second
 
 
 def test_init_db_migrates_legacy_status(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """init_db migrates legacy status values: delegated→handoff, DELEGATED→HANDOFF."""
+    """init_db migrates legacy status values and converts to handoff + check_in."""
     db_path = tmp_path / "todo.db"
     db = _reload_db_module(db_path, monkeypatch)
 
@@ -238,7 +298,7 @@ def test_init_db_migrates_legacy_status(
         )
         conn.execute(
             "INSERT INTO todo (id, project_id, name, status, created_at, is_archived) "
-            "VALUES (2, 1, 'New', 'DELEGATED', '2026-01-01 00:00:00', 0)"
+            "VALUES (2, 1, 'New', 'handoff', '2026-01-01 00:00:00', 0)"
         )
         conn.commit()
     finally:
@@ -248,19 +308,20 @@ def test_init_db_migrates_legacy_status(
 
     conn = sqlite3.connect(sqlite_path)
     try:
-        rows = conn.execute("SELECT id, status FROM todo ORDER BY id").fetchall()
+        handoffs = conn.execute("SELECT id, need_back FROM handoff ORDER BY id").fetchall()
     finally:
         conn.close()
-    status_by_id = {r[0]: r[1] for r in rows}
-    assert status_by_id[1] == "handoff"
-    assert status_by_id[2] == "HANDOFF"
+
+    assert len(handoffs) == 2
+    assert handoffs[0][1] == "Old"
+    assert handoffs[1][1] == "New"
 
 
 def test_init_db_preserves_data_through_migration(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Migrating from older schema (no next_check) preserves existing project and todo data."""
+    """Migrating from older schema preserves existing project and handoff data."""
     db_path = tmp_path / "todo.db"
     db = _reload_db_module(db_path, monkeypatch)
 
@@ -310,16 +371,18 @@ def test_init_db_preserves_data_through_migration(
     conn = sqlite3.connect(sqlite_path)
     try:
         projects = conn.execute("SELECT id, name FROM project").fetchall()
-        todos = conn.execute("SELECT id, project_id, name, next_check FROM todo").fetchall()
+        handoffs = conn.execute(
+            "SELECT id, project_id, need_back, next_check FROM handoff"
+        ).fetchall()
     finally:
         conn.close()
 
     assert len(projects) == 1
     assert projects[0][1] == "My Project"
-    assert len(todos) == 1
-    assert todos[0][2] == "Existing todo"
-    assert todos[0][3] is None
-    assert todos[0][1] == 1
+    assert len(handoffs) == 1
+    assert handoffs[0][2] == "Existing todo"
+    assert handoffs[0][3] is None
+    assert handoffs[0][1] == 1
 
 
 def test_init_db_raises_when_engine_creation_fails(
