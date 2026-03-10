@@ -58,6 +58,11 @@ handoff = "scripts.cli:main"
 include = ["src", "scripts"]
 exclude = [
     "src/handoff/data.py",
+    "src/handoff/data_activity.py",
+    "src/handoff/data_handoffs.py",
+    "src/handoff/data_io.py",
+    "src/handoff/data_projects.py",
+    "src/handoff/data_queries.py",
     "src/handoff/pages/dashboard.py",
     "src/handoff/services/dashboard_service.py",
 ]

@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-import handoff.data as data
 from handoff.models import Handoff, Project
 from handoff.services import settings_service
 
@@ -24,13 +23,24 @@ def _patch_settings_path(monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
 
 
 def _patch_session_context(monkeypatch, session) -> None:
-    """Patch data module session context to reuse the test session."""
+    """Patch session_context in all data sub-modules to reuse the test session.
+
+    Each sub-module imports session_context directly, so all five must be
+    patched: data_activity (log_activity), data_handoffs (CRUD),
+    data_io (import/export), data_projects (project CRUD), data_queries (queries).
+    """
+    import handoff.data_activity as _da
+    import handoff.data_handoffs as _dh
+    import handoff.data_io as _dio
+    import handoff.data_projects as _dp
+    import handoff.data_queries as _dq
 
     @contextmanager
     def _session_context():
         yield session
 
-    monkeypatch.setattr(data, "session_context", _session_context)
+    for mod in (_da, _dh, _dio, _dp, _dq):
+        monkeypatch.setattr(mod, "session_context", _session_context)
 
 
 def test_get_export_payload_via_service(session, monkeypatch) -> None:
