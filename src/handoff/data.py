@@ -6,7 +6,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from loguru import logger
-from sqlalchemy import exists, text
+from sqlalchemy import exists, func, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import or_, select
 
@@ -559,7 +559,16 @@ def reopen_handoff(
             logger.warning(msg)
             raise ValueError(msg)
 
-        latest = _latest_check_in(handoff)
+        latest = session.exec(
+            select(CheckIn)
+            .where(CheckIn.handoff_id == handoff_id)
+            .order_by(
+                CheckIn.check_in_date.desc(),
+                CheckIn.created_at.desc(),
+                CheckIn.id.desc(),
+            )
+            .limit(1)
+        ).first()
         if latest is None or latest.check_in_type != CheckInType.CONCLUDED:
             msg = f"Handoff {handoff_id} cannot be reopened unless latest check-in is concluded"
             logger.info(msg)
@@ -616,6 +625,44 @@ def _check_in_note_subquery(search_value: str):
     )
 
 
+def _latest_check_in_type_subquery():
+    """Return a correlated scalar subquery for the latest check-in type."""
+    return (
+        select(CheckIn.check_in_type)
+        .where(CheckIn.handoff_id == Handoff.id)
+        .order_by(
+            CheckIn.check_in_date.desc(),
+            CheckIn.created_at.desc(),
+            CheckIn.id.desc(),
+        )
+        .limit(1)
+        .correlate(Handoff)
+        .scalar_subquery()
+    )
+
+
+def _latest_check_in_is_open_predicate():
+    """Return SQL predicate for open handoffs by latest check-in semantics."""
+    latest_type = _latest_check_in_type_subquery()
+    return or_(latest_type.is_(None), latest_type != CheckInType.CONCLUDED)
+
+
+def _latest_check_in_is_concluded_predicate():
+    """Return SQL predicate for concluded handoffs by latest check-in semantics."""
+    latest_type = _latest_check_in_type_subquery()
+    return latest_type == CheckInType.CONCLUDED
+
+
+def _last_concluded_check_in_date_subquery():
+    """Return correlated scalar subquery for last concluded check-in date."""
+    return (
+        select(func.max(CheckIn.check_in_date))
+        .where(CheckIn.handoff_id == Handoff.id, CheckIn.check_in_type == CheckInType.CONCLUDED)
+        .correlate(Handoff)
+        .scalar_subquery()
+    )
+
+
 def _apply_handoff_filters(
     stmt,
     *,
@@ -663,12 +710,12 @@ def count_open_handoffs() -> int:
     """Return the number of open handoffs in non-archived projects."""
     with session_context() as session:
         stmt = (
-            select(Handoff)
-            .options(selectinload(Handoff.check_ins))
+            select(func.count())
+            .select_from(Handoff)
             .where(Handoff.project.has(Project.is_archived.is_(False)))
+            .where(_latest_check_in_is_open_predicate())
         )
-        handoffs = list(session.exec(stmt).unique().all())
-        return sum(1 for handoff in handoffs if handoff_is_open(handoff))
+        return int(session.exec(stmt).one())
 
 
 # ---------------------------------------------------------------------------
@@ -736,9 +783,13 @@ def query_handoffs(
             selectinload(Handoff.project),
             selectinload(Handoff.check_ins),
         )
+        close_date_expr = _last_concluded_check_in_date_subquery()
 
         if not include_archived_projects:
             stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
+
+        if not include_concluded:
+            stmt = stmt.where(_latest_check_in_is_open_predicate())
 
         if project_ids:
             stmt = stmt.where(Handoff.project_id.in_(project_ids))
@@ -756,6 +807,13 @@ def query_handoffs(
         if end is not None:
             stmt = stmt.where(Handoff.deadline.isnot(None)).where(Handoff.deadline <= end)
 
+        if concluded_start is not None or concluded_end is not None:
+            stmt = stmt.where(close_date_expr.isnot(None))
+            if concluded_start is not None:
+                stmt = stmt.where(close_date_expr >= concluded_start)
+            if concluded_end is not None:
+                stmt = stmt.where(close_date_expr <= concluded_end)
+
         normalized_search = (search_text or "").strip()
         if normalized_search:
             like_expr = f"%{normalized_search}%"
@@ -771,22 +829,6 @@ def query_handoffs(
 
         stmt = stmt.order_by(Handoff.deadline.asc().nulls_last(), Handoff.created_at.asc())
         handoffs = list(session.exec(stmt).unique().all())
-
-        if not include_concluded:
-            handoffs = [handoff for handoff in handoffs if handoff_is_open(handoff)]
-
-        if concluded_start is not None or concluded_end is not None:
-            filtered: list[Handoff] = []
-            for handoff in handoffs:
-                close_date = get_handoff_close_date(handoff)
-                if close_date is None:
-                    continue
-                if concluded_start is not None and close_date < concluded_start:
-                    continue
-                if concluded_end is not None and close_date > concluded_end:
-                    continue
-                filtered.append(handoff)
-            handoffs = filtered
 
         filters_applied = any(
             [
@@ -853,6 +895,7 @@ def query_now_items(
             select(Handoff)
             .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
             .where(Handoff.project.has(Project.is_archived.is_(False)))
+            .where(_latest_check_in_is_open_predicate())
         )
         if project_ids:
             stmt = stmt.where(Handoff.project_id.in_(project_ids))
@@ -896,7 +939,6 @@ def query_now_items(
         stmt = stmt.where(next_check_due | deadline_at_risk)
 
         handoffs = list(session.exec(stmt).unique().all())
-        handoffs = [handoff for handoff in handoffs if handoff_is_open(handoff)]
 
     result: list[tuple[Handoff, bool]] = []
     for h in handoffs:
@@ -956,6 +998,7 @@ def query_upcoming_handoffs(
         stmt = select(Handoff).options(
             selectinload(Handoff.project), selectinload(Handoff.check_ins)
         )
+        stmt = stmt.where(_latest_check_in_is_open_predicate())
         if not include_archived_projects:
             stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
         stmt = _apply_handoff_filters(
@@ -978,8 +1021,7 @@ def query_upcoming_handoffs(
     filtered = [
         handoff
         for handoff in handoffs
-        if handoff_is_open(handoff)
-        and not _is_risk_handoff(handoff, cutoff=cutoff)
+        if not _is_risk_handoff(handoff, cutoff=cutoff)
         and not (handoff.next_check is not None and handoff.next_check <= today)
     ]
     return filtered[:limit]
@@ -1004,6 +1046,7 @@ def query_action_handoffs(
         stmt = (
             select(Handoff)
             .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
+            .where(_latest_check_in_is_open_predicate())
             .where(Handoff.next_check.isnot(None))
             .where(Handoff.next_check <= today)
         )
@@ -1025,11 +1068,7 @@ def query_action_handoffs(
             Handoff.created_at.asc(),
         )
         handoffs = list(session.exec(stmt).unique().all())
-    return [
-        handoff
-        for handoff in handoffs
-        if handoff_is_open(handoff) and not _is_risk_handoff(handoff, cutoff=cutoff)
-    ]
+    return [handoff for handoff in handoffs if not _is_risk_handoff(handoff, cutoff=cutoff)]
 
 
 def query_risk_handoffs(
@@ -1050,6 +1089,7 @@ def query_risk_handoffs(
         stmt = (
             select(Handoff)
             .options(selectinload(Handoff.project), selectinload(Handoff.check_ins))
+            .where(_latest_check_in_is_open_predicate())
             .where(Handoff.deadline.isnot(None))
             .where(Handoff.deadline <= cutoff)
         )
@@ -1071,11 +1111,7 @@ def query_risk_handoffs(
             Handoff.created_at.asc(),
         )
         handoffs = list(session.exec(stmt).unique().all())
-    return [
-        handoff
-        for handoff in handoffs
-        if handoff_is_open(handoff) and _is_risk_handoff(handoff, cutoff=cutoff)
-    ]
+    return [handoff for handoff in handoffs if _is_risk_handoff(handoff, cutoff=cutoff)]
 
 
 def query_concluded_handoffs(
@@ -1097,9 +1133,11 @@ def query_concluded_handoffs(
         Concluded handoffs ordered by close date descending.
     """
     with session_context() as session:
+        close_date_expr = _last_concluded_check_in_date_subquery()
         stmt = select(Handoff).options(
             selectinload(Handoff.project), selectinload(Handoff.check_ins)
         )
+        stmt = stmt.where(_latest_check_in_is_concluded_predicate())
         if not include_archived_projects:
             stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
         if project_ids:
@@ -1120,14 +1158,8 @@ def query_concluded_handoffs(
                     exists(_check_in_note_subquery(like_expr)),
                 )
             )
-        handoffs = list(session.exec(stmt).unique().all())
-
-    handoffs = [handoff for handoff in handoffs if handoff_is_closed(handoff)]
-    handoffs.sort(
-        key=lambda h: get_handoff_close_date(h) or date.min,
-        reverse=True,
-    )
-    return handoffs
+        stmt = stmt.order_by(close_date_expr.desc(), Handoff.created_at.desc())
+        return list(session.exec(stmt).unique().all())
 
 
 # ---------------------------------------------------------------------------
@@ -1164,19 +1196,14 @@ def list_pitchmen_with_open_handoffs(*, include_archived_projects: bool = False)
         Sorted list of unique non-empty pitchman names.
     """
     with session_context() as session:
-        handoff_stmt = (
-            select(Handoff)
-            .options(selectinload(Handoff.check_ins))
-            .where(Handoff.pitchman.isnot(None))
-        )
+        stmt = select(Handoff.pitchman).where(Handoff.pitchman.isnot(None))
+        stmt = stmt.where(_latest_check_in_is_open_predicate())
         if not include_archived_projects:
-            handoff_stmt = handoff_stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
-        handoffs = list(session.exec(handoff_stmt).unique().all())
+            stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
+        raw_values = session.exec(stmt).all()
         canonical_by_lower: dict[str, str] = {}
-        for handoff in handoffs:
-            if not handoff_is_open(handoff):
-                continue
-            name = (handoff.pitchman or "").strip()
+        for raw in raw_values:
+            name = (raw or "").strip()
             if not name:
                 continue
             lowered = name.lower()

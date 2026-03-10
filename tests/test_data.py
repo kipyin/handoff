@@ -183,6 +183,103 @@ def test_list_pitchmen_with_open_handoffs_include_archived_projects(session, mon
     assert "Bob" in all_pitchmen
 
 
+def test_count_open_handoffs_uses_latest_check_in_semantics(session, monkeypatch) -> None:
+    """count_open_handoffs counts open-by-latest and excludes archived projects."""
+    _patch_session_context(monkeypatch, session)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    open_no_history = Handoff(project_id=active.id, need_back="Open no history")
+    closed_latest_concluded = Handoff(project_id=active.id, need_back="Closed latest concluded")
+    reopened_open = Handoff(project_id=active.id, need_back="Reopened and open")
+    archived_open = Handoff(project_id=archived.id, need_back="Archived open")
+    session.add_all([open_no_history, closed_latest_concluded, reopened_open, archived_open])
+    session.commit()
+    session.refresh(closed_latest_concluded)
+    session.refresh(reopened_open)
+
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=closed_latest_concluded.id,
+                check_in_date=date(2026, 3, 5),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=reopened_open.id,
+                check_in_date=date(2026, 3, 5),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=reopened_open.id,
+                check_in_date=date(2026, 3, 6),
+                check_in_type=CheckInType.ON_TRACK,
+            ),
+        ]
+    )
+    session.commit()
+
+    assert data.count_open_handoffs() == 2
+
+
+def test_query_handoffs_concluded_window_preserves_reopened_open_items(
+    session, monkeypatch
+) -> None:
+    """concluded_start/end filters by last concluded date while honoring latest open/closed."""
+    _patch_session_context(monkeypatch, session)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    closed = Handoff(project_id=p.id, need_back="Closed")
+    reopened = Handoff(project_id=p.id, need_back="Reopened")
+    never_concluded = Handoff(project_id=p.id, need_back="Never concluded")
+    session.add_all([closed, reopened, never_concluded])
+    session.commit()
+    session.refresh(closed)
+    session.refresh(reopened)
+
+    session.add_all(
+        [
+            CheckIn(
+                handoff_id=closed.id,
+                check_in_date=date(2026, 3, 5),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=reopened.id,
+                check_in_date=date(2026, 3, 6),
+                check_in_type=CheckInType.CONCLUDED,
+            ),
+            CheckIn(
+                handoff_id=reopened.id,
+                check_in_date=date(2026, 3, 7),
+                check_in_type=CheckInType.ON_TRACK,
+            ),
+        ]
+    )
+    session.commit()
+
+    all_with_window = data.query_handoffs(
+        include_concluded=True,
+        concluded_start=date(2026, 3, 5),
+        concluded_end=date(2026, 3, 6),
+    )
+    assert {h.need_back for h in all_with_window} == {"Closed", "Reopened"}
+
+    open_only_with_window = data.query_handoffs(
+        include_concluded=False,
+        concluded_start=date(2026, 3, 5),
+        concluded_end=date(2026, 3, 6),
+    )
+    assert {h.need_back for h in open_only_with_window} == {"Reopened"}
+
+
 def test_query_handoffs_filters(session, monkeypatch) -> None:
     """Verify query_handoffs with multiple filter combinations."""
     _patch_session_context(monkeypatch, session)
