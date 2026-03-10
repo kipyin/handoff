@@ -1,19 +1,11 @@
 """Check that Python source files stay under the PyArmor trial file-size limit.
 
-PyArmor's trial license refuses to obfuscate files over ~32KB. This script
-ensures every .py file under src/ (or the given paths) is under that limit
-so the issue surfaces before building.
-
-Usage:
-    uv run handoff sizecheck                    # defaults to src/
-    uv run handoff sizecheck path/to.py        # check given file(s) or dir(s)
-    uv run handoff sizecheck --max-bytes 40000  # override size limit
-    uv run handoff sizecheck --warn-threshold 0.8  # warn at 80% of limit
+PyArmor's trial license refuses to obfuscate files over ~32KB. The handoff CLI
+runs this via `uv run handoff sizecheck` so the issue surfaces before building.
 """
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 from . import ROOT
@@ -83,56 +75,3 @@ def run_sizecheck(
             pct = 100 * size / max_bytes
             warnings_list.append(f"{rel}: {size:,} bytes ({pct:.0f}% of limit)")
     return (len(violations) == 0, violations, warnings_list)
-
-
-def main() -> None:
-    """CLI entrypoint. Exit 0 if all files pass, 1 otherwise."""
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Check .py files under size limit.")
-    parser.add_argument(
-        "paths",
-        nargs="*",
-        default=None,
-        help="Paths to check (default: src/).",
-    )
-    parser.add_argument(
-        "--path",
-        "-p",
-        default=DEFAULT_PATH,
-        help=f"Default directory when no paths given (default: {DEFAULT_PATH}).",
-    )
-    parser.add_argument(
-        "--max-bytes",
-        type=int,
-        default=MAX_BYTES,
-        help=f"Max file size in bytes (default: {MAX_BYTES}).",
-    )
-    parser.add_argument(
-        "--warn-threshold",
-        type=float,
-        default=WARN_THRESHOLD,
-        help=f"Warn when file reaches this fraction of limit 0-1 (default: {WARN_THRESHOLD}).",
-    )
-    parsed = parser.parse_args()
-    paths = parsed.paths if parsed.paths else None
-    ok, violations, warnings_list = run_sizecheck(
-        paths,
-        default_path=parsed.path,
-        max_bytes=parsed.max_bytes,
-        warn_threshold=parsed.warn_threshold,
-    )
-    for w in warnings_list:
-        print(f"warning: {w}", file=sys.stderr)
-    if not ok:
-        print(
-            f"The following files exceed the limit ({parsed.max_bytes:,} bytes). "
-            "Split them into smaller modules:\n" + "\n".join(f"  {v}" for v in violations),
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    sys.exit(0)
-
-
-if __name__ == "__main__":
-    main()
