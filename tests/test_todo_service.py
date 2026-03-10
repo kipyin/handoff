@@ -278,7 +278,11 @@ def test_service_query_risk_handoffs(session, monkeypatch) -> None:
 
 
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:
-    """query_upcoming_handoffs returns handoffs with future next_check."""
+    """query_upcoming_handoffs returns non-action, non-risk open handoffs.
+
+    This includes handoffs with a future next_check and handoffs with no
+    next_check when they are otherwise not in Risk/Action.
+    """
     _patch_session_context(monkeypatch, session)
 
     class FixedDate(date):
@@ -294,11 +298,13 @@ def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:
     session.refresh(p)
 
     data.create_handoff(project_id=p.id, need_back="Upcoming", next_check=date(2026, 4, 1))
+    data.create_handoff(project_id=p.id, need_back="No next check", next_check=None)
     data.create_handoff(project_id=p.id, need_back="Overdue", next_check=date(2000, 1, 1))
 
     results = query_upcoming_handoffs()
     names = [r.need_back for r in results]
     assert "Upcoming" in names
+    assert "No next check" in names
     assert "Overdue" not in names
 
 

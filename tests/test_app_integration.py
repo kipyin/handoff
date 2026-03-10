@@ -20,6 +20,7 @@ from streamlit.testing.v1 import AppTest
 import handoff.data as data
 import handoff.db as db
 from handoff.dates import add_business_days
+from handoff.services import snooze_handoff
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 
@@ -228,8 +229,8 @@ def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
 
     The "Snooze" button lives inside a st.popover (Actions), which
     Streamlit's AppTest v1 does not expose.  This test therefore verifies the
-    full data-layer path directly: the Now page renders cleanly when the
-    handoff is in the upcoming section, and snooze_handoff() updates the DB.
+    service-layer path directly: the Now page renders cleanly when the handoff
+    is in the upcoming section, and snooze_handoff() updates the DB.
     """
     db.init_db()
     project = data.create_project("Now Snooze Test")
@@ -237,7 +238,7 @@ def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
     handoff = data.create_handoff(
         project_id=project.id,
         need_back="Snooze this handoff",
-        next_check=date(2000, 1, 1),
+        next_check=add_business_days(date.today(), 5),
         pitchman="Riley",
     )
     assert handoff.id is not None
@@ -245,12 +246,12 @@ def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=5)
     assert len(at.exception) == 0
-    # The handoff appears as an action item (next_check is overdue).
+    # The handoff appears in the upcoming section (next_check is in the future).
     assert len(at.get("expander")) >= 1
 
-    # Simulate what the Snooze button would do: call snooze_handoff directly.
+    # Simulate what the Snooze button would do via the service boundary.
     snooze_target = add_business_days(date.today(), 1)
-    updated = data.snooze_handoff(handoff.id, to_date=snooze_target)
+    updated = snooze_handoff(handoff.id, to_date=snooze_target)
     assert updated is not None
     assert updated.next_check == snooze_target
 
