@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -11,6 +11,7 @@ from handoff.models import CheckInType
 from handoff.services.dashboard_service import (
     ReopenRateSummary,
     compute_cycle_time_by_project,
+    compute_deadline_adherence_trend,
     compute_on_time_close_rate_trend,
     compute_open_aging_profile,
     compute_reopen_rate_summary,
@@ -152,6 +153,44 @@ def test_compute_reopen_rate_summary_tracks_reopened_closes() -> None:
     assert summary.rate_display == "50%"
 
 
+def test_compute_reopen_rate_summary_handles_mixed_timezone_created_at() -> None:
+    today = date(2026, 3, 10)
+    check_ins = [
+        SimpleNamespace(
+            id=1,
+            check_in_date=date(2026, 3, 1),
+            check_in_type=CheckInType.CONCLUDED,
+            created_at=None,
+        ),
+        SimpleNamespace(
+            id=2,
+            check_in_date=date(2026, 3, 1),
+            check_in_type=CheckInType.ON_TRACK,
+            created_at=datetime(2026, 3, 1, 9, 0, tzinfo=UTC),
+        ),
+    ]
+    handoff = _make_handoff(
+        id=1,
+        created_at=datetime(2026, 2, 1),
+        check_ins=check_ins,
+    )
+    summary = compute_reopen_rate_summary([handoff], today=today, window_days=30)
+    assert summary.total_closes == 1
+    assert summary.reopened_closes == 1
+
+
+def test_compute_deadline_adherence_trend_uses_dataset_timeframe() -> None:
+    historical = _make_handoff(
+        id=1,
+        created_at=datetime(2020, 1, 1),
+        deadline=date(2020, 1, 15),
+        check_ins=[_make_check_in(date(2020, 1, 10), CheckInType.CONCLUDED)],
+    )
+    trend = compute_deadline_adherence_trend([historical], weeks=8)
+    assert not trend.empty
+    assert trend.iloc[0]["week_label"].startswith("2020-")
+
+
 def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch) -> None:
     today = date(2026, 3, 10)
     open_handoffs = [
@@ -160,8 +199,10 @@ def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch)
         _make_handoff(id=3, created_at=datetime(2026, 2, 3), next_check=date(2026, 3, 12)),
     ]
     analytics_handoffs = [_make_handoff(id=4, created_at=datetime(2026, 2, 1))]
+    query_calls: list[dict[str, object]] = []
 
     def fake_query_handoffs(**kwargs):
+        query_calls.append(kwargs)
         if kwargs.get("include_concluded"):
             return analytics_handoffs
         return open_handoffs
@@ -184,6 +225,9 @@ def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch)
     assert metrics.open_handoffs == 3
     assert metrics.reopen_rate == "25%"
     assert metrics.reopen_rate_detail == "1 of 4 closes reopened"
+    analytics_call = next(call for call in query_calls if call.get("include_concluded"))
+    assert analytics_call["concluded_start"] == today - timedelta(days=90)
+    assert analytics_call["concluded_end"] == today
 
 
 def test_get_on_time_close_rate_trend_uses_service_query(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -48,6 +48,15 @@ def _check_in_type(check_in: CheckIn) -> CheckInType | None:
         return None
 
 
+def _normalize_sort_timestamp(created_at: datetime | None) -> datetime:
+    """Return a timezone-neutral timestamp for deterministic sorting."""
+    if created_at is None:
+        return datetime.min
+    if created_at.tzinfo is not None:
+        return created_at.replace(tzinfo=None)
+    return created_at
+
+
 def _sorted_check_ins(handoff: Handoff) -> list[CheckIn]:
     """Return a handoff trail sorted by date, timestamp, and id."""
     check_ins = getattr(handoff, "check_ins", []) or []
@@ -55,7 +64,7 @@ def _sorted_check_ins(handoff: Handoff) -> list[CheckIn]:
         check_ins,
         key=lambda ci: (
             ci.check_in_date,
-            getattr(ci, "created_at", None) or datetime.min,
+            _normalize_sort_timestamp(getattr(ci, "created_at", None)),
             getattr(ci, "id", 0) or 0,
         ),
     )
@@ -372,8 +381,18 @@ def compute_on_time_close_rate_trend(
 
 
 def compute_deadline_adherence_trend(handoffs: list[Handoff], weeks: int = 8) -> pd.DataFrame:
-    """Compatibility wrapper for the on-time close trend helper."""
-    trend = compute_on_time_close_rate_trend(handoffs, today=date.today(), weeks=weeks)
+    """Compatibility wrapper that derives an effective 'today' from input data."""
+    if weeks <= 0:
+        return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
+    close_dates = [get_handoff_close_date(handoff) for handoff in handoffs]
+    close_dates = [close_date for close_date in close_dates if close_date is not None]
+    if not close_dates:
+        return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
+    trend = compute_on_time_close_rate_trend(
+        handoffs,
+        today=max(close_dates),
+        weeks=weeks,
+    )
     if trend.empty:
         return pd.DataFrame(columns=["week_label", "on_time_rate", "total"])
     return trend[["week_label", "on_time_rate", "total"]]
@@ -393,6 +412,8 @@ class DashboardMetrics:
 
 def get_dashboard_metrics(today: date) -> DashboardMetrics:
     """Return PM-operations dashboard cards for current state."""
+    reopen_window_days = 90
+    reopen_window_start = today - timedelta(days=reopen_window_days)
     deadline_near_days = get_deadline_near_days()
     open_handoffs = query_handoffs(
         include_concluded=False,
@@ -417,11 +438,13 @@ def get_dashboard_metrics(today: date) -> DashboardMetrics:
     analytics_handoffs = query_handoffs(
         include_concluded=True,
         include_archived_projects=False,
+        concluded_start=reopen_window_start,
+        concluded_end=today,
     )
     reopen_summary = compute_reopen_rate_summary(
         analytics_handoffs,
         today=today,
-        window_days=90,
+        window_days=reopen_window_days,
     )
 
     return DashboardMetrics(
