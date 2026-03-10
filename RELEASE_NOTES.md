@@ -25,6 +25,17 @@ Apply tags in this order. Use the first tag that matches.
   - Ruff/formatting cleanup, pyright fixes
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
 
+## 2026.3.10 [Recommended]
+
+- **Feature**
+  - **Latest-check-in lifecycle + append-only reopen:** Open/closed state now follows the latest check-in; reopen appends a new on-track check-in instead of mutating history.
+  - **Now page check-in flow expansion:** Risk, Action, and Upcoming all support On-track/Delayed/Conclude actions; Concluded items support Reopen.
+- **Improvement**
+  - **Check-in date semantics:** User-triggered check-ins always record the real action date (today), while `next_check` remains planning-only.
+  - **Dashboard PM metrics:** Dashboard cards and analytics focus on operational signals (at-risk now, overdue action, aging, on-time trend, cycle-time profile, reopen rate).
+- **Internal**
+  - **Integration hardening:** Added end-to-end coverage for late/early check-ins, conclude→reopen lifecycle behavior, archived-project toggle interactions, and dashboard metrics smoke paths.
+
 ## 2026.3.9 [Recommended]
 
 - **Feature**

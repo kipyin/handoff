@@ -267,6 +267,150 @@ def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: 
     assert "Conclude and reopen this handoff" not in concluded_names
 
 
+def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db: Path) -> None:
+    """Late (due) check-in records today's check-in date."""
+    today = date.today()
+    expected_next_check = add_business_days(today, 1)
+    db.init_db()
+    project = data.create_project("Now Due Check-in Test")
+    assert project.id is not None
+    handoff = data.create_handoff(
+        project_id=project.id,
+        need_back="Due check-in should use today",
+        next_check=date(2000, 1, 1),
+        pitchman="Jamie",
+    )
+    assert handoff.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    on_track_buttons = [b for b in at.button if getattr(b, "label", None) == "On-track"]
+    assert on_track_buttons, "Expected On-track button not found on Now page"
+    on_track_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
+    assert save_buttons, "Expected 'Save check-in' button not found"
+    save_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    updated = next(
+        h
+        for h in data.query_handoffs(project_ids=[project.id], include_concluded=True)
+        if h.id == handoff.id
+    )
+    latest = max(updated.check_ins, key=lambda ci: (ci.check_in_date, ci.created_at, ci.id or 0))
+    assert latest.check_in_type == data.CheckInType.ON_TRACK
+    assert latest.check_in_date == today
+    assert updated.next_check == expected_next_check
+
+
+def test_now_page_early_check_in_records_today_and_keeps_planned_next_check(
+    app_test_db: Path,
+) -> None:
+    """Early (not due yet) check-in still records today's check-in date."""
+    today = date.today()
+    db.init_db()
+    project = data.create_project("Now Early Check-in Test")
+    assert project.id is not None
+    planned_next_check = add_business_days(today, 5)
+    handoff = data.create_handoff(
+        project_id=project.id,
+        need_back="Early check-in should use today",
+        next_check=planned_next_check,
+        pitchman="Morgan",
+    )
+    assert handoff.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    on_track_buttons = [b for b in at.button if getattr(b, "label", None) == "On-track"]
+    assert on_track_buttons, "Expected On-track button not found on Now page"
+    on_track_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
+    assert save_buttons, "Expected 'Save check-in' button not found"
+    save_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    updated = next(
+        h
+        for h in data.query_handoffs(project_ids=[project.id], include_concluded=True)
+        if h.id == handoff.id
+    )
+    latest = max(updated.check_ins, key=lambda ci: (ci.check_in_date, ci.created_at, ci.id or 0))
+    assert latest.check_in_type == data.CheckInType.ON_TRACK
+    assert latest.check_in_date == today
+    assert updated.next_check == planned_next_check
+
+
+def test_now_page_archived_toggle_allows_reopen_under_latest_lifecycle(app_test_db: Path) -> None:
+    """Archived concluded handoffs are reopenable only when archived toggle is enabled."""
+    db.init_db()
+    active = data.create_project("Active")
+    archived = data.create_project("Archived")
+    assert active.id is not None
+    assert archived.id is not None
+    assert data.archive_project(archived.id) is True
+
+    data.create_handoff(
+        project_id=active.id,
+        need_back="Active open handoff",
+        next_check=date(2000, 1, 1),
+        pitchman="Alex",
+    )
+    archived_handoff = data.create_handoff(
+        project_id=archived.id,
+        need_back="Archived concluded handoff",
+        next_check=date(2000, 1, 1),
+        pitchman="Taylor",
+    )
+    assert archived_handoff.id is not None
+    data.conclude_handoff(archived_handoff.id, note="Done in archived project")
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+    assert not [b for b in at.button if getattr(b, "label", None) == "Reopen"]
+
+    assert len(at.checkbox) >= 1
+    at.checkbox[0].check().run(timeout=5)
+    assert len(at.exception) == 0
+
+    reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
+    assert reopen_buttons, "Expected Reopen button once archived projects are included"
+    reopen_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Save reopen"]
+    assert save_reopen_buttons, "Expected Save reopen button after clicking Reopen"
+    save_reopen_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    archived_concluded_names = [
+        h.need_back
+        for h in data.query_concluded_handoffs(
+            project_ids=[archived.id],
+            include_archived_projects=True,
+        )
+    ]
+    assert "Archived concluded handoff" not in archived_concluded_names
+
+    archived_open_names = [
+        h.need_back
+        for h in data.query_upcoming_handoffs(
+            project_ids=[archived.id],
+            include_archived_projects=True,
+        )
+    ]
+    assert "Archived concluded handoff" in archived_open_names
+
+
 def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
     """Snooze updates a handoff's next_check date.
 
@@ -325,6 +469,61 @@ def test_now_page_add_form_creates_handoff(app_test_db: Path) -> None:
     handoffs = data.query_handoffs(project_ids=[project.id], include_concluded=True)
     created = next((h for h in handoffs if h.need_back == "New handoff from add form"), None)
     assert created is not None
+
+
+def test_dashboard_page_pm_metrics_smoke_with_seed_data(app_test_db: Path) -> None:
+    """Dashboard renders PM cards for seeded lifecycle data."""
+    db.init_db()
+    project = data.create_project("Dashboard PM Test")
+    assert project.id is not None
+    today = date.today()
+
+    risk = data.create_handoff(
+        project_id=project.id,
+        need_back="Risk handoff",
+        next_check=today,
+        deadline=today,
+        pitchman="R1",
+    )
+    overdue = data.create_handoff(
+        project_id=project.id,
+        need_back="Overdue action",
+        next_check=add_business_days(today, -1),
+        pitchman="R2",
+    )
+    due_today = data.create_handoff(
+        project_id=project.id,
+        need_back="Due today action",
+        next_check=today,
+        pitchman="R3",
+    )
+    reopened = data.create_handoff(
+        project_id=project.id,
+        need_back="Recently reopened",
+        next_check=today,
+        pitchman="R4",
+    )
+    assert all(h.id is not None for h in [risk, overdue, due_today, reopened])
+
+    data.create_check_in(
+        handoff_id=risk.id,
+        check_in_type=data.CheckInType.DELAYED,
+        check_in_date=today,
+    )
+    data.conclude_handoff(reopened.id, note="initial conclude")
+    data.reopen_handoff(
+        reopened.id, note="reopen for follow-up", next_check_date=add_business_days(today, 1)
+    )
+
+    at = AppTest.from_function(_dashboard_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    metric_labels = [getattr(metric, "label", None) for metric in at.metric]
+    assert "At risk now" in metric_labels
+    assert "Action overdue" in metric_labels
+    assert "Open handoffs" in metric_labels
+    assert "Reopen rate (90d)" in metric_labels
 
 
 def test_full_app_loads_with_app_test(app_test_db: Path) -> None:

@@ -358,6 +358,16 @@ Treat each sub-step as a focused change set with its own tests and a brief hando
   - No regressions in existing now/dashboard/project workflows.
 - **Token budget guidance:** ~8k-14k tokens.
 
+**Step 3.1-D completion notes (2026-03-10):**
+
+- Added AppTest integration coverage for:
+  - due (late) and early check-in flows validating real action-date recording (`check_in_date = today`)
+  - conclude -> reopen lifecycle movement out of Concluded
+  - archived-project toggle behavior under latest-check-in lifecycle semantics
+  - dashboard PM metric card smoke path with seeded lifecycle data
+- Added final data-layer edge-case test for archived include-toggle + latest-check-in lifecycle correctness after reopen.
+- Added `2026.3.10` draft block in `RELEASE_NOTES.md` to unblock Phase 4 docs finalization.
+
 ### Phase 3.1 done criteria
 
 - Reopen is append-only and works functionally.
