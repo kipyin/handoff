@@ -21,3 +21,4 @@ pyproject.toml                          @kipyin
 
 # CI/CD pipelines — changes affect all automation
 .github/workflows/                      @kipyin
+.github/CODEOWNDERS                     @kipyin
