@@ -20,6 +20,7 @@ from streamlit.testing.v1 import AppTest
 import handoff.data as data
 import handoff.db as db
 from handoff.dates import add_business_days
+from handoff.services import snooze_handoff
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 
@@ -178,7 +179,12 @@ def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None
 
 
 def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
-    """Clicking Conclude on a Now item adds a concluded check-in."""
+    """Conclude flow on a due action item adds a concluded check-in.
+
+    Due action items (next_check in the past) use a two-step check-in form:
+    1. Click "Conclude" to enter concluded mode.
+    2. Submit "Save conclude check-in" to persist and close the handoff.
+    """
     db.init_db()
     project = data.create_project("Now Conclude Test")
     assert project.id is not None
@@ -194,28 +200,35 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "✓ Conclude"]
+    # Due action items show "On-track / Delayed / Conclude" buttons in-line.
+    conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "Conclude"]
     assert conclude_buttons, "Expected Conclude button not found on Now page"
     conclude_buttons[0].click().run(timeout=5)
     assert len(at.exception) == 0
 
-    # Handoff should no longer appear in action items (it's concluded)
+    # After clicking Conclude, a save form appears.
+    save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"]
+    assert save_buttons, "Expected 'Save conclude check-in' button not found"
+    save_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    # Handoff should no longer be open (concluded check-in was persisted).
     handoffs = data.query_handoffs(project_ids=[project.id], include_concluded=True)
     updated = next((h for h in handoffs if h.id == handoff.id), None)
     assert updated is not None
     assert not data.handoff_is_open(updated)
 
 
-def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
-    """Clicking Snooze updates the handoff next_check to the date input default."""
+def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: Path) -> None:
+    """Conclude then reopen flow moves an item back to the open sections."""
     db.init_db()
-    project = data.create_project("Now Snooze Test")
+    project = data.create_project("Now Reopen Test")
     assert project.id is not None
     handoff = data.create_handoff(
         project_id=project.id,
-        need_back="Snooze this handoff",
+        need_back="Conclude and reopen this handoff",
         next_check=date(2000, 1, 1),
-        pitchman="Riley",
+        pitchman="Jordan",
     )
     assert handoff.id is not None
 
@@ -223,15 +236,67 @@ def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    snooze_buttons = [b for b in at.button if getattr(b, "label", None) == "Snooze"]
-    assert snooze_buttons, "Expected Snooze button not found on Now page"
-    snooze_buttons[0].click().run(timeout=5)
+    conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "Conclude"]
+    assert conclude_buttons, "Expected Conclude button not found on Now page"
+    conclude_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_conclude_buttons = [
+        b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"
+    ]
+    assert save_conclude_buttons, "Expected 'Save conclude check-in' button not found"
+    save_conclude_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
+    assert reopen_buttons, "Expected Reopen button not found in Concluded section"
+    reopen_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    save_reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Save reopen"]
+    assert save_reopen_buttons, "Expected 'Save reopen' button not found"
+    save_reopen_buttons[0].click().run(timeout=5)
     assert len(at.exception) == 0
 
     handoffs = data.query_handoffs(project_ids=[project.id], include_concluded=True)
     updated = next((h for h in handoffs if h.id == handoff.id), None)
     assert updated is not None
-    assert updated.next_check == add_business_days(date.today(), 1)
+    assert data.handoff_is_open(updated)
+
+    concluded_names = [h.need_back for h in data.query_concluded_handoffs(project_ids=[project.id])]
+    assert "Conclude and reopen this handoff" not in concluded_names
+
+
+def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
+    """Snooze updates a handoff's next_check date.
+
+    The "Snooze" button lives inside a st.popover (Actions), which
+    Streamlit's AppTest v1 does not expose.  This test therefore verifies the
+    service-layer path directly: the Now page renders cleanly when the handoff
+    is in the upcoming section, and snooze_handoff() updates the DB.
+    """
+    db.init_db()
+    project = data.create_project("Now Snooze Test")
+    assert project.id is not None
+    handoff = data.create_handoff(
+        project_id=project.id,
+        need_back="Snooze this handoff",
+        next_check=add_business_days(date.today(), 5),
+        pitchman="Riley",
+    )
+    assert handoff.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+    # The handoff appears in the upcoming section (next_check is in the future).
+    assert len(at.get("expander")) >= 1
+
+    # Simulate what the Snooze button would do via the service boundary.
+    snooze_target = add_business_days(date.today(), 1)
+    updated = snooze_handoff(handoff.id, to_date=snooze_target)
+    assert updated is not None
+    assert updated.next_check == snooze_target
 
 
 def test_now_page_add_form_creates_handoff(app_test_db: Path) -> None:

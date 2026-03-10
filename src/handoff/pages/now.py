@@ -24,9 +24,12 @@ from handoff.services import (
     query_concluded_handoffs,
     query_risk_handoffs,
     query_upcoming_handoffs,
+    reopen_handoff,
     snooze_handoff,
     update_handoff,
 )
+
+_NOW_FLASH_SUCCESS_KEY = "now_flash_success"
 
 
 def _render_filters(
@@ -110,11 +113,23 @@ def _is_check_in_due(handoff: Handoff) -> bool:
     return handoff.next_check is not None and handoff.next_check <= date.today()
 
 
-def _render_due_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
-    """Render on-track/delayed/conclude check-in forms for due handoffs."""
+def _set_flash_success(message: str) -> None:
+    """Persist one success message for display after the next rerun."""
+    st.session_state[_NOW_FLASH_SUCCESS_KEY] = message
+
+
+def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
+    """Render on-track/delayed/conclude check-in forms for open handoffs."""
     handoff_id = handoff.id
     if handoff_id is None:
         return
+
+    today = date.today()
+    if _is_check_in_due(handoff):
+        st.caption("Check-in due now. Record today's status.")
+    else:
+        planned_label = format_date_smart(handoff.next_check)
+        st.caption(f"Optional early check-in. Planned next check: {planned_label}.")
 
     mode_key = f"{key_prefix}_check_in_mode_{handoff_id}"
     selected_mode = st.session_state.get(mode_key)
@@ -128,52 +143,108 @@ def _render_due_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
             st.session_state[mode_key] = "delayed"
             st.rerun()
     with c3:
-        if st.button("✓ Conclude", key=f"{key_prefix}_conclude_btn_{handoff_id}"):
-            conclude_handoff(handoff_id)
-            st.success("Concluded.")
-            st.session_state.pop(mode_key, None)
+        if st.button("Conclude", key=f"{key_prefix}_conclude_btn_{handoff_id}"):
+            st.session_state[mode_key] = "concluded"
             st.rerun()
 
-    snooze_date = st.date_input(
-        "Snooze to",
-        value=add_business_days(date.today(), 1),
-        key=f"{key_prefix}_snooze_date_{handoff_id}",
-    )
-    if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{handoff_id}"):
-        snooze_handoff(handoff_id, to_date=snooze_date)
-        st.success("Snoozed.")
-        st.session_state.pop(mode_key, None)
-        st.rerun()
-
-    if selected_mode not in {"on_track", "delayed"}:
+    if selected_mode not in {"on_track", "delayed", "concluded"}:
         return
 
     form_key = f"{key_prefix}_check_in_form_{handoff_id}_{selected_mode}"
     with st.form(key=form_key):
-        note_label = "Note (optional)" if selected_mode == "on_track" else "Reason (optional)"
-        note = st.text_area(note_label, key=f"{form_key}_note")
-        next_check = st.date_input(
-            "Next check-in",
-            value=add_business_days(date.today(), 1),
-            key=f"{form_key}_next_check",
-        )
-        save = st.form_submit_button("Save check-in")
+        if selected_mode == "concluded":
+            note = st.text_area(
+                "Conclusion note (optional)",
+                key=f"{form_key}_note",
+            )
+            save = st.form_submit_button("Save conclude check-in")
+        else:
+            note_label = "Note (optional)" if selected_mode == "on_track" else "Reason (optional)"
+            note = st.text_area(note_label, key=f"{form_key}_note")
+            default_next_check = (
+                handoff.next_check
+                if handoff.next_check is not None and handoff.next_check > today
+                else add_business_days(today, 1)
+            )
+            next_check = st.date_input(
+                "Next check-in",
+                value=default_next_check,
+                key=f"{form_key}_next_check",
+            )
+            save = st.form_submit_button("Save check-in")
         cancel = st.form_submit_button("Cancel")
 
         if save:
             note_value = note.strip() or None
-            check_in_type = (
-                CheckInType.ON_TRACK if selected_mode == "on_track" else CheckInType.DELAYED
-            )
-            add_check_in(
-                handoff_id,
-                check_in_type=check_in_type,
-                note=note_value,
-                next_check_date=next_check,
-            )
-            st.success("Check-in saved.")
+            if selected_mode == "concluded":
+                conclude_handoff(handoff_id, note=note_value)
+                _set_flash_success("Checked in today as concluded.")
+            else:
+                check_in_type = (
+                    CheckInType.ON_TRACK if selected_mode == "on_track" else CheckInType.DELAYED
+                )
+                add_check_in(
+                    handoff_id,
+                    check_in_type=check_in_type,
+                    note=note_value,
+                    next_check_date=next_check,
+                )
+                _set_flash_success(
+                    f"Checked in today; next check set to {format_date_smart(next_check)}."
+                )
             st.session_state.pop(mode_key, None)
             st.rerun()
+        if cancel:
+            st.session_state.pop(mode_key, None)
+            st.rerun()
+
+
+def _render_reopen_flow(handoff: Handoff, *, key_prefix: str) -> None:
+    """Render append-only reopen controls for concluded handoffs."""
+    handoff_id = handoff.id
+    if handoff_id is None:
+        return
+
+    mode_key = f"{key_prefix}_reopen_mode_{handoff_id}"
+    if st.button("Reopen", key=f"{key_prefix}_reopen_btn_{handoff_id}"):
+        st.session_state[mode_key] = "reopen"
+        st.rerun()
+    if st.session_state.get(mode_key) != "reopen":
+        return
+
+    today = date.today()
+    default_next_check = add_business_days(today, 1)
+    form_key = f"{key_prefix}_reopen_form_{handoff_id}"
+    with st.form(key=form_key):
+        note = st.text_area(
+            "Reason (optional)",
+            placeholder="reopen: waiting on revised doc",
+            key=f"{form_key}_note",
+        )
+        next_check = st.date_input(
+            "Next check-in",
+            value=default_next_check,
+            key=f"{form_key}_next_check",
+        )
+        save = st.form_submit_button("Save reopen")
+        cancel = st.form_submit_button("Cancel")
+
+        if save:
+            note_value = note.strip() or None
+            try:
+                reopen_handoff(
+                    handoff_id,
+                    note=note_value,
+                    next_check_date=next_check,
+                )
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                _set_flash_success(
+                    f"Checked in today; next check set to {format_date_smart(next_check)}."
+                )
+                st.session_state.pop(mode_key, None)
+                st.rerun()
         if cancel:
             st.session_state.pop(mode_key, None)
             st.rerun()
@@ -185,8 +256,9 @@ def _render_item(
     *,
     project_by_name: dict[str, Project],
     is_risk: bool = False,
-    show_due_flow: bool = False,
+    show_check_in_controls: bool = False,
     allow_actions: bool = True,
+    allow_reopen: bool = False,
 ) -> None:
     """Render one handoff item in an expander."""
     handoff_id = handoff.id
@@ -225,9 +297,10 @@ def _render_item(
                 key_prefix=f"{key_prefix}_edit_{handoff_id}",
             )
         else:
-            if allow_actions and show_due_flow and _is_check_in_due(handoff):
-                _render_due_check_in_flow(handoff, key_prefix=key_prefix)
-            elif allow_actions:
+            if allow_actions and show_check_in_controls:
+                _render_check_in_flow(handoff, key_prefix=key_prefix)
+
+            if allow_actions:
                 today = date.today()
                 with st.popover("Actions"):
                     r1c1, r1c2 = st.columns(2)
@@ -236,21 +309,18 @@ def _render_item(
                             st.session_state["now_editing_handoff_id"] = handoff_id
                             st.rerun()
                     with r1c2:
-                        if st.button("✓ Conclude", key=f"{key_prefix}_conclude_{handoff_id}"):
-                            conclude_handoff(handoff_id)
-                            st.rerun()
-                    r2c1, r2c2 = st.columns(2)
-                    with r2c1:
                         custom_date = st.date_input(
                             "Date",
                             value=add_business_days(today, 1),
                             key=f"{key_prefix}_custom_{handoff_id}",
                             label_visibility="collapsed",
                         )
-                    with r2c2:
+                    with r1c2:
                         if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{handoff_id}"):
                             snooze_handoff(handoff_id, to_date=custom_date)
                             st.rerun()
+            elif allow_reopen:
+                _render_reopen_flow(handoff, key_prefix=key_prefix)
 
             if context:
                 st.markdown("**Context:**")
@@ -425,6 +495,9 @@ def render_now_page() -> None:
         "Minimize risks by clearing actions on time. "
         "Use Snooze to follow up later, or Conclude when done."
     )
+    flash_message = st.session_state.pop(_NOW_FLASH_SUCCESS_KEY, None)
+    if flash_message:
+        st.success(flash_message)
 
     include_archived_projects = st.checkbox(
         "Include archived projects",
@@ -510,6 +583,7 @@ def render_now_page() -> None:
                 "now_risk",
                 project_by_name=project_by_name,
                 is_risk=True,
+                show_check_in_controls=True,
                 allow_actions=True,
             )
 
@@ -524,7 +598,7 @@ def render_now_page() -> None:
                 handoff,
                 "now_action",
                 project_by_name=project_by_name,
-                show_due_flow=True,
+                show_check_in_controls=True,
             )
 
     # --- Upcoming section ---
@@ -538,6 +612,7 @@ def render_now_page() -> None:
                 handoff,
                 key_prefix="now_upcoming",
                 project_by_name=project_by_name,
+                show_check_in_controls=True,
             )
 
     # --- Concluded section ---
@@ -552,4 +627,5 @@ def render_now_page() -> None:
                 key_prefix="now_concluded",
                 project_by_name=project_by_name,
                 allow_actions=False,
+                allow_reopen=True,
             )

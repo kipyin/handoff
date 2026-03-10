@@ -3,6 +3,7 @@
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
+from sqlalchemy import Column, Enum
 from sqlmodel import Field, Relationship, SQLModel
 
 if "CheckInType" not in globals():
@@ -43,7 +44,7 @@ if "Handoff" not in globals():
         """A single handoff item belonging to a project.
 
         The pitchman is the person responsible for the deliverable. A handoff
-        is open until it has a check-in with type ``concluded``.
+        is closed when its latest check-in has type ``concluded``.
         """
 
         __tablename__ = "handoff"  # type: ignore[assignment]
@@ -74,7 +75,7 @@ if "CheckIn" not in globals():
         """A check-in entry on a handoff's trail.
 
         The trail records on-track, delayed, and concluded events. A handoff
-        is closed once it has at least one ``concluded`` check-in.
+        is closed when the latest event in the trail is ``concluded``.
         """
 
         __tablename__ = "check_in"  # type: ignore[assignment]
@@ -84,7 +85,16 @@ if "CheckIn" not in globals():
         handoff_id: int = Field(foreign_key="handoff.id", index=True)
         check_in_date: date
         note: str | None = Field(default=None)
-        check_in_type: CheckInType = Field(index=True)
+        check_in_type: CheckInType = Field(
+            sa_column=Column(
+                Enum(
+                    CheckInType,
+                    values_callable=lambda x: [e.value for e in x],
+                ),
+                index=True,
+                nullable=False,
+            ),
+        )
         created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
         handoff: Handoff | None = Relationship(back_populates="check_ins")
