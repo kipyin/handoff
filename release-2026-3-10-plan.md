@@ -383,3 +383,10 @@ Treat each sub-step as a focused change set with its own tests and a brief hando
 AGENTS.md: update terminology (Handoff, pitchman, need_back, check-in trail). README: any user-facing changes. RELEASE_NOTES: entry for paradigm shift. Integration tests. Commit: docs and polish.
 
 *Deliverable:* Docs updated. All tests pass. Ready for release.
+
+**Phase 4 completion notes (2026-03-10):**
+
+- Updated `AGENTS.md` terminology and workflow summary to reflect handoff + check-in lifecycle semantics.
+- Refreshed `README.md` user-facing language/features for Risk/Action/Upcoming/Concluded, check-in trail, reopen flow, and PM-metric dashboard framing.
+- Expanded `RELEASE_NOTES.md` `2026.3.10` block with explicit Todo→Handoff paradigm-shift + docs refresh bullets.
+- Validation run: `uv run handoff ci` passed (Ruff, pyright, pytest) with 395 passed / 1 skipped.

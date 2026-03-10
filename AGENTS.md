@@ -67,7 +67,14 @@ The goal is not maximal abstraction or maximal cleverness. The goal is code that
 
 ## Project overview
 
-**Handoff** is a single-user local to-do app built with Python 3.13+, Streamlit, and SQLite. No external services or Docker are needed.
+**Handoff** is a single-user local handoff tracker built with Python 3.13+, Streamlit, and SQLite. No external services or Docker are needed.
+
+### Core workflow
+
+- A **handoff** stays open until its latest check-in is `concluded`.
+- Check-ins are append-only (`on_track`, `delayed`, `concluded`) and form a per-handoff trail.
+- The Now page is organized as **Risk | Action required | Upcoming | Concluded**.
+- Terminology is canonical: use `pitchman` (who is responsible) and `need_back` (deliverable requested).
 
 ### Deployment philosophy
 
@@ -164,7 +171,7 @@ There is no Calendar page.
 
 **Pages / UI:** `uv run pytest tests/test_pages_projects.py tests/test_pages_now.py tests/test_dashboard.py`
 
-**Services:** `uv run pytest tests/test_todo_service.py tests/test_services_architecture.py`
+**Services:** `uv run pytest tests/test_todo_service.py tests/test_services_architecture.py` (handoff service tests; legacy filename retained)
 
 **Integration:** `cd /workspace && uv run pytest tests/test_app_integration.py` (from project root).
 
