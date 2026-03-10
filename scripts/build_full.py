@@ -217,11 +217,12 @@ def _copy_docs() -> None:
             shutil.copy2(src, APP_BUILD_DIR / filename)
 
 
-def _obfuscate_app_code_with_pyarmor() -> None:
+def _obfuscate_app_code_with_pyarmor(*, dry_run: bool = False) -> None:
     """Obfuscate the application package in the build directory using PyArmor.
 
     This runs PyArmor against a copied source tree under SRC_PLAIN_DIR and
     writes obfuscated modules and the runtime package under APP_BUILD_DIR/src.
+    When dry_run is True, copies plain source to src/ instead (no PyArmor).
     """
     if not SRC_PLAIN_DIR.exists():
         raise RuntimeError(
@@ -232,6 +233,11 @@ def _obfuscate_app_code_with_pyarmor() -> None:
     obf_root = APP_BUILD_DIR / "src"
     if obf_root.exists():
         shutil.rmtree(obf_root, ignore_errors=True)
+
+    if dry_run:
+        print("Dry run: copying plain source to src/ (skipping PyArmor)...")
+        shutil.copytree(SRC_PLAIN_DIR / "handoff", obf_root / "handoff")
+        return
 
     pyarmor_exe = shutil.which("pyarmor")
     if not pyarmor_exe:
@@ -443,11 +449,13 @@ def _make_tar_gz(name: str, version: str) -> Path:
     return dist_path
 
 
-def main(*, platform: str = "windows") -> None:
+def main(*, platform: str = "windows", dry_run: bool = False) -> None:
     """Build the full embedded/standalone distribution for the app.
 
     Args:
         platform: Target platform — ``"windows"`` or ``"mac"``.
+        dry_run: If True, run copy/docs/launcher steps only; skip download,
+            extract, deps install, obfuscation, and archive creation.
     """
     name, version = _read_project_metadata()
 
@@ -455,6 +463,20 @@ def main(*, platform: str = "windows") -> None:
     APP_BUILD_DIR = BUILD_ROOT / f"{name}-{version}"
     SRC_PLAIN_DIR = APP_BUILD_DIR / "src_plain"
     PYTHON_DIR = APP_BUILD_DIR / "python"
+
+    if dry_run:
+        print(f"Dry run: building {name} {version} ({platform})...")
+        _prepare_dirs()
+        _copy_app_code()
+        _copy_docs()
+        _obfuscate_app_code_with_pyarmor(dry_run=True)
+        if platform == "mac":
+            _write_handoff_sh()
+        else:
+            _write_handoff_bat()
+        print()
+        print("Dry run complete. Skipped: download, extract, deps install, archive.")
+        return
 
     if platform == "mac":
         print(f"Building {name} {version} (macOS standalone Python tar.gz)...")

@@ -125,7 +125,7 @@ def test_build_patch_includes_docs_and_core_files(
             "x = 1", encoding="utf-8"
         )
 
-    def _fake_obfuscate() -> None:
+    def _fake_obfuscate(*, dry_run: bool = False) -> None:
         (build_app_dir / "src" / "handoff").mkdir(parents=True, exist_ok=True)
         (build_app_dir / "src" / "handoff" / "__init__.py").write_text("x = 1", encoding="utf-8")
 

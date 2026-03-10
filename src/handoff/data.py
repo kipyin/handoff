@@ -1,10 +1,12 @@
 """Data access helpers for projects/todos and common query workflows."""
 
 import enum
+import json
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
 from loguru import logger
+from sqlalchemy import text
 from sqlalchemy.orm import selectinload
 from sqlmodel import or_, select
 
@@ -12,6 +14,78 @@ from handoff.backup_schema import BackupPayload
 from handoff.db import session_context
 from handoff.models import Project, Todo, TodoStatus
 from handoff.page_models import TodoQuery
+
+
+def log_activity(
+    entity_type: str,
+    entity_id: int | None,
+    action: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Record an activity log entry for the audit trail.
+
+    Args:
+        entity_type: One of "project", "todo".
+        entity_id: Id of the entity, or None for bulk operations.
+        action: One of created, updated, completed, deleted, archived, unarchived.
+        details: Optional JSON-serializable dict with extra context.
+    """
+    try:
+        with session_context() as session:
+            details_str = json.dumps(details) if details else None
+            session.execute(
+                text(
+                    "INSERT INTO activity_log (timestamp, entity_type, entity_id, action, details) "
+                    "VALUES (CURRENT_TIMESTAMP, :entity_type, :entity_id, :action, :details)"
+                ),
+                {
+                    "entity_type": entity_type,
+                    "entity_id": entity_id,
+                    "action": action,
+                    "details": details_str,
+                },
+            )
+            session.commit()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Activity log insert failed: {}", exc)
+
+
+def get_recent_activity(limit: int = 20) -> list[dict[str, Any]]:
+    """Return recent activity log entries, newest first.
+
+    Args:
+        limit: Maximum number of entries to return.
+
+    Returns:
+        List of dicts with timestamp, entity_type, entity_id, action, details.
+    """
+    with session_context() as session:
+        result = session.execute(
+            text(
+                "SELECT timestamp, entity_type, entity_id, action, details "
+                "FROM activity_log ORDER BY timestamp DESC LIMIT :limit"
+            ),
+            {"limit": limit},
+        )
+        rows = result.fetchall()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        details = None
+        if row[4]:
+            try:
+                details = json.loads(row[4])
+            except (json.JSONDecodeError, TypeError):
+                details = {"raw": row[4]}
+        out.append(
+            {
+                "timestamp": row[0],
+                "entity_type": row[1],
+                "entity_id": row[2],
+                "action": row[3],
+                "details": details,
+            }
+        )
+    return out
 
 
 class _Unset(enum.Enum):
@@ -62,6 +136,7 @@ def create_project(name: str) -> Project:
         logger.info(
             "Created project {project_id}: {name}", project_id=project.id, name=project.name
         )
+        log_activity("project", project.id, "created", {"name": project.name})
         return project
 
 
@@ -147,6 +222,7 @@ def create_todo(
             status=todo.status.value,
             helper=todo.helper,
         )
+        log_activity("todo", todo.id, "created", {"name": todo.name, "project_id": todo.project_id})
         return todo
 
 
@@ -217,6 +293,8 @@ def update_todo(
             helper=todo.helper,
             deadline=todo.deadline,
         )
+        action = "completed" if is_newly_done else "updated"
+        log_activity("todo", todo.id, action, {"name": todo.name})
         return todo
 
 
@@ -272,6 +350,7 @@ def delete_todo(todo_id: int) -> bool:
             name=name,
             project_id=project_id,
         )
+        log_activity("todo", todo_id, "deleted", {"name": name, "project_id": project_id})
         return True
 
 
@@ -433,13 +512,19 @@ def query_now_items(
     project_ids: list[int] | None = None,
     helper_names: list[str] | None = None,
     search_text: str | None = None,
-    deadline_near_days: int = 2,
+    deadline_near_days: int = 1,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
 ) -> list[tuple[Todo, bool]]:
     """Return open items that need attention on the Now page.
 
     An item needs attention if:
     - Next check is today or earlier (or null), and/or
     - Deadline is within deadline_near_days or past due.
+
+    Optional date filters from natural-language search narrow the result set.
 
     Returns:
         List of (todo, at_risk) tuples. at_risk is True when deadline is near
@@ -474,6 +559,23 @@ def query_now_items(
                     Todo.project.has(Project.name.ilike(like_expr)),
                 )
             )
+        if next_check_min is not None:
+            stmt = stmt.where(
+                Todo.next_check.isnot(None),
+                Todo.next_check >= next_check_min,
+            )
+        if next_check_max is not None:
+            stmt = stmt.where((Todo.next_check.is_(None)) | (Todo.next_check <= next_check_max))
+        if deadline_min is not None:
+            stmt = stmt.where(
+                Todo.deadline.isnot(None),
+                Todo.deadline >= deadline_min,
+            )
+        if deadline_max is not None:
+            stmt = stmt.where(
+                Todo.deadline.isnot(None),
+                Todo.deadline <= deadline_max,
+            )
 
         # Next-check driven: next_check <= today OR next_check IS NULL
         next_check_due = (Todo.next_check <= today) | (Todo.next_check.is_(None))
@@ -501,6 +603,91 @@ def query_now_items(
     return result
 
 
+def query_upcoming_handoffs(
+    *,
+    project_ids: list[int] | None = None,
+    helper_names: list[str] | None = None,
+    search_text: str | None = None,
+    deadline_near_days: int = 1,
+    limit: int = 20,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
+) -> list[Todo]:
+    """Return handoff items that are not yet action-required (upcoming).
+
+    An item is upcoming if next_check is in the future and deadline is not
+    at risk (within deadline_near_days). Sorted by next_check asc.
+
+    Optional date filters from natural-language search narrow the result set.
+
+    Args:
+        project_ids: Optional filter by project ids.
+        helper_names: Optional filter by helper names.
+        search_text: Optional search in name, notes, helper, project name.
+        deadline_near_days: Cutoff for "at risk" (deadline > today + N is safe).
+        limit: Maximum number of results.
+        next_check_min: Optional minimum next_check date.
+        next_check_max: Optional maximum next_check date.
+        deadline_min: Optional minimum deadline.
+        deadline_max: Optional maximum deadline.
+
+    Returns:
+        List of Todo models with project loaded, ordered by next_check.
+
+    """
+    today = date.today()
+    cutoff = today + timedelta(days=deadline_near_days)
+
+    with session_context() as session:
+        stmt = (
+            select(Todo)
+            .options(selectinload(Todo.project))
+            .where(Todo.is_archived.is_(False))
+            .where(Todo.status == TodoStatus.HANDOFF)
+            .where(Todo.next_check.isnot(None))
+            .where(Todo.next_check > today)
+            .where((Todo.deadline.is_(None)) | (Todo.deadline > cutoff))
+        )
+        if project_ids:
+            stmt = stmt.where(Todo.project_id.in_(project_ids))
+        if helper_names:
+            canonical = [n.strip() for n in helper_names if n.strip()]
+            if canonical:
+                stmt = stmt.where(Todo.helper.in_(canonical))
+        normalized_search = (search_text or "").strip()
+        if normalized_search:
+            like_expr = f"%{normalized_search}%"
+            stmt = stmt.where(
+                or_(
+                    Todo.name.ilike(like_expr),
+                    Todo.notes.ilike(like_expr),
+                    Todo.helper.ilike(like_expr),
+                    Todo.project.has(Project.name.ilike(like_expr)),
+                )
+            )
+        if next_check_min is not None:
+            stmt = stmt.where(Todo.next_check >= next_check_min)
+        if next_check_max is not None:
+            stmt = stmt.where(Todo.next_check <= next_check_max)
+        if deadline_min is not None:
+            stmt = stmt.where(
+                Todo.deadline.isnot(None),
+                Todo.deadline >= deadline_min,
+            )
+        if deadline_max is not None:
+            stmt = stmt.where(
+                Todo.deadline.isnot(None),
+                Todo.deadline <= deadline_max,
+            )
+
+        stmt = stmt.order_by(Todo.next_check.asc()).limit(limit)
+        todos = list(session.exec(stmt).all())
+
+    return todos
+
+
 def list_helpers() -> list[str]:
     """Return all distinct helper names (plain string column), sorted.
 
@@ -510,6 +697,34 @@ def list_helpers() -> list[str]:
     """
     with session_context() as session:
         stmt = select(Todo.helper).where(Todo.helper.isnot(None))
+        raw_values = session.exec(stmt).all()
+        canonical_by_lower: dict[str, str] = {}
+        for raw in raw_values:
+            name = (raw or "").strip()
+            if not name:
+                continue
+            lowered = name.lower()
+            if lowered not in canonical_by_lower:
+                canonical_by_lower[lowered] = name
+        return sorted(canonical_by_lower.values(), key=str.lower)
+
+
+def list_helpers_with_open_handoffs() -> list[str]:
+    """Return distinct helper names who have at least one open handoff.
+
+    Open handoffs are status HANDOFF and not archived. Use for Now page Who
+    filter so the dropdown shows only relevant people.
+
+    Returns:
+        Sorted list of unique non-empty helper names.
+    """
+    with session_context() as session:
+        stmt = (
+            select(Todo.helper)
+            .where(Todo.helper.isnot(None))
+            .where(Todo.status == TodoStatus.HANDOFF)
+            .where(Todo.is_archived.is_(False))
+        )
         raw_values = session.exec(stmt).all()
         canonical_by_lower: dict[str, str] = {}
         for raw in raw_values:
@@ -543,6 +758,7 @@ def rename_project(project_id: int, name: str) -> Project | None:
         session.commit()
         session.refresh(project)
         logger.info("Renamed project {project_id} to {name}", project_id=project_id, name=name)
+        log_activity("project", project_id, "updated", {"name": name})
         return project
 
 
@@ -562,12 +778,16 @@ def delete_project(project_id: int) -> bool:
             logger.warning("Project {project_id} not found for delete", project_id=project_id)
             return False
         todo_count = len(project.todos)
+        proj_name = project.name
         session.delete(project)
         session.commit()
         logger.info(
             "Deleted project {project_id} and {todo_count} todos",
             project_id=project_id,
             todo_count=todo_count,
+        )
+        log_activity(
+            "project", project_id, "deleted", {"name": proj_name, "todo_count": todo_count}
         )
         return True
 
@@ -603,6 +823,7 @@ def archive_project(project_id: int, *, archive_todos: bool = True) -> bool:
             project_id=project_id,
             archive_todos=archive_todos,
         )
+        log_activity("project", project_id, "archived", {"archive_todos": archive_todos})
         return True
 
 
@@ -625,6 +846,7 @@ def unarchive_project(project_id: int) -> bool:
         session.add(project)
         session.commit()
         logger.info("Unarchived project {project_id}", project_id=project_id)
+        log_activity("project", project_id, "unarchived", {})
         return True
 
 
@@ -647,6 +869,7 @@ def archive_todo(todo_id: int) -> bool:
         session.add(todo)
         session.commit()
         logger.info("Archived todo {todo_id}", todo_id=todo_id)
+        log_activity("todo", todo_id, "archived", {"name": todo.name})
         return True
 
 
@@ -669,6 +892,7 @@ def unarchive_todo(todo_id: int) -> bool:
         session.add(todo)
         session.commit()
         logger.info("Unarchived todo {todo_id}", todo_id=todo_id)
+        log_activity("todo", todo_id, "unarchived", {"name": todo.name})
         return True
 
 

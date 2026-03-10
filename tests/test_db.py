@@ -39,6 +39,19 @@ def _fetch_columns(sqlite_path: str, table: str) -> set[str]:
     return {row[1] for row in rows}
 
 
+def _table_exists(sqlite_path: str, table: str) -> bool:
+    """Return True if the table exists."""
+    conn = sqlite3.connect(sqlite_path)
+    try:
+        cursor = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+            (table,),
+        )
+        return cursor.fetchone() is not None
+    finally:
+        conn.close()
+
+
 def test_init_db_creates_tables_and_completed_at(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -58,6 +71,8 @@ def test_init_db_creates_tables_and_completed_at(
     assert "is_archived" in todo_columns
     assert "next_check" in todo_columns
     assert "is_archived" in project_columns
+    assert _table_exists(sqlite_path, "schema_version")
+    assert _table_exists(sqlite_path, "activity_log")
 
 
 def test_init_db_adds_completed_at_to_existing_schema(
@@ -213,7 +228,10 @@ def test_init_db_migrates_legacy_status(
             )
             """,
         )
-        conn.execute("INSERT INTO project (id, name, created_at, is_archived) VALUES (1, 'P', '2026-01-01 00:00:00', 0)")
+        conn.execute(
+            "INSERT INTO project (id, name, created_at, is_archived) "
+            "VALUES (1, 'P', '2026-01-01 00:00:00', 0)"
+        )
         conn.execute(
             "INSERT INTO todo (id, project_id, name, status, created_at, is_archived) "
             "VALUES (1, 1, 'Old', 'delegated', '2026-01-01 00:00:00', 0)"
@@ -276,7 +294,8 @@ def test_init_db_preserves_data_through_migration(
             """,
         )
         conn.execute(
-            "INSERT INTO project (id, name, created_at, is_archived) VALUES (1, 'My Project', '2026-01-01 00:00:00', 0)"
+            "INSERT INTO project (id, name, created_at, is_archived) "
+            "VALUES (1, 'My Project', '2026-01-01 00:00:00', 0)"
         )
         conn.execute(
             "INSERT INTO todo (id, project_id, name, status, created_at, is_archived) "
@@ -291,9 +310,7 @@ def test_init_db_preserves_data_through_migration(
     conn = sqlite3.connect(sqlite_path)
     try:
         projects = conn.execute("SELECT id, name FROM project").fetchall()
-        todos = conn.execute(
-            "SELECT id, project_id, name, next_check FROM todo"
-        ).fetchall()
+        todos = conn.execute("SELECT id, project_id, name, next_check FROM todo").fetchall()
     finally:
         conn.close()
 
@@ -324,7 +341,7 @@ def test_init_db_raises_when_engine_creation_fails(
 def test_init_db_raises_when_migration_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When migrations raise inside connect(), DatabaseInitializationError is raised."""
+    """Migrations raising in run_pending_migrations raises DatabaseInitializationError."""
     db_path = tmp_path / "todo.db"
     db = _reload_db_module(db_path, monkeypatch)
     try:
@@ -332,7 +349,8 @@ def test_init_db_raises_when_migration_fails(
         mock_conn.exec_driver_sql.side_effect = Exception("Migration failed")
         mock_conn.__enter__ = lambda self: self
         mock_conn.__exit__ = lambda *a: None
-        with patch.object(db.get_engine(), "connect", return_value=mock_conn):
+        mock_begin = MagicMock(return_value=mock_conn)
+        with patch.object(db.get_engine(), "begin", mock_begin):
             with pytest.raises((DatabaseInitializationError, Exception)) as exc_info:
                 db.init_db()
             assert type(exc_info.value).__name__ == "DatabaseInitializationError"

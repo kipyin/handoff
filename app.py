@@ -12,12 +12,11 @@ from functools import wraps
 
 import streamlit as st
 
+from handoff.pages.about import render_about_page
 from handoff.pages.dashboard import render_dashboard_page
-from handoff.pages.docs import render_docs_page
 from handoff.pages.now import render_now_page
 from handoff.pages.projects import render_projects_page
-from handoff.pages.settings import render_settings_page
-from handoff.pages.todos import render_todos_page
+from handoff.pages.system_settings import render_system_settings_page
 from handoff.ui import setup
 from handoff.version import __version__ as APP_VERSION
 
@@ -35,14 +34,17 @@ def _page(renderer: Callable[[], None]) -> Callable[[], None]:
 
 def main() -> None:
     """Run the Handoff app using the Streamlit navigation API."""
-    pages = [
-        st.Page(_page(render_now_page), title="Now", icon="🎯"),
-        st.Page(_page(render_todos_page), title="Todos", icon="✅"),
-        st.Page(_page(render_projects_page), title="Projects", icon="📁"),
-        st.Page(_page(render_dashboard_page), title="Dashboard", icon="📊"),
-        st.Page(_page(render_settings_page), title="Settings", icon="⚙️"),
-        st.Page(_page(render_docs_page), title="Docs", icon="📖"),
-    ]
+    pages = {
+        "": [
+            st.Page(_page(render_now_page), title="Now", icon="🎯"),
+            st.Page(_page(render_dashboard_page), title="Dashboard", icon="📊"),
+        ],
+        "Settings": [
+            st.Page(_page(render_projects_page), title="Projects", icon="📁"),
+            st.Page(_page(render_about_page), title="About", icon="📖"),
+            st.Page(_page(render_system_settings_page), title="System Settings", icon="⚙️"),
+        ],
+    }
     nav = st.navigation(pages, position="top")
     nav.run()
 

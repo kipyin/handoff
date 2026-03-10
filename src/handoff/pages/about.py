@@ -1,4 +1,4 @@
-"""Docs page for rendering README and RELEASE_NOTES inside the app."""
+"""About page for rendering README and RELEASE_NOTES inside the app."""
 
 from __future__ import annotations
 
@@ -14,9 +14,9 @@ def _cached_markdown(name: str) -> str:
     return read_markdown_from_app_root(name)
 
 
-def render_docs_page() -> None:
+def render_about_page() -> None:
     """Render README and release notes as markdown inside the app."""
-    st.subheader(f"Documentation ({APP_VERSION})")
+    st.subheader(f"About ({APP_VERSION})")
 
     readme_text = _cached_markdown("README.md")
     release_notes_text = _cached_markdown("RELEASE_NOTES.md")

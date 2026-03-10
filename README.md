@@ -67,25 +67,24 @@ To keep the app simple and robust, some things are intentionally out of scope:
 1. **Projects** — Create and manage engagements/projects on the Projects page.
 2. **Todos per project** — Each project has many todos. Each todo has:
    - Name
+   - Next check (optional follow-up date)
    - Deadline (optional)
    - Creation timestamp (auto)
    - Status: `handoff` | `done` | `canceled`
    - Helper (assignee)
    - Notes (text; you can paste links, file paths, etc.)
-3. **Unified table view** — One main table lists todos across all projects. Use
-   the filter bar to narrow by:
-   - **Search** — Text in name, notes, helper, or project.
-   - **Statuses** — Multiselect (defaults to `handoff`).
-   - **Projects** — Multiselect.
-   - **Helper** — Dropdown of known helpers (or "All helpers").
-   - **Deadline** — Optional date range (enable the range toggle, then pick
-     From/To dates).
-   Sort by clicking column headers. Edit inline and click **Save changes** to
-   create, update, or delete todos.
+3. **Now page** — Control-tower view for action-required handoffs. Shows items
+   that need attention (next check due today or earlier, or deadline at risk).
+   Add new handoffs, edit existing ones, Snooze to a specific follow-up date
+   using a date picker, or Close when done. Upcoming section lists handoffs not
+   yet due. Filter by project, helper, or search. Search supports natural-language
+   date filters: `@today` (check due/overdue), `@due today`, `overdue`, `check
+   this week`, `due next 7 days`. Who dropdown lists only helpers with open
+   handoffs.
 4. **Dashboard** — At-a-glance metrics: open handoffs, completed this week vs
    last, median cycle time, and on-time rate. Plus a weekly throughput chart
    and current helper load.
-5. **Updates and backups** — An in-app Settings page lets you apply code-only
+5. **Updates and backups** — An in-app System Settings page lets you apply code-only
    patch zips and restore from backups created before each update.
 
 ## Where your data lives
@@ -143,7 +142,7 @@ What gets logged (non-exhaustive):
 - Save summary counts and high-level query info.
 
 For deeper diagnostics you can extend the existing `loguru` calls in
-`src/handoff/data.py`, `src/handoff/db.py`, or `src/handoff/pages/todos.py`.
+`src/handoff/data.py`, `src/handoff/db.py`, or `src/handoff/pages/now.py`.
 
 ## Windows embedded zip build and obfuscated patches
 
@@ -175,7 +174,7 @@ flow:
 
 1. Get a patch zip (for example from a Handoff release or your team).
 2. Run the app as usual (for example double‑click `handoff.bat`).
-3. In the app, open **Settings** → **Update app**, upload the patch zip, and
+3. In the app, open **Settings** → **System Settings** → **Update app**, upload the patch zip, and
    click **Apply and Restart**.
 4. The app creates a backup of files that will be overwritten, extracts the
    patch to `./update/`, then exits after a few seconds.
@@ -188,12 +187,12 @@ flow:
 
 Backups are created **before** the update is applied (when you click
 **Apply and Restart**), under `backup/<YYYYMMDD-HHMMSS>-version<version>/` in
-the app root. The next time you open **Settings**, the app shows where the
+the app root. The next time you open **System Settings**, the app shows where the
 backup was saved.
 
 To restore from a bad patch:
 
-1. Open **Settings** → **Restore from backup** (under **Update app**).
+1. Open **Settings** → **System Settings** → **Restore from backup** (under **Update app**).
 2. Pick a snapshot (listed by date and version).
 3. Click **Restore and Restart**.
 
@@ -208,5 +207,8 @@ moment it is a personal project; treat issues and requests as best-effort.
 
 For **user-facing docs** (how to run, update the app, backups), stay in this
 README. For **developer docs** (CLI commands, layout, release workflow, and
-code style), see [`CONTRIBUTING.md`](CONTRIBUTING.md). You can also read the
-README and release notes inside the app via the Docs navigation entry.
+code style), see [`AGENTS.md`](AGENTS.md). You can also read the README and
+release notes inside the app via the About navigation entry.
+
+**Contributing:** Run `uv run handoff ci` before submitting changes. See
+AGENTS.md for commands, style, and workflow.

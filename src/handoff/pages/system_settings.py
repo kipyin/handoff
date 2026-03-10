@@ -1,4 +1,4 @@
-"""Settings page implementation for Handoff.
+"""System Settings page implementation for Handoff.
 
 This page centralises app updates, code backup restore, data export, log
 download, and a compact About section so that operational controls live in
@@ -19,11 +19,39 @@ import streamlit as st
 from loguru import logger
 
 from handoff.backup_schema import BackupPayload
-from handoff.data import get_export_payload, import_payload
 from handoff.docs import get_readme_intro
 from handoff.logging import _get_logs_dir
+from handoff.services.settings_service import (
+    DEADLINE_NEAR_DAYS_MAX,
+    DEADLINE_NEAR_DAYS_MIN,
+    get_deadline_near_days,
+    get_export_payload,
+    import_payload,
+    set_deadline_near_days,
+)
 from handoff.update_ui import render_update_panel
 from handoff.version import __version__ as APP_VERSION
+
+
+def _render_now_settings_section() -> None:
+    """Render Now page / risk-window setting (deadline at risk days)."""
+    st.markdown("### Now page")
+    st.caption(
+        "Control how many days before a deadline an item is shown as at risk on the Now page. "
+        "Default is 1 (items overdue, due today, or due tomorrow)."
+    )
+    current = get_deadline_near_days()
+    new_value = st.number_input(
+        "Deadline at risk (days)",
+        min_value=DEADLINE_NEAR_DAYS_MIN,
+        max_value=DEADLINE_NEAR_DAYS_MAX,
+        value=current,
+        step=1,
+        key="settings_deadline_near_days",
+    )
+    if new_value != current:
+        set_deadline_near_days(new_value)
+        st.success("Saved. The Now page will use this from the next refresh.")
 
 
 def _render_data_export_section() -> None:
@@ -141,7 +169,7 @@ def _render_data_import_section() -> None:
 
 
 def _render_about_section() -> None:
-    """Render a compact About section at the end of the Settings page."""
+    """Render a compact About section at the end of the System Settings page."""
     st.markdown("### About Handoff")
     st.caption(f"Version: {APP_VERSION}")
 
@@ -158,9 +186,9 @@ def _render_about_section() -> None:
     )
 
 
-def render_settings_page() -> None:
-    """Render the settings page with update, backup, and about sections."""
-    st.subheader("Settings")
+def render_system_settings_page() -> None:
+    """Render the System Settings page with update, backup, and about sections."""
+    st.subheader("System Settings")
     st.write(
         "Use this page to apply code updates, restore backups created by updates, export "
         "or import your data, and download logs. An About section at the end summarises "
@@ -169,6 +197,9 @@ def render_settings_page() -> None:
 
     # App updates and code backups (panel from handoff.updater).
     render_update_panel(APP_VERSION)
+
+    st.divider()
+    _render_now_settings_section()
 
     st.divider()
     _render_data_export_section()

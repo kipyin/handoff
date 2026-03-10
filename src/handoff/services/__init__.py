@@ -13,16 +13,62 @@ from handoff.services.dashboard_service import (
     get_per_project_throughput,
     get_weekly_throughput,
 )
-from handoff.services.todo_service import complete_todo
+from handoff.services.project_service import (
+    archive_project,
+    create_project,
+    delete_project,
+    get_projects_with_todo_summary,
+    list_projects,
+    rename_project,
+    unarchive_project,
+)
+from handoff.services.settings_service import (
+    get_deadline_near_days,
+    get_export_payload,
+    import_payload,
+    set_deadline_near_days,
+)
+from handoff.services.todo_service import (
+    complete_todo,
+    create_todo,
+    delete_todo,
+    list_helpers,
+    list_helpers_with_open_handoffs,
+    query_now_items,
+    query_todos,
+    query_upcoming_handoffs,
+    snooze_todo,
+    update_todo,
+)
 
 __all__ = [
+    "archive_project",
     "complete_todo",
+    "create_project",
+    "create_todo",
+    "delete_project",
+    "delete_todo",
     "get_cycle_time_by_project",
     "get_dashboard_metrics",
     "get_deadline_adherence_trend",
+    "get_deadline_near_days",
     "get_exportable_metrics",
+    "get_export_payload",
     "get_helper_load",
     "get_per_helper_throughput",
     "get_per_project_throughput",
+    "get_projects_with_todo_summary",
     "get_weekly_throughput",
+    "import_payload",
+    "list_helpers",
+    "list_helpers_with_open_handoffs",
+    "list_projects",
+    "query_now_items",
+    "query_todos",
+    "query_upcoming_handoffs",
+    "snooze_todo",
+    "rename_project",
+    "set_deadline_near_days",
+    "unarchive_project",
+    "update_todo",
 ]

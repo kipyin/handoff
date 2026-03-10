@@ -1,4 +1,4 @@
-"""Tests for Settings page helpers."""
+"""Tests for System Settings page helpers."""
 
 from __future__ import annotations
 
@@ -6,16 +6,16 @@ import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from handoff.pages.settings import _render_data_import_section
+from handoff.pages.system_settings import _render_data_import_section
 
 
 def _patch_streamlit(monkeypatch, uploaded) -> MagicMock:
-    """Replace the Streamlit module in the settings page with a mock."""
+    """Replace the Streamlit module in the System Settings page with a mock."""
     st_mock = MagicMock()
     st_mock.file_uploader.return_value = uploaded
     st_mock.checkbox.return_value = False
     st_mock.button.return_value = False
-    monkeypatch.setattr("handoff.pages.settings.st", st_mock)
+    monkeypatch.setattr("handoff.pages.system_settings.st", st_mock)
     return st_mock
 
 

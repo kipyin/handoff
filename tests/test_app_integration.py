@@ -3,13 +3,15 @@
 Each page is tested in isolation via AppTest.from_function() with a wrapper that
 calls setup() and the page renderer. Uses a temporary DB path so tests do not
 touch real user data.
+
+Also includes full-app load and programmatic UI interaction tests to verify
+no errors when clicking around different elements.
 """
 
 from __future__ import annotations
 
 import importlib
 from datetime import date
-
 from pathlib import Path
 
 import pytest
@@ -17,6 +19,10 @@ from streamlit.testing.v1 import AppTest
 
 import handoff.data as data
 import handoff.db as db
+from handoff.dates import add_business_days
+from handoff.models import TodoStatus
+
+WORKSPACE = Path(__file__).resolve().parents[1]
 
 
 def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -40,15 +46,6 @@ def app_test_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return db_path
 
 
-def _todos_page_entry() -> None:
-    """Single-page entrypoint for Todos: setup + render."""
-    import handoff.ui as ui
-    from handoff.pages.todos import render_todos_page
-
-    ui.setup("2026.2.24")
-    render_todos_page()
-
-
 def _projects_page_entry() -> None:
     """Single-page entrypoint for Projects: setup + render."""
     import handoff.ui as ui
@@ -58,13 +55,13 @@ def _projects_page_entry() -> None:
     render_projects_page()
 
 
-def _settings_page_entry() -> None:
-    """Single-page entrypoint for Settings: setup + render."""
+def _system_settings_page_entry() -> None:
+    """Single-page entrypoint for System Settings: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.settings import render_settings_page
+    from handoff.pages.system_settings import render_system_settings_page
 
     ui.setup("2026.2.24")
-    render_settings_page()
+    render_system_settings_page()
 
 
 def _dashboard_page_entry() -> None:
@@ -76,13 +73,13 @@ def _dashboard_page_entry() -> None:
     render_dashboard_page()
 
 
-def _docs_page_entry() -> None:
-    """Single-page entrypoint for Docs: setup + render."""
+def _about_page_entry() -> None:
+    """Single-page entrypoint for About: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.docs import render_docs_page
+    from handoff.pages.about import render_about_page
 
     ui.setup("2026.2.24")
-    render_docs_page()
+    render_about_page()
 
 
 def _now_page_entry() -> None:
@@ -92,15 +89,6 @@ def _now_page_entry() -> None:
 
     ui.setup("2026.2.24")
     render_now_page()
-
-
-def test_todos_page_renders_with_app_test(app_test_db: Path) -> None:
-    """Todos page renders (smoke test)."""
-    at = AppTest.from_function(_todos_page_entry)
-    at.run(timeout=5)
-    # With no projects we get subheader + info; with projects we get data_editor
-    assert len(at.get("subheader")) >= 1
-    assert len(at.get("data_editor")) >= 0 or len(at.get("info")) >= 1
 
 
 def test_projects_page_renders_with_app_test(app_test_db: Path) -> None:
@@ -139,9 +127,9 @@ def test_projects_page_archived_toggle_survives_models_reload(app_test_db: Path)
     assert len(at.get("subheader")) >= 1
 
 
-def test_settings_page_renders_with_app_test(app_test_db: Path) -> None:
-    """Settings page renders (smoke test)."""
-    at = AppTest.from_function(_settings_page_entry)
+def test_system_settings_page_renders_with_app_test(app_test_db: Path) -> None:
+    """System Settings page renders (smoke test)."""
+    at = AppTest.from_function(_system_settings_page_entry)
     at.run(timeout=5)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("markdown")) >= 1
@@ -155,9 +143,9 @@ def test_dashboard_page_renders_with_app_test(app_test_db: Path) -> None:
     assert len(at.get("metric")) >= 4
 
 
-def test_docs_page_renders_with_app_test(app_test_db: Path) -> None:
-    """Docs page renders (smoke test)."""
-    at = AppTest.from_function(_docs_page_entry)
+def test_about_page_renders_with_app_test(app_test_db: Path) -> None:
+    """About page renders (smoke test)."""
+    at = AppTest.from_function(_about_page_entry)
     at.run(timeout=5)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("tabs")) >= 1 or len(at.get("markdown")) >= 1
@@ -168,7 +156,8 @@ def test_now_page_renders_with_app_test(app_test_db: Path) -> None:
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=5)
     assert len(at.get("subheader")) >= 1
-    assert len(at.get("info")) >= 1 or len(at.get("expander")) >= 0
+    assert len(at.get("info")) >= 1
+    assert len(at.get("expander")) == 0
 
 
 def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None:
@@ -187,3 +176,137 @@ def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None
     assert len(at.exception) == 0
     assert len(at.get("subheader")) >= 1
     assert len(at.get("expander")) >= 1
+
+
+def test_now_page_close_button_marks_todo_done(app_test_db: Path) -> None:
+    """Clicking Close on a Now item marks it done."""
+    db.init_db()
+    project = data.create_project("Now Close Test")
+    assert project.id is not None
+    todo = data.create_todo(
+        project_id=project.id,
+        name="Close this handoff",
+        next_check=date(2000, 1, 1),
+        helper="Alex",
+    )
+    assert todo.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    close_buttons = [b for b in at.button if getattr(b, "label", None) == "✓ Close"]
+    assert close_buttons, "Expected Close button not found on Now page"
+    close_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    todos = data.query_todos(project_ids=[project.id])
+    updated = next((t for t in todos if t.id == todo.id), None)
+    assert updated is not None
+    assert updated.status == TodoStatus.DONE
+    assert updated.completed_at is not None
+
+
+def test_now_page_snooze_updates_next_check(app_test_db: Path) -> None:
+    """Clicking Snooze updates the todo next_check to the date input default (next business day)."""
+    db.init_db()
+    project = data.create_project("Now Snooze Test")
+    assert project.id is not None
+    todo = data.create_todo(
+        project_id=project.id,
+        name="Snooze this handoff",
+        next_check=date(2000, 1, 1),
+        helper="Riley",
+    )
+    assert todo.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    snooze_buttons = [b for b in at.button if getattr(b, "label", None) == "Snooze"]
+    assert snooze_buttons, "Expected Snooze button not found on Now page"
+    snooze_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    todos = data.query_todos(project_ids=[project.id])
+    updated = next((t for t in todos if t.id == todo.id), None)
+    assert updated is not None
+    # UI default for Snooze date is add_business_days(today, 1)
+    assert updated.next_check == add_business_days(date.today(), 1)
+    assert updated.status == TodoStatus.HANDOFF
+
+
+def test_now_page_add_form_creates_todo(app_test_db: Path) -> None:
+    """Submitting the Add handoff form creates a new todo."""
+    db.init_db()
+    project = data.create_project("Add Form Test")
+    assert project.id is not None
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    need_back_inputs = [
+        ti
+        for ti in at.text_input
+        if getattr(ti, "key", None) == "now_add_need" or getattr(ti, "label", None) == "Need back"
+    ]
+    assert need_back_inputs, "Expected Need back text input not found on Now page"
+    need_back_inputs[0].input("New handoff from add form").run(timeout=5)
+
+    add_buttons = [b for b in at.button if getattr(b, "label", None) == "Add"]
+    assert add_buttons, "Expected Add button not found on Now page"
+    add_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
+    todos = data.query_todos(project_ids=[project.id])
+    created = next((t for t in todos if t.name == "New handoff from add form"), None)
+    assert created is not None
+    assert created.status == TodoStatus.HANDOFF
+
+
+def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
+    """Full app (app.py with st.navigation) loads without exception."""
+    at = AppTest.from_file(str(WORKSPACE / "app.py"))
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+    # First page (Now) should render; we expect at least a subheader or info
+    assert len(at.get("subheader")) >= 1 or len(at.get("info")) >= 1
+
+
+def test_projects_create_form_submit_no_error(app_test_db: Path) -> None:
+    """Submitting the create-project form does not raise."""
+    at = AppTest.from_function(_projects_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    # Fill project name and submit. The Projects page always renders a project-name
+    # text input and a Create submit button. Target them by label/key so the test
+    # fails if the UI contract breaks.
+    project_name_inputs = [
+        ti
+        for ti in at.text_input
+        if getattr(ti, "key", None) == "projects_new_project_name"
+        or getattr(ti, "label", None) == "Project name"
+    ]
+    assert project_name_inputs, "Expected project-name text input not found on Projects page"
+    project_name_inputs[0].input("TestProjectFromForm").run(timeout=5)
+
+    create_btns = [b for b in at.button if getattr(b, "label", None) == "Create"]
+    assert create_btns, "Expected Create button not found on Projects page"
+    create_btns[0].click().run(timeout=5)
+
+    assert len(at.exception) == 0
+
+
+def test_about_page_tab_switch_no_error(app_test_db: Path) -> None:
+    """Switching About page tabs (README / Release notes) does not raise."""
+    at = AppTest.from_function(_about_page_entry)
+    at.run(timeout=5)
+    assert len(at.exception) == 0
+
+    tabs = at.tabs
+    assert len(tabs) == 2, f"Expected exactly 2 tabs on About page, got {len(tabs)}"
+    tabs[1].run(timeout=5)  # Switch to Release notes tab
+    assert len(at.exception) == 0

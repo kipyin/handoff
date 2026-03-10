@@ -3,7 +3,9 @@
 import importlib
 from contextlib import contextmanager
 from datetime import UTC, date, datetime, timedelta
+from pathlib import Path
 
+import pytest
 from sqlmodel import select
 
 import handoff.data as data
@@ -130,6 +132,27 @@ def test_list_helpers_canonicalization(session, monkeypatch) -> None:
     helpers = data.list_helpers()
     # Should be sorted, trimmed, and unique by case (keeping first encountered casing)
     assert helpers == ["Alice", "BOB"]
+
+
+def test_list_helpers_with_open_handoffs(session, monkeypatch) -> None:
+    """list_helpers_with_open_handoffs returns only helpers with open handoffs."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    session.add(Todo(project_id=p.id, name="t1", status=TodoStatus.HANDOFF, helper="Alice"))
+    session.add(Todo(project_id=p.id, name="t2", status=TodoStatus.DONE, helper="Bob"))
+    session.add(Todo(project_id=p.id, name="t3", status=TodoStatus.HANDOFF, helper="Carol"))
+    session.add(
+        Todo(project_id=p.id, name="t4", status=TodoStatus.HANDOFF, is_archived=True, helper="Dave")
+    )
+    session.commit()
+
+    helpers = data.list_helpers_with_open_handoffs()
+    assert helpers == ["Alice", "Carol"]
+    assert "Bob" not in helpers
+    assert "Dave" not in helpers
 
 
 def test_query_todos_filters(session, monkeypatch) -> None:
@@ -270,6 +293,26 @@ def test_create_project(session, monkeypatch) -> None:
     assert project.id is not None
     assert project.name == "New Project"
     assert session.get(Project, project.id) is not None
+
+
+def test_activity_log_and_get_recent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """log_activity records entries; get_recent_activity returns them."""
+    monkeypatch.setenv("HANDOFF_DB_PATH", str(tmp_path / "activity_test.db"))
+    import handoff.db as db_mod
+
+    db_mod.dispose_db()
+    importlib.reload(db_mod)
+    db_mod.init_db()
+
+    data.create_project("Test Project")
+    activity = data.get_recent_activity(limit=5)
+    assert len(activity) >= 1
+    entry = activity[0]
+    assert entry["entity_type"] == "project"
+    assert entry["action"] == "created"
+    assert entry.get("details", {}).get("name") == "Test Project"
+
+    db_mod.dispose_db()
 
 
 def test_list_projects_excludes_archived_by_default(session, monkeypatch) -> None:
@@ -702,6 +745,55 @@ def test_query_now_items_sorts_risk_first_then_next_check_and_deadline(session, 
         "null_next_check_nonrisk",
     ]
     assert risk_flags == [True, True, False, False]
+
+
+def test_query_upcoming_handoffs(session, monkeypatch) -> None:
+    """query_upcoming_handoffs returns handoffs with next_check in future, deadline not at risk."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr(data, "date", FixedDate)
+
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    tomorrow = date(2026, 3, 10)
+
+    t1 = Todo(
+        project_id=p.id,
+        name="Upcoming",
+        status=TodoStatus.HANDOFF,
+        next_check=tomorrow,
+        deadline=None,
+    )
+    t2 = Todo(
+        project_id=p.id,
+        name="Also upcoming",
+        status=TodoStatus.HANDOFF,
+        next_check=date(2026, 3, 15),
+        deadline=date(2026, 3, 20),
+    )
+    t3 = Todo(
+        project_id=p.id,
+        name="Due soon",
+        status=TodoStatus.HANDOFF,
+        next_check=tomorrow,
+        deadline=tomorrow,
+    )
+    session.add_all([t1, t2, t3])
+    session.commit()
+
+    results = data.query_upcoming_handoffs(deadline_near_days=2)
+    names = [r.name for r in results]
+    assert "Upcoming" in names
+    assert "Also upcoming" in names
+    assert "Due soon" not in names
 
 
 # ---------------------------------------------------------------------------
