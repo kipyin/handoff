@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
 
@@ -103,6 +104,30 @@ def test_compute_on_time_close_rate_trend_weekly_rates() -> None:
     assert week_w11["total"] == 1
 
 
+def test_compute_on_time_close_rate_trend_ignores_missing_deadlines() -> None:
+    today = date(2026, 3, 10)
+    handoffs = [
+        _make_handoff(
+            id=1,
+            created_at=datetime(2026, 2, 20),
+            deadline=None,
+            check_ins=[_make_check_in(date(2026, 3, 2), CheckInType.CONCLUDED, id=1)],
+        ),
+        _make_handoff(
+            id=2,
+            created_at=datetime(2026, 2, 20),
+            deadline=date(2026, 3, 3),
+            check_ins=[_make_check_in(date(2026, 3, 2), CheckInType.CONCLUDED, id=2)],
+        ),
+    ]
+    trend = compute_on_time_close_rate_trend(handoffs, today=today, weeks=8)
+    assert len(trend) == 1
+    week = trend.iloc[0]
+    assert week["total"] == 1
+    assert week["on_time_rate"] == 1.0
+    assert week["on_time_rate_pct"] == "100%"
+
+
 def test_compute_cycle_time_by_project_returns_p50_and_p90() -> None:
     handoffs = [
         _make_handoff(
@@ -179,6 +204,32 @@ def test_compute_reopen_rate_summary_handles_mixed_timezone_created_at() -> None
     assert summary.reopened_closes == 1
 
 
+def test_compute_reopen_rate_summary_accepts_string_check_in_types() -> None:
+    today = date(2026, 3, 10)
+    check_ins = [
+        SimpleNamespace(
+            id=1,
+            check_in_date=date(2026, 3, 1),
+            check_in_type="concluded",
+            created_at=datetime(2026, 3, 1, 8, 0, 0),
+        ),
+        SimpleNamespace(
+            id=2,
+            check_in_date=date(2026, 3, 2),
+            check_in_type="on_track",
+            created_at=datetime(2026, 3, 2, 8, 0, 0),
+        ),
+    ]
+    handoff = _make_handoff(
+        id=1,
+        created_at=datetime(2026, 2, 1),
+        check_ins=check_ins,
+    )
+    summary = compute_reopen_rate_summary([handoff], today=today, window_days=30)
+    assert summary.total_closes == 1
+    assert summary.reopened_closes == 1
+
+
 def test_compute_deadline_adherence_trend_uses_dataset_timeframe() -> None:
     historical = _make_handoff(
         id=1,
@@ -191,6 +242,22 @@ def test_compute_deadline_adherence_trend_uses_dataset_timeframe() -> None:
     assert trend.iloc[0]["week_label"].startswith("2020-")
 
 
+def test_compute_deadline_adherence_trend_empty_without_closes_or_weeks() -> None:
+    open_handoff = _make_handoff(
+        id=1,
+        created_at=datetime(2026, 3, 1),
+        deadline=date(2026, 3, 20),
+        check_ins=[_make_check_in(date(2026, 3, 10), CheckInType.ON_TRACK)],
+    )
+    no_close_trend = compute_deadline_adherence_trend([open_handoff], weeks=8)
+    assert no_close_trend.empty
+    assert list(no_close_trend.columns) == ["week_label", "on_time_rate", "total"]
+
+    zero_week_trend = compute_deadline_adherence_trend([open_handoff], weeks=0)
+    assert zero_week_trend.empty
+    assert list(zero_week_trend.columns) == ["week_label", "on_time_rate", "total"]
+
+
 def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch) -> None:
     today = date(2026, 3, 10)
     open_handoffs = [
@@ -200,6 +267,7 @@ def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch)
     ]
     analytics_handoffs = [_make_handoff(id=4, created_at=datetime(2026, 2, 1))]
     query_calls: list[dict[str, object]] = []
+    risk_calls: list[dict[str, object]] = []
 
     def fake_query_handoffs(**kwargs):
         query_calls.append(kwargs)
@@ -210,7 +278,7 @@ def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("handoff.services.dashboard_service.query_handoffs", fake_query_handoffs)
     monkeypatch.setattr(
         "handoff.services.dashboard_service.query_risk_handoffs",
-        lambda **kwargs: [open_handoffs[0], open_handoffs[1]],
+        lambda **kwargs: risk_calls.append(kwargs) or [open_handoffs[0], open_handoffs[1]],
     )
     monkeypatch.setattr("handoff.services.dashboard_service.get_deadline_near_days", lambda: 2)
     monkeypatch.setattr(
@@ -228,6 +296,7 @@ def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch)
     analytics_call = next(call for call in query_calls if call.get("include_concluded"))
     assert analytics_call["concluded_start"] == today - timedelta(days=90)
     assert analytics_call["concluded_end"] == today
+    assert risk_calls == [{"deadline_near_days": 2, "include_archived_projects": False}]
 
 
 def test_get_on_time_close_rate_trend_uses_service_query(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -267,6 +336,35 @@ def test_get_exportable_metrics_with_data(monkeypatch: pytest.MonkeyPatch) -> No
     assert "on_time_rate" in export_data["csv"]
     assert "reopen_rate" in export_data["csv"]
     assert "p90_cycle_days" in export_data["csv"]
+
+
+def test_get_exportable_metrics_filters_selected_project_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    today = date(2026, 3, 10)
+    project_a = _make_handoff(
+        id=1,
+        created_at=datetime(2026, 2, 20),
+        deadline=date(2026, 3, 3),
+        check_ins=[_make_check_in(date(2026, 3, 2), CheckInType.CONCLUDED, id=1)],
+    )
+    project_b = _make_handoff(
+        id=2,
+        created_at=datetime(2026, 2, 20),
+        deadline=date(2026, 3, 3),
+        check_ins=[_make_check_in(date(2026, 3, 2), CheckInType.CONCLUDED, id=2)],
+    )
+    project_b.project_id = 2
+    project_b.project = SimpleNamespace(name="Project B")
+    monkeypatch.setattr(
+        "handoff.services.dashboard_service.completed_in_range",
+        lambda start, end: [project_a, project_b],
+    )
+    export_data = get_exportable_metrics(today, weeks=12, project_ids=[2])
+    rows = json.loads(export_data["json"])
+    assert len(rows) == 1
+    assert rows[0]["closed"] == 1
+    assert rows[0]["on_time_rate"] == 1.0
 
 
 def test_get_exportable_metrics_empty(monkeypatch: pytest.MonkeyPatch) -> None:
