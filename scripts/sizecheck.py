@@ -5,8 +5,8 @@ ensures every .py file under src/ (or the given paths) is under that limit
 so the issue surfaces before building.
 
 Usage:
-    uv run handoff sizecheck
-    uv run handoff sizecheck src/handoff/data/queries.py
+    uv run handoff sizecheck              # defaults to src/
+    uv run handoff sizecheck path/to.py   # check given file(s) or dir(s)
 """
 
 from __future__ import annotations
@@ -18,6 +18,9 @@ from . import ROOT, SRC
 
 # PyArmor trial license refuses files over ~32KB. Use a conservative limit.
 MAX_BYTES = 32 * 1024
+
+# Warn when a file exceeds this fraction of the limit (e.g. 90% = 28.8KB).
+WARN_THRESHOLD = 0.9
 
 
 def _resolve_paths(paths: list[str] | None) -> list[Path]:
@@ -36,33 +39,42 @@ def _resolve_paths(paths: list[str] | None) -> list[Path]:
     return sorted(SRC.rglob("*.py"))
 
 
-def run_sizecheck(paths: list[str] | None = None) -> tuple[bool, list[str]]:
+def run_sizecheck(paths: list[str] | None = None) -> tuple[bool, list[str], list[str]]:
     """Check that all Python files are under MAX_BYTES.
+
+    Defaults to src/ if no paths provided; with paths, checks the given files/dirs.
 
     Args:
         paths: Optional list of paths (files or dirs). Default: all src/**/*.py.
 
     Returns:
-        (ok, violations) where ok is True if no violations, violations list
-        describes each oversized file.
+        (ok, violations, warnings) where ok is True if no violations, violations
+        list oversized files, warnings list files at or above 90% of limit.
     """
     to_check = _resolve_paths(paths)
     violations: list[str] = []
+    warnings_list: list[str] = []
+    warn_threshold_bytes = int(MAX_BYTES * WARN_THRESHOLD)
     for path in to_check:
         size = path.stat().st_size
+        try:
+            rel = path.relative_to(ROOT)
+        except ValueError:
+            rel = path
         if size > MAX_BYTES:
-            try:
-                rel = path.relative_to(ROOT)
-            except ValueError:
-                rel = path
             violations.append(f"{rel}: {size:,} bytes (max {MAX_BYTES:,})")
-    return (len(violations) == 0, violations)
+        elif size >= warn_threshold_bytes:
+            pct = 100 * size / MAX_BYTES
+            warnings_list.append(f"{rel}: {size:,} bytes ({pct:.0f}% of limit)")
+    return (len(violations) == 0, violations, warnings_list)
 
 
 def main() -> None:
     """CLI entrypoint. Exit 0 if all files pass, 1 otherwise."""
     args = sys.argv[1:] if len(sys.argv) > 1 else []
-    ok, violations = run_sizecheck(args if args else None)
+    ok, violations, warnings_list = run_sizecheck(args if args else None)
+    for w in warnings_list:
+        print(f"warning: {w}", file=sys.stderr)
     if not ok:
         print(
             "The following files exceed the PyArmor trial license limit "

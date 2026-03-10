@@ -85,7 +85,7 @@ def _ci_run(extra_args: list[str] | None = None) -> None:
     extra_args, fix = _extract_fix_flag(extra_args)
     _format_and_lint(extra_args=extra_args, fix=fix)
     typecheck(extra_args=extra_args)
-    sizecheck(extra_args=extra_args)
+    sizecheck(extra_args=[])  # Always check src/; do not forward test paths
     test(extra_args=extra_args)
 
 
@@ -164,9 +164,13 @@ def typecheck(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
 
 @app.command("sizecheck", context_settings={"allow_extra_args": True})
 def sizecheck(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
-    """Check that all .py files under src/ (or given paths) are under 32KB."""
+    """Check .py files under 32KB. Defaults to src/; with args, checks given paths."""
     extra_args = list(extra_args) if extra_args else []
-    ok, violations = sizecheck_module.run_sizecheck(extra_args if extra_args else None)
+    ok, violations, warnings_list = sizecheck_module.run_sizecheck(
+        extra_args if extra_args else None
+    )
+    for w in warnings_list:
+        console.print(f"warning: {w}", style="bold yellow")
     if not ok:
         console.print(
             "The following files exceed the PyArmor trial limit (32KB):\n"

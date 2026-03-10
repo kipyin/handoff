@@ -14,7 +14,7 @@ import scripts.sizecheck as sizecheck_module
 
 def test_no_source_file_exceeds_pyarmor_trial_limit() -> None:
     """Every .py file under src/ must stay under 32KB."""
-    ok, violations = sizecheck_module.run_sizecheck(paths=None)
+    ok, violations, _ = sizecheck_module.run_sizecheck(paths=None)
     assert ok, (
         "The following files exceed the PyArmor trial license limit. "
         "Split them into smaller modules, or run `uv run handoff sizecheck` "
