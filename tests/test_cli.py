@@ -101,3 +101,63 @@ def test_ci_cli_accepts_fix_flag(monkeypatch) -> None:
         ["uv", "run", "pyright", "src", "scripts"],
         ["uv", "run", "pytest", "."],
     ]
+
+
+def test_sizecheck_cli_uses_defaults_when_no_paths(monkeypatch) -> None:
+    """`handoff sizecheck` should default to src with default thresholds."""
+    seen: dict[str, object] = {}
+
+    def fake_run_sizecheck(paths, *, default_path: str, max_bytes: int, warn_threshold: float):
+        seen["paths"] = paths
+        seen["default_path"] = default_path
+        seen["max_bytes"] = max_bytes
+        seen["warn_threshold"] = warn_threshold
+        return True, [], []
+
+    monkeypatch.setattr(cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+
+    result = RUNNER.invoke(cli.app, ["sizecheck"])
+
+    assert result.exit_code == 0
+    assert seen == {
+        "paths": None,
+        "default_path": "src",
+        "max_bytes": 32 * 1024,
+        "warn_threshold": 0.9,
+    }
+    assert "All files under 32,768 bytes." in result.stdout
+
+
+def test_sizecheck_cli_surfaces_warnings_and_fails_on_violations(monkeypatch) -> None:
+    """`handoff sizecheck` should print warnings and exit non-zero on violations."""
+
+    def fake_run_sizecheck(paths, *, default_path: str, max_bytes: int, warn_threshold: float):
+        assert paths == ["src/handoff", "scripts"]
+        assert default_path == "src"
+        assert max_bytes == 100
+        assert warn_threshold == 0.8
+        return (
+            False,
+            ["src/handoff/data.py: 1,234 bytes (max 100)"],
+            ["src/handoff/io.py: 80 bytes (80% of limit)"],
+        )
+
+    monkeypatch.setattr(cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "sizecheck",
+            "--max-bytes",
+            "100",
+            "--warn-threshold",
+            "0.8",
+            "src/handoff",
+            "scripts",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "warning: src/handoff/io.py: 80 bytes (80% of limit)" in result.stdout
+    assert "The following files exceed the limit (100 bytes):" in result.stdout
+    assert "src/handoff/data.py: 1,234 bytes (max 100)" in result.stdout
