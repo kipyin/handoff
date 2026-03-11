@@ -1,0 +1,29 @@
+name: Bug
+description: Something is broken or behaving incorrectly.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What's broken?
+      description: A clear, one- or two-sentence description of the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps or a short scenario that triggers the bug. Leave blank if obvious from the description.
+      placeholder: |
+        1. …
+        2. …
+        3. See error
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should have happened instead?
+    validations:
+      required: false

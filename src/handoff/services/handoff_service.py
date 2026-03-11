@@ -18,7 +18,6 @@ from handoff.data import query_now_items as _query_now_items
 from handoff.data import query_risk_handoffs as _query_risk_handoffs
 from handoff.data import query_upcoming_handoffs as _query_upcoming_handoffs
 from handoff.data import reopen_handoff as _reopen_handoff
-from handoff.data import snooze_handoff as _snooze_handoff
 from handoff.data import update_handoff as _update_handoff
 from handoff.models import CheckIn, CheckInType, Handoff, Project
 from handoff.page_models import HandoffQuery, NowSnapshot
@@ -278,8 +277,8 @@ def query_concluded_handoffs(
 
 
 def snooze_handoff(handoff_id: int, *, to_date: date) -> Handoff | None:
-    """Update a handoff's next_check date. Does not change deadline."""
-    return _snooze_handoff(handoff_id, to_date=to_date)
+    """Move a handoff next_check date without changing other fields."""
+    return _update_handoff(handoff_id, next_check=to_date)
 
 
 def conclude_handoff(handoff_id: int, note: str | None = None) -> CheckIn:

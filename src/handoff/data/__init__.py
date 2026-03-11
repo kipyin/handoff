@@ -19,7 +19,6 @@ from handoff.data.handoffs import (
     handoff_is_closed,
     handoff_is_open,
     reopen_handoff,
-    snooze_handoff,
     update_handoff,
 )
 from handoff.data.io import get_export_payload, import_payload
@@ -75,7 +74,6 @@ __all__ = [
     "_pitchman_to_db",
     "create_handoff",
     "update_handoff",
-    "snooze_handoff",
     "delete_handoff",
     # check-ins
     "create_check_in",

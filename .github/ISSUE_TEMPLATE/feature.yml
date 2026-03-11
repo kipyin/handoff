@@ -1,0 +1,25 @@
+name: Feature
+description: A new capability, change, or idea worth building.
+labels: [feature]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What to build?
+      description: A clear, one- or two-sentence description of the desired change or capability.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why? (optional)
+      description: Context, motivation, or the problem this solves. Skip if self-evident.
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes / acceptance criteria (optional)
+      description: Constraints, open questions, or a rough done-when checklist for AI agents.
+    validations:
+      required: false

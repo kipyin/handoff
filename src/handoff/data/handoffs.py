@@ -150,19 +150,6 @@ def update_handoff(
         return handoff
 
 
-def snooze_handoff(handoff_id: int, *, to_date: date) -> Handoff | None:
-    """Update a handoff's next_check date. Does not change deadline.
-
-    Args:
-        handoff_id: Id of the handoff to snooze.
-        to_date: New next follow-up date.
-
-    Returns:
-        Updated handoff, or None if not found.
-    """
-    return update_handoff(handoff_id, next_check=to_date)
-
-
 def delete_handoff(handoff_id: int) -> bool:
     """Delete a handoff by id.
 

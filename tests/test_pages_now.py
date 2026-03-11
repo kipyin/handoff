@@ -166,6 +166,43 @@ def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch)
     assert "project_ids" in snapshot_calls[0]
     assert "pitchman_names" in snapshot_calls[0]
     assert "search_text" in snapshot_calls[0]
+    assert snapshot_calls[0]["projects"] == [mock_project]
+    assert snapshot_calls[0]["pitchmen"] == ["Alice"]
+
+
+def test_render_now_page_add_form_uses_snapshot_pitchmen(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Now page uses snapshot.pitchmen for add form options."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(pitchmen=["Bob", "Carol"]),
+    )
+    add_form_calls: list[dict] = []
+
+    def _capture_add_form(project_by_name, pitchmen, key_prefix):
+        add_form_calls.append(
+            {
+                "project_by_name": project_by_name,
+                "pitchmen": pitchmen,
+                "key_prefix": key_prefix,
+            }
+        )
+
+    monkeypatch.setattr("handoff.pages.now._render_add_form", _capture_add_form)
+
+    render_now_page()
+
+    assert len(add_form_calls) == 1
+    assert add_form_calls[0]["pitchmen"] == ["Bob", "Carol"]
+    assert add_form_calls[0]["key_prefix"] == "now"
 
 
 def test_render_now_page_include_archived_projects_passed_to_snapshot(
@@ -252,6 +289,7 @@ def test_render_now_page_action_item_shows_check_in_buttons(
     render_now_page()
 
     labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
+    assert "Edit" in labels
     assert "On-track" in labels
     assert "Delayed" in labels
     assert "Conclude" in labels
@@ -280,6 +318,7 @@ def test_render_now_page_risk_item_shows_check_in_buttons(
     render_now_page()
 
     labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
+    assert "Edit" in labels
     assert "On-track" in labels
     assert "Delayed" in labels
     assert "Conclude" in labels
@@ -307,6 +346,7 @@ def test_render_now_page_upcoming_item_shows_check_in_buttons(
     render_now_page()
 
     labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
+    assert "Edit" in labels
     assert "On-track" in labels
     assert "Delayed" in labels
     assert "Conclude" in labels

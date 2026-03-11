@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import date
+from types import SimpleNamespace
 
 import pytest
 
@@ -25,7 +26,6 @@ from handoff.services import (
     query_risk_handoffs,
     query_upcoming_handoffs,
     reopen_handoff,
-    snooze_handoff,
     update_handoff,
 )
 
@@ -151,26 +151,6 @@ def test_service_query_action_handoffs_include_archived_projects(session, monkey
     all_names = [h.need_back for h in query_action_handoffs(include_archived_projects=True)]
     assert "Active due" in all_names
     assert "Archived due" in all_names
-
-
-def test_service_snooze_handoff(session, monkeypatch) -> None:
-    """snooze_handoff updates next_check through the service boundary."""
-    _patch_session_context(monkeypatch, session)
-    p = Project(name="P")
-    session.add(p)
-    session.commit()
-    session.refresh(p)
-
-    handoff = data.create_handoff(
-        project_id=p.id,
-        need_back="Snooze me",
-        next_check=date(2025, 1, 1),
-    )
-    assert handoff.id is not None
-
-    updated = snooze_handoff(handoff.id, to_date=date(2026, 1, 15))
-    assert updated is not None
-    assert updated.next_check == date(2026, 1, 15)
 
 
 def test_service_add_check_in_updates_next_check(session, monkeypatch) -> None:
@@ -553,6 +533,115 @@ def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -
     assert "Closed" in concluded_names
     assert len(snapshot.projects) >= 1
     assert snapshot.projects[0].name == "Work"
+
+
+def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
+    """Snapshot query fan-out uses parsed search/date filters for risk/action/upcoming sections."""
+    parsed = SimpleNamespace(
+        text_query="release gate",
+        next_check_min=date(2026, 3, 1),
+        next_check_max=date(2026, 3, 31),
+        deadline_min=date(2026, 3, 5),
+        deadline_max=date(2026, 4, 5),
+    )
+    monkeypatch.setattr("handoff.services.handoff_service.parse_search_query", lambda _: parsed)
+    monkeypatch.setattr("handoff.services.handoff_service.get_deadline_near_days", lambda: 3)
+
+    risk_calls: list[dict[str, object]] = []
+    action_calls: list[dict[str, object]] = []
+    upcoming_calls: list[dict[str, object]] = []
+    concluded_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.query_risk_handoffs",
+        lambda **kwargs: risk_calls.append(kwargs) or [],
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.query_action_handoffs",
+        lambda **kwargs: action_calls.append(kwargs) or [],
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.query_upcoming_handoffs",
+        lambda **kwargs: upcoming_calls.append(kwargs) or [],
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.query_concluded_handoffs",
+        lambda **kwargs: concluded_calls.append(kwargs) or [],
+    )
+
+    list_projects_calls: list[dict[str, object]] = []
+    list_pitchmen_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.list_projects",
+        lambda **kwargs: list_projects_calls.append(kwargs) or [],
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.list_pitchmen_with_open_handoffs",
+        lambda **kwargs: list_pitchmen_calls.append(kwargs) or [],
+    )
+
+    get_now_snapshot(
+        include_archived_projects=True,
+        project_ids=[7],
+        pitchman_names=["Alice"],
+        search_text="@this_week release gate",
+    )
+
+    open_expected = {
+        "project_ids": [7],
+        "pitchman_names": ["Alice"],
+        "search_text": "release gate",
+        "deadline_near_days": 3,
+        "next_check_min": date(2026, 3, 1),
+        "next_check_max": date(2026, 3, 31),
+        "deadline_min": date(2026, 3, 5),
+        "deadline_max": date(2026, 4, 5),
+        "include_archived_projects": True,
+    }
+    concluded_expected = {
+        "project_ids": [7],
+        "pitchman_names": ["Alice"],
+        "search_text": "release gate",
+        "include_archived_projects": True,
+    }
+    assert risk_calls == [open_expected]
+    assert action_calls == [open_expected]
+    assert upcoming_calls == [open_expected]
+    assert concluded_calls == [concluded_expected]
+    assert list_projects_calls == [{"include_archived": True}]
+    assert list_pitchmen_calls == [{"include_archived_projects": True}]
+
+
+def test_service_get_now_snapshot_uses_prefetched_supporting_data(monkeypatch) -> None:
+    """Prefetched projects/pitchmen bypass extra list queries in snapshot service."""
+    parsed = SimpleNamespace(
+        text_query="",
+        next_check_min=None,
+        next_check_max=None,
+        deadline_min=None,
+        deadline_max=None,
+    )
+    monkeypatch.setattr("handoff.services.handoff_service.parse_search_query", lambda _: parsed)
+    monkeypatch.setattr("handoff.services.handoff_service.get_deadline_near_days", lambda: 1)
+    monkeypatch.setattr("handoff.services.handoff_service.query_risk_handoffs", lambda **_: [])
+    monkeypatch.setattr("handoff.services.handoff_service.query_action_handoffs", lambda **_: [])
+    monkeypatch.setattr("handoff.services.handoff_service.query_upcoming_handoffs", lambda **_: [])
+    monkeypatch.setattr("handoff.services.handoff_service.query_concluded_handoffs", lambda **_: [])
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.list_projects",
+        lambda **_: pytest.fail("list_projects should not be called when projects are pre-fetched"),
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.list_pitchmen_with_open_handoffs",
+        lambda **_: pytest.fail("list_pitchmen_with_open_handoffs should not be called"),
+    )
+
+    prefetched_projects = [Project(name="Prefetched")]
+    prefetched_pitchmen = ["Alice", "Bob"]
+
+    snapshot = get_now_snapshot(projects=prefetched_projects, pitchmen=prefetched_pitchmen)
+
+    assert snapshot.projects is prefetched_projects
+    assert snapshot.pitchmen is prefetched_pitchmen
 
 
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:

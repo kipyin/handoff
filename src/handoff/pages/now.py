@@ -696,10 +696,7 @@ def _render_add_form(
 def render_now_page() -> None:
     """Render the Now page with four sections: Risk | Action | Upcoming | Concluded."""
     st.subheader("Now")
-    st.caption(
-        "Minimize risks by clearing actions on time. "
-        "Use Snooze to follow up later, or Conclude when done."
-    )
+    st.caption("Minimize risks by clearing actions on time.")
     flash_message = st.session_state.pop(_NOW_FLASH_SUCCESS_KEY, None)
     if flash_message:
         st.success(flash_message)

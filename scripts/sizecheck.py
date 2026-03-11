@@ -69,9 +69,10 @@ def run_sizecheck(
             rel = path.relative_to(ROOT)
         except ValueError:
             rel = path
+        rel_posix = rel.as_posix()
         if size > max_bytes:
-            violations.append(f"{rel}: {size:,} bytes (max {max_bytes:,})")
+            violations.append(f"{rel_posix}: {size:,} bytes (max {max_bytes:,})")
         elif size >= warn_threshold_bytes:
             pct = 100 * size / max_bytes
-            warnings_list.append(f"{rel}: {size:,} bytes ({pct:.0f}% of limit)")
+            warnings_list.append(f"{rel_posix}: {size:,} bytes ({pct:.0f}% of limit)")
     return (len(violations) == 0, violations, warnings_list)
