@@ -276,6 +276,11 @@ def query_concluded_handoffs(
     )
 
 
+def snooze_handoff(handoff_id: int, *, to_date: date) -> Handoff | None:
+    """Move a handoff next_check date without changing other fields."""
+    return _update_handoff(handoff_id, next_check=to_date)
+
+
 def conclude_handoff(handoff_id: int, note: str | None = None) -> CheckIn:
     """Add a concluded check-in to close the handoff.
 
