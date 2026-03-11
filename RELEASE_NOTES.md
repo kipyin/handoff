@@ -25,6 +25,11 @@ Apply tags in this order. Use the first tag that matches.
   - Ruff/formatting cleanup, pyright fixes
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
 
+## 2026.3.11 [Recommended]
+
+- **Improvement**
+  - **Now page action row cleanup:** Removed Snooze; Edit is now inline with On-track | Delayed | Conclude in a single row. No Actions popover.
+
 ## 2026.3.10 [Recommended]
 
 - **Feature**

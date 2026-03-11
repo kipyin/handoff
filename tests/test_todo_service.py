@@ -26,7 +26,6 @@ from handoff.services import (
     query_risk_handoffs,
     query_upcoming_handoffs,
     reopen_handoff,
-    snooze_handoff,
     update_handoff,
 )
 
@@ -152,26 +151,6 @@ def test_service_query_action_handoffs_include_archived_projects(session, monkey
     all_names = [h.need_back for h in query_action_handoffs(include_archived_projects=True)]
     assert "Active due" in all_names
     assert "Archived due" in all_names
-
-
-def test_service_snooze_handoff(session, monkeypatch) -> None:
-    """snooze_handoff updates next_check through the service boundary."""
-    _patch_session_context(monkeypatch, session)
-    p = Project(name="P")
-    session.add(p)
-    session.commit()
-    session.refresh(p)
-
-    handoff = data.create_handoff(
-        project_id=p.id,
-        need_back="Snooze me",
-        next_check=date(2025, 1, 1),
-    )
-    assert handoff.id is not None
-
-    updated = snooze_handoff(handoff.id, to_date=date(2026, 1, 15))
-    assert updated is not None
-    assert updated.next_check == date(2026, 1, 15)
 
 
 def test_service_add_check_in_updates_next_check(session, monkeypatch) -> None:
