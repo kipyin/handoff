@@ -115,6 +115,8 @@ def rule_condition_to_dict(condition: RuleCondition) -> dict[str, Any]:
 
 def rule_condition_from_dict(payload: dict[str, Any]) -> RuleCondition:
     """Deserialize a rule condition from dictionary form."""
+    if not isinstance(payload, dict):
+        raise ValueError(f"rule condition payload must be a dict, got {type(payload)!r}")
     raw_type = payload.get("condition_type")
     try:
         condition_type = RuleConditionType(str(raw_type))
@@ -173,9 +175,14 @@ class RuleDefinition:
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> RuleDefinition:
         """Deserialize from dictionary form."""
+        if not isinstance(payload, dict):
+            raise ValueError(f"rule definition payload must be a dict, got {type(payload)!r}")
         conditions_payload = payload.get("conditions")
         if not isinstance(conditions_payload, list):
             raise ValueError("conditions must be a list")
+        for i, item in enumerate(conditions_payload):
+            if not isinstance(item, dict):
+                raise ValueError(f"conditions[{i}] must be a dict, got {type(item)!r}")
         return cls(
             rule_id=str(payload["rule_id"]),
             name=str(payload["name"]),
@@ -251,8 +258,11 @@ class RuleMatchResult:
             raise ValueError("explanation must be non-empty")
         if self.is_fallback and self.matched_rule_id is not None:
             raise ValueError("fallback match results must not include matched_rule_id")
-        if not self.is_fallback and self.matched_rule_id is None:
-            raise ValueError("non-fallback match results require matched_rule_id")
+        if not self.is_fallback:
+            if self.matched_rule_id is None:
+                raise ValueError("non-fallback match results require matched_rule_id")
+            if not self.matched_rule_id.strip():
+                raise ValueError("matched_rule_id must be non-empty for non-fallback match results")
 
 
 def build_default_rulebook_settings(*, deadline_near_days: int = 1) -> RulebookSettings:

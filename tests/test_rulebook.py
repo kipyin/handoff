@@ -5,6 +5,8 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import date, timedelta
 
+import pytest
+
 import handoff.data as data
 from handoff.models import CheckIn, CheckInType, Handoff, Project
 from handoff.rulebook import (
@@ -171,25 +173,17 @@ def test_rulebook_validation_and_roundtrip() -> None:
         priority=30,
         conditions=(NextCheckDueCondition(),),
     )
-    try:
+    with pytest.raises(ValueError, match="rule_ids must be unique"):
         RulebookSettings(
             version=1,
             rules=(settings.rules[0], duplicate_rule),
         )
-    except ValueError as exc:
-        assert "rule_ids must be unique" in str(exc)
-    else:
-        raise AssertionError("Expected duplicate rule ids to raise ValueError")
 
 
 def test_rule_condition_and_match_result_validation() -> None:
     """Condition and match-result contracts reject invalid payloads."""
-    try:
+    with pytest.raises(ValueError, match="days >= 0"):
         DeadlineWithinDaysCondition(days=-1)
-    except ValueError as exc:
-        assert "days >= 0" in str(exc)
-    else:
-        raise AssertionError("Expected negative days to raise ValueError")
 
     fallback_result = RuleMatchResult(
         section_id=BuiltInSection.UPCOMING.value,
@@ -199,17 +193,21 @@ def test_rule_condition_and_match_result_validation() -> None:
     )
     assert fallback_result.is_fallback is True
 
-    try:
+    with pytest.raises(ValueError, match="require matched_rule_id"):
         RuleMatchResult(
             section_id=BuiltInSection.RISK.value,
             explanation="Matched risk rule.",
             matched_rule_id=None,
             is_fallback=False,
         )
-    except ValueError as exc:
-        assert "require matched_rule_id" in str(exc)
-    else:
-        raise AssertionError("Expected non-fallback result without rule id to raise ValueError")
+
+    with pytest.raises(ValueError, match="matched_rule_id must be non-empty"):
+        RuleMatchResult(
+            section_id=BuiltInSection.RISK.value,
+            explanation="Matched risk rule.",
+            matched_rule_id="   ",
+            is_fallback=False,
+        )
 
 
 def test_default_rules_mirror_current_section_semantics(session, monkeypatch) -> None:
