@@ -45,10 +45,10 @@ def _format_condition(condition: RuleCondition) -> str:
     """Return a human-readable description of a rule condition.
 
     Args:
-        condition (RuleCondition): The rule condition to format.
+        condition: The rule condition to format.
 
     Returns:
-        str: A short description of the condition (e.g., "Deadline within 3 day(s)").
+        A short description of the condition (e.g., "Deadline within 3 day(s)").
     """
     if isinstance(condition, DeadlineWithinDaysCondition):
         return f"Deadline within {condition.days} day(s)"
