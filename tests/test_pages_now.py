@@ -1503,9 +1503,7 @@ def test_render_check_in_flow_edit_button_visible_with_allow_actions(
     )
 
     edit_buttons = [
-        call[0][0]
-        for call in st_mock.button.call_args_list
-        if call[0] and call[0][0] == "Edit"
+        call[0][0] for call in st_mock.button.call_args_list if call[0] and call[0][0] == "Edit"
     ]
     assert len(edit_buttons) == 1
 
@@ -1525,9 +1523,7 @@ def test_render_check_in_flow_edit_button_hidden_without_allow_actions(
     )
 
     edit_buttons = [
-        call[0][0]
-        for call in st_mock.button.call_args_list
-        if call[0] and call[0][0] == "Edit"
+        call[0][0] for call in st_mock.button.call_args_list if call[0] and call[0][0] == "Edit"
     ]
     assert len(edit_buttons) == 0
 
@@ -1544,7 +1540,9 @@ def test_render_check_in_flow_segmented_control_options_correct(
 
     seg_calls = st_mock.segmented_control.call_args_list
     assert len(seg_calls) >= 1
-    options = seg_calls[0].kwargs.get("options", seg_calls[0].args[1] if len(seg_calls[0].args) > 1 else [])
+    options = seg_calls[0].kwargs.get(
+        "options", seg_calls[0].args[1] if len(seg_calls[0].args) > 1 else []
+    )
     assert list(options) == ["on_track", "delayed", "concluded"]
 
 
