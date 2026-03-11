@@ -13,10 +13,12 @@ Rulebook semantics in this release:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, timedelta
 from enum import StrEnum
 from typing import Any
 
-from handoff.models import CheckInType
+from handoff.handoff_lifecycle import _latest_check_in, handoff_is_open
+from handoff.models import CheckInType, Handoff
 
 DEFAULT_RULEBOOK_VERSION = 1
 DEFAULT_RISK_RULE_ID = "default_risk_deadline_near_and_delayed"
@@ -265,6 +267,86 @@ class RuleMatchResult:
                 raise ValueError("matched_rule_id must be non-empty for non-fallback match results")
 
 
+def _ordered_enabled_rules(settings: RulebookSettings) -> tuple[RuleDefinition, ...]:
+    """Return enabled rules in deterministic priority order."""
+    return tuple(
+        rule
+        for _, rule in sorted(
+            enumerate(settings.rules),
+            key=lambda item: (item[1].priority, item[0]),
+        )
+        if rule.enabled
+    )
+
+
+def _matches_condition(condition: RuleCondition, handoff: Handoff, *, today: date) -> bool:
+    """Return True when the handoff satisfies the given condition."""
+    if isinstance(condition, DeadlineWithinDaysCondition):
+        cutoff = today + timedelta(days=condition.days)
+        return handoff.deadline is not None and handoff.deadline <= cutoff
+    if isinstance(condition, LatestCheckInTypeIsCondition):
+        latest = _latest_check_in(handoff)
+        return latest is not None and latest.check_in_type == condition.check_in_type
+    if isinstance(condition, NextCheckDueCondition):
+        if handoff.next_check is None:
+            return condition.include_missing_next_check
+        return handoff.next_check <= today
+    msg = f"Unsupported rule condition type: {type(condition)!r}"
+    raise ValueError(msg)
+
+
+def _match_explanation(rule: RuleDefinition) -> str:
+    """Return a concise explanation for a rule match."""
+    return rule.match_reason.strip() or f"Matched {rule.name}."
+
+
+def _section_label(section_id: str) -> str:
+    """Return a human-readable section label for explanations."""
+    return section_id.replace("_", " ").title()
+
+
+def evaluate_open_handoff(
+    handoff: Handoff,
+    *,
+    settings: RulebookSettings | None = None,
+    today: date | None = None,
+) -> RuleMatchResult:
+    """Evaluate one open handoff against the configured rulebook.
+
+    The rule engine is exclusive and first-match-wins. Concluded handoffs stay
+    outside the engine and raise ``ValueError`` here.
+    """
+    settings = settings or DEFAULT_RULEBOOK_SETTINGS
+    if not settings.first_match_wins:
+        raise ValueError("rule evaluation only supports first_match_wins=True")
+    if not handoff_is_open(handoff):
+        raise ValueError("rule evaluation only supports open handoffs")
+
+    evaluation_day = today or date.today()
+    for rule in _ordered_enabled_rules(settings):
+        if all(
+            _matches_condition(condition, handoff, today=evaluation_day)
+            for condition in rule.conditions
+        ):
+            return RuleMatchResult(
+                section_id=rule.section_id,
+                explanation=_match_explanation(rule),
+                matched_rule_id=rule.rule_id,
+                is_fallback=False,
+            )
+
+    fallback_section = settings.open_items_fallback_section
+    fallback_explanation = (
+        f"No enabled rule matched; item falls back to {_section_label(fallback_section)}."
+    )
+    return RuleMatchResult(
+        section_id=fallback_section,
+        explanation=fallback_explanation,
+        matched_rule_id=None,
+        is_fallback=True,
+    )
+
+
 def build_default_rulebook_settings(*, deadline_near_days: int = 1) -> RulebookSettings:
     """Return built-in default rulebook definitions.
 
@@ -323,6 +405,7 @@ __all__ = [
     "RuleMatchResult",
     "RulebookSettings",
     "build_default_rulebook_settings",
+    "evaluate_open_handoff",
     "rule_condition_from_dict",
     "rule_condition_to_dict",
 ]

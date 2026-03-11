@@ -19,6 +19,10 @@ from handoff.pages.now import (
     _render_check_in_trail,
     _render_item,
     _render_reopen_flow,
+    _save_add_submission,
+    _save_check_in_submission,
+    _save_edit_submission,
+    _save_reopen_submission,
     render_now_page,
 )
 
@@ -156,7 +160,9 @@ def test_render_now_page_archived_only_projects_shows_toggle_hint(
 
     assert list_project_calls == [False, True]
     st_mock.info.assert_called_once()
-    assert "No active projects." in st_mock.info.call_args[0][0]
+    info_msg = st_mock.info.call_args[0][0]
+    assert "No active projects." in info_msg
+    assert "Include archived projects" in info_msg
 
 
 def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1422,6 +1428,276 @@ def test_is_check_in_due_none() -> None:
 
     h = SimpleNamespace(next_check=None)
     assert _is_check_in_due(h) is False
+
+
+def test_save_check_in_submission_with_missing_next_check_key_sets_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Check-in submission with missing next_check_key sets flash error."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    services_mock = MagicMock()
+    monkeypatch.setattr("handoff.pages.now.add_check_in", services_mock)
+
+    st_mock.session_state["test_mode"] = "on_track"
+    st_mock.session_state["test_note"] = "Going well"
+
+    _save_check_in_submission(
+        handoff_id=1,
+        selected_mode="on_track",
+        mode_key="test_mode",
+        note_key="test_note",
+        next_check_key=None,  # Missing
+    )
+
+    assert st_mock.session_state["now_flash_error"] == "Select a valid next check-in date."
+    services_mock.assert_not_called()
+
+
+def test_save_check_in_submission_with_invalid_next_check_date_sets_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Check-in submission with invalid next_check_date type sets flash error."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    services_mock = MagicMock()
+    monkeypatch.setattr("handoff.pages.now.add_check_in", services_mock)
+
+    st_mock.session_state["test_mode"] = "on_track"
+    st_mock.session_state["test_note"] = "Going well"
+    st_mock.session_state["test_next_check"] = "2026-03-10"  # Invalid: not a date object
+
+    _save_check_in_submission(
+        handoff_id=1,
+        selected_mode="on_track",
+        mode_key="test_mode",
+        note_key="test_note",
+        next_check_key="test_next_check",
+    )
+
+    assert st_mock.session_state["now_flash_error"] == "Select a valid next check-in date."
+    services_mock.assert_not_called()
+
+
+def test_save_check_in_submission_conclude_logs_instrumentation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Conclude action flow logs instrumentation with time_action."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    conclude_mock = MagicMock()
+    monkeypatch.setattr("handoff.pages.now.conclude_handoff", conclude_mock)
+
+    logger_mock = MagicMock()
+    monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
+
+    st_mock.session_state["test_mode"] = "concluded"
+    st_mock.session_state["test_note"] = "Done"
+
+    _save_check_in_submission(
+        handoff_id=1,
+        selected_mode="concluded",
+        mode_key="test_mode",
+        note_key="test_note",
+        next_check_key="test_next_check",
+    )
+
+    conclude_mock.assert_called_once_with(1, note="Done")
+    logger_mock.info.assert_called_once()
+    call_args = logger_mock.info.call_args[0]
+    assert call_args[1] == "now_conclude"
+    assert "elapsed_ms" in call_args[0]
+
+
+def test_save_check_in_submission_on_track_logs_instrumentation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On-track check-in logs instrumentation with time_action."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    check_in_mock = MagicMock()
+    monkeypatch.setattr("handoff.pages.now.add_check_in", check_in_mock)
+
+    logger_mock = MagicMock()
+    monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
+
+    st_mock.session_state["test_mode"] = "on_track"
+    st_mock.session_state["test_note"] = "Good progress"
+    st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+
+    _save_check_in_submission(
+        handoff_id=1,
+        selected_mode="on_track",
+        mode_key="test_mode",
+        note_key="test_note",
+        next_check_key="test_next_check",
+    )
+
+    check_in_mock.assert_called_once()
+    logger_mock.info.assert_called_once()
+    call_args = logger_mock.info.call_args[0]
+    assert call_args[1] == "now_check_in"
+
+
+def test_save_reopen_submission_logs_instrumentation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reopen action logs instrumentation with time_action."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    reopen_mock = MagicMock()
+    monkeypatch.setattr("handoff.pages.now.reopen_handoff", reopen_mock)
+
+    logger_mock = MagicMock()
+    monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
+
+    st_mock.session_state["test_reopen_mode"] = "reopen"
+    st_mock.session_state["test_reopen_note"] = "Reopening"
+    st_mock.session_state["test_reopen_next_check"] = date(2026, 3, 16)
+
+    _save_reopen_submission(
+        handoff_id=1,
+        mode_key="test_reopen_mode",
+        note_key="test_reopen_note",
+        next_check_key="test_reopen_next_check",
+    )
+
+    reopen_mock.assert_called_once()
+    logger_mock.info.assert_called_once()
+    call_args = logger_mock.info.call_args[0]
+    assert call_args[1] == "now_reopen"
+
+
+def test_save_reopen_submission_with_error_logs_and_sets_flash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reopen error logs instrumentation and sets flash instead of raising."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    reopen_mock = MagicMock(side_effect=ValueError("Cannot reopen"))
+    monkeypatch.setattr("handoff.pages.now.reopen_handoff", reopen_mock)
+
+    logger_mock = MagicMock()
+    monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
+
+    st_mock.session_state["test_reopen_mode"] = "reopen"
+    st_mock.session_state["test_reopen_note"] = "Reopening"
+    st_mock.session_state["test_reopen_next_check"] = date(2026, 3, 16)
+
+    _save_reopen_submission(
+        handoff_id=1,
+        mode_key="test_reopen_mode",
+        note_key="test_reopen_note",
+        next_check_key="test_reopen_next_check",
+    )
+
+    logger_mock.info.assert_called_once()
+    assert st_mock.session_state["now_flash_error"] == "Cannot reopen"
+
+
+def test_save_edit_submission_logs_instrumentation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edit action logs instrumentation with time_action."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    update_mock = MagicMock()
+    monkeypatch.setattr("handoff.pages.now.update_handoff", update_mock)
+
+    logger_mock = MagicMock()
+    monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
+
+    st_mock.session_state["test_project"] = "Work"
+    st_mock.session_state["test_need"] = "Updated need"
+    st_mock.session_state["test_who"] = "Bob"
+    st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+    st_mock.session_state["test_deadline"] = date(2026, 3, 20)
+    st_mock.session_state["test_context"] = "Context"
+
+    _save_edit_submission(
+        handoff_id=1,
+        project_by_name={"Work": SimpleNamespace(id=1)},
+        project_key="test_project",
+        who_key="test_who",
+        need_key="test_need",
+        next_check_key="test_next_check",
+        deadline_key="test_deadline",
+        context_key="test_context",
+    )
+
+    update_mock.assert_called_once()
+    logger_mock.info.assert_called_once()
+    call_args = logger_mock.info.call_args[0]
+    assert call_args[1] == "now_edit"
+
+
+def test_save_add_submission_logs_instrumentation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Add action logs instrumentation with time_action."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    create_mock = MagicMock()
+    monkeypatch.setattr("handoff.pages.now.create_handoff", create_mock)
+
+    logger_mock = MagicMock()
+    monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
+
+    st_mock.session_state["test_project"] = "Work"
+    st_mock.session_state["test_need"] = "New need"
+    st_mock.session_state["test_who"] = "Alice"
+    st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+    st_mock.session_state["test_deadline"] = None
+    st_mock.session_state["test_context"] = "New context"
+
+    _save_add_submission(
+        project_by_name={"Work": SimpleNamespace(id=1)},
+        project_key="test_project",
+        who_key="test_who",
+        need_key="test_need",
+        next_check_key="test_next_check",
+        deadline_key="test_deadline",
+        context_key="test_context",
+    )
+
+    create_mock.assert_called_once()
+    logger_mock.info.assert_called_once()
+    call_args = logger_mock.info.call_args[0]
+    assert call_args[1] == "now_add"
+
+
+def test_render_now_page_flash_success_displays(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Flash success message is displayed when present in session state."""
+    st_mock = _build_streamlit_mock()
+    st_mock.session_state["now_flash_success"] = "Operation successful"
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kw: [])
+
+    render_now_page()
+
+    st_mock.success.assert_called_once_with("Operation successful")
+
+
+def test_render_now_page_no_projects_with_include_archived_true_shows_create_info(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When include_archived=True and truly no projects, shows create info."""
+    st_mock = _build_streamlit_mock()
+    st_mock.checkbox.return_value = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kw: [])
+
+    render_now_page()
+
+    info_calls = [c[0][0] for c in st_mock.info.call_args_list if c[0]]
+    assert any("Create one on the Projects page" in str(call) for call in info_calls)
 
 
 # --- Regression tests for PR #88: Snooze removal + segmented_control ---
