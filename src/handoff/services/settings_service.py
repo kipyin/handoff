@@ -45,9 +45,8 @@ def _save_settings(settings: dict[str, Any]) -> None:
         json.dump(settings, f, indent=2)
 
 
-def get_deadline_near_days() -> int:
-    """Return the number of days within which a deadline is considered at risk (for Now page)."""
-    settings = _load_settings()
+def _deadline_near_days_from_dict(settings: dict[str, Any]) -> int:
+    """Extract deadline_near_days from a settings dict with validation."""
     val = settings.get("deadline_near_days")
     if val is None:
         return DEFAULT_DEADLINE_NEAR_DAYS
@@ -58,6 +57,11 @@ def get_deadline_near_days() -> int:
     except (TypeError, ValueError):
         pass
     return DEFAULT_DEADLINE_NEAR_DAYS
+
+
+def get_deadline_near_days() -> int:
+    """Return the number of days within which a deadline is considered at risk (for Now page)."""
+    return _deadline_near_days_from_dict(_load_settings())
 
 
 def set_deadline_near_days(value: int) -> None:
@@ -71,24 +75,25 @@ def set_deadline_near_days(value: int) -> None:
 def get_rulebook_settings() -> RulebookSettings:
     """Return global rulebook settings from disk. Fall back to defaults if invalid/missing."""
     settings = _load_settings()
+    deadline_near = _deadline_near_days_from_dict(settings)
     rulebook_payload = settings.get(RULEBOOK_SETTINGS_KEY)
     if rulebook_payload is None:
-        return build_default_rulebook_settings(deadline_near_days=get_deadline_near_days())
+        return build_default_rulebook_settings(deadline_near_days=deadline_near)
     if not isinstance(rulebook_payload, dict):
-        return build_default_rulebook_settings(deadline_near_days=get_deadline_near_days())
+        return build_default_rulebook_settings(deadline_near_days=deadline_near)
     try:
         parsed = RulebookSettings.from_dict(rulebook_payload)
         if not parsed.rules:
-            return build_default_rulebook_settings(deadline_near_days=get_deadline_near_days())
+            return build_default_rulebook_settings(deadline_near_days=deadline_near)
         return parsed
     except (ValueError, KeyError, TypeError):
-        return build_default_rulebook_settings(deadline_near_days=get_deadline_near_days())
+        return build_default_rulebook_settings(deadline_near_days=deadline_near)
 
 
-def save_rulebook_settings(settings: RulebookSettings) -> None:
+def save_rulebook_settings(rulebook_settings: RulebookSettings) -> None:
     """Persist the global rulebook to settings JSON. Preserves other settings keys."""
     data = _load_settings()
-    data[RULEBOOK_SETTINGS_KEY] = settings.to_dict()
+    data[RULEBOOK_SETTINGS_KEY] = rulebook_settings.to_dict()
     _save_settings(data)
 
 

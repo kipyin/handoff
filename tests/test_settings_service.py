@@ -183,9 +183,7 @@ def test_get_rulebook_settings_missing_file_returns_defaults(
 
     settings = settings_service.get_rulebook_settings()
 
-    assert settings.version >= 1
-    assert len(settings.rules) == 2
-    assert settings.open_items_fallback_section == BuiltInSection.UPCOMING.value
+    assert settings == build_default_rulebook_settings()
 
 
 def test_get_rulebook_settings_invalid_json_returns_defaults(
@@ -197,8 +195,7 @@ def test_get_rulebook_settings_invalid_json_returns_defaults(
 
     settings = settings_service.get_rulebook_settings()
 
-    assert settings.version >= 1
-    assert len(settings.rules) == 2
+    assert settings == build_default_rulebook_settings()
 
 
 def test_get_rulebook_settings_invalid_rulebook_payload_returns_defaults(
@@ -209,22 +206,19 @@ def test_get_rulebook_settings_invalid_rulebook_payload_returns_defaults(
 
     (tmp_path / "handoff_settings.json").write_text('{"rulebook": "not a dict"}', encoding="utf-8")
     settings = settings_service.get_rulebook_settings()
-    assert settings.version >= 1
-    assert len(settings.rules) == 2
+    assert settings == build_default_rulebook_settings()
 
     (tmp_path / "handoff_settings.json").write_text(
         '{"rulebook": {"version": 1, "rules": "not a list"}}', encoding="utf-8"
     )
     settings = settings_service.get_rulebook_settings()
-    assert settings.version >= 1
-    assert len(settings.rules) == 2
+    assert settings == build_default_rulebook_settings()
 
     (tmp_path / "handoff_settings.json").write_text(
         '{"rulebook": {"version": 1, "rules": []}}', encoding="utf-8"
     )
     settings = settings_service.get_rulebook_settings()
-    assert settings.version >= 1
-    assert len(settings.rules) == 2
+    assert settings == build_default_rulebook_settings()
 
 
 def test_get_rulebook_settings_valid_returns_persisted(
@@ -270,7 +264,7 @@ def test_save_rulebook_settings_persists_and_preserves_other_keys(
     assert settings_service.get_deadline_near_days() == 5
     loaded = settings_service.get_rulebook_settings()
     assert loaded.version == custom.version
-    assert len(loaded.rules) == 2
+    assert len(loaded.rules) == len(build_default_rulebook_settings().rules)
 
     raw = (tmp_path / "handoff_settings.json").read_text(encoding="utf-8")
     assert "deadline_near_days" in raw
