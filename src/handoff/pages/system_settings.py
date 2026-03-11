@@ -46,7 +46,14 @@ from handoff.version import __version__ as APP_VERSION
 
 
 def _format_condition(condition: RuleCondition) -> str:
-    """Return a short human-readable description of a rule condition."""
+    """Return a human-readable description of a rule condition.
+
+    Args:
+        condition: The rule condition to format.
+
+    Returns:
+        A short description of the condition (e.g., "Deadline within 3 day(s)").
+    """
     if isinstance(condition, DeadlineWithinDaysCondition):
         return f"Deadline within {condition.days} day(s)"
     if isinstance(condition, LatestCheckInTypeIsCondition):
@@ -57,6 +64,13 @@ def _format_condition(condition: RuleCondition) -> str:
             return "Next check due or missing"
         return "Next check due"
     return "Unknown condition"
+
+
+def _clear_rulebook_widget_state() -> None:
+    """Remove rulebook widget keys from session state so form reloads from disk."""
+    to_drop = [k for k in st.session_state if k.startswith("settings_rule_")]
+    for k in to_drop:
+        del st.session_state[k]
 
 
 def _collect_edited_rule(
@@ -145,10 +159,19 @@ def _render_rulebook_section() -> None:
                         CheckInType.ON_TRACK.value,
                         CheckInType.DELAYED.value,
                     ]
+                    try:
+                        index = options.index(cond.check_in_type.value)
+                    except ValueError:
+                        index = 0
+                        st.warning(
+                            "A saved rule uses an unsupported check-in type. "
+                            "Falling back to a default value.",
+                            icon="⚠️",
+                        )
                     st.selectbox(
                         "Latest check-in type",
                         options=options,
-                        index=options.index(cond.check_in_type.value),
+                        index=index,
                         key=key_prefix + "_check_in_type",
                     )
                 elif isinstance(cond, NextCheckDueCondition):
@@ -186,10 +209,12 @@ def _render_rulebook_section() -> None:
     with col2:
         if st.button("Reset to defaults", key="settings_rulebook_reset"):
             reset_rulebook_settings()
+            _clear_rulebook_widget_state()
             st.success(
                 "Rulebook reset to built-in defaults. "
                 "The Now page will use this from the next refresh."
             )
+            st.rerun()
 
 
 def _render_now_settings_section() -> None:

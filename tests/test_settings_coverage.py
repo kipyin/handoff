@@ -17,6 +17,7 @@ from handoff.pages.system_settings import (
     _render_rulebook_section,
     _render_send_log_section,
 )
+from handoff.rulebook import NextCheckDueCondition, RulebookSettings, RuleDefinition
 
 
 def _patch_streamlit(monkeypatch, **st_overrides) -> MagicMock:
@@ -88,10 +89,6 @@ class TestRenderRulebookSection:
         from handoff.rulebook import build_default_rulebook_settings
 
         st_mock = _patch_streamlit(monkeypatch)
-
-        def button_return(key: str | None = None) -> bool:
-            return key == "settings_rulebook_reset" if key else False
-
         st_mock.button.side_effect = lambda label, key=None: (
             key == "settings_rulebook_reset" if key else False
         )
@@ -124,7 +121,7 @@ class TestRenderRulebookSection:
         st_mock.button.side_effect = lambda label, key=None: (
             key == "settings_rulebook_save" if key else False
         )
-        st_mock.session_state = {
+        session_state = {
             "settings_rule_0_enabled": True,
             "settings_rule_0_priority": 10,
             "settings_rule_0_cond_0_days": 2,
@@ -133,6 +130,13 @@ class TestRenderRulebookSection:
             "settings_rule_1_priority": 20,
             "settings_rule_1_cond_0_include_missing": False,
         }
+        st_mock.session_state = session_state
+        st_mock.checkbox.side_effect = lambda *a, **kw: session_state.get(
+            kw.get("key"), kw.get("value", False)
+        )
+        st_mock.number_input.side_effect = lambda *a, **kw: session_state.get(
+            kw.get("key"), kw.get("value", 0)
+        )
         monkeypatch.setattr(
             "handoff.pages.system_settings.get_rulebook_settings",
             build_default_rulebook_settings,
@@ -157,6 +161,8 @@ class TestRenderRulebookSection:
             c for c in risk_rule.conditions if isinstance(c, DeadlineWithinDaysCondition)
         )
         assert deadline_cond.days == 2
+        assert risk_rule.enabled is True
+        assert risk_rule.priority == 10
         st_mock.success.assert_called_once()
 
     def test_save_invalid_config_shows_error(self, monkeypatch) -> None:
@@ -185,6 +191,113 @@ class TestRenderRulebookSection:
 
         st_mock.error.assert_called_once()
         assert "Invalid" in st_mock.error.call_args[0][0]
+
+    def test_reset_clears_session_state_and_reruns(self, monkeypatch) -> None:
+        """After Reset, rulebook widget keys are cleared and rerun is triggered."""
+        from handoff.rulebook import build_default_rulebook_settings
+
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.button.side_effect = lambda label, key=None: (
+            key == "settings_rulebook_reset" if key else False
+        )
+        session_state = {
+            "settings_rule_0_enabled": False,
+            "settings_rule_0_priority": 99,
+        }
+        st_mock.session_state = session_state
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_rulebook_settings",
+            build_default_rulebook_settings,
+        )
+        reset_called = []
+
+        def mock_reset() -> None:
+            reset_called.append(True)
+
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.reset_rulebook_settings",
+            mock_reset,
+        )
+
+        _render_rulebook_section()
+
+        assert reset_called == [True]
+        assert "settings_rule_0_enabled" not in session_state
+        assert "settings_rule_0_priority" not in session_state
+        st_mock.rerun.assert_called_once()
+
+    def test_caption_uses_rulebook_sections_and_fallback(self, monkeypatch) -> None:
+        """Caption reflects configured sections and fallback, not hard-coded labels."""
+        settings = RulebookSettings(
+            version=1,
+            rules=(
+                RuleDefinition(
+                    rule_id="rule_two",
+                    name="Two",
+                    section_id="waiting_for_input",
+                    priority=20,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+                RuleDefinition(
+                    rule_id="rule_one",
+                    name="One",
+                    section_id="needs_review",
+                    priority=10,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+            ),
+            open_items_fallback_section="manual_triage",
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.button.side_effect = lambda label, key=None: False
+        monkeypatch.setattr("handoff.pages.system_settings.get_rulebook_settings", lambda: settings)
+
+        _render_rulebook_section()
+
+        caption_calls = [call.args[0] for call in st_mock.caption.call_args_list]
+        assert any("Needs Review" in text and "Waiting For Input" in text for text in caption_calls)
+        assert any("fall back to Manual Triage" in text for text in caption_calls)
+
+    def test_rule_preview_uses_priority_then_original_order(self, monkeypatch) -> None:
+        """Rules with the same priority preserve their configured order in expanders."""
+        settings = RulebookSettings(
+            version=1,
+            rules=(
+                RuleDefinition(
+                    rule_id="z_rule",
+                    name="First Configured",
+                    section_id="risk",
+                    priority=10,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+                RuleDefinition(
+                    rule_id="a_rule",
+                    name="Second Configured",
+                    section_id="action_required",
+                    priority=10,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+                RuleDefinition(
+                    rule_id="b_rule",
+                    name="Lower Priority",
+                    section_id="upcoming",
+                    priority=30,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+            ),
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.button.side_effect = lambda label, key=None: False
+        monkeypatch.setattr("handoff.pages.system_settings.get_rulebook_settings", lambda: settings)
+
+        _render_rulebook_section()
+
+        expander_calls = [call.args[0] for call in st_mock.expander.call_args_list]
+        assert expander_calls == [
+            "**First Configured** — Risk",
+            "**Second Configured** — Action Required",
+            "**Lower Priority** — Upcoming",
+        ]
 
 
 class TestRenderAboutSection:
