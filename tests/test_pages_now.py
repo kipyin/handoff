@@ -916,7 +916,7 @@ def test_render_add_form_invalid_next_check_sets_flash_error(
     ("mode", "expected_label"),
     [
         ("on_track", "Current progress (optional)"),
-        ("delayed", "Why delayed? (optional)"),
+        ("delayed", "Why? (optional)"),
     ],
 )
 def test_render_check_in_flow_note_label_matches_mode(
