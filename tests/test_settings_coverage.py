@@ -17,7 +17,7 @@ from handoff.pages.system_settings import (
     _render_rulebook_section,
     _render_send_log_section,
 )
-from handoff.rulebook import NextCheckDueCondition, RuleDefinition, RulebookSettings
+from handoff.rulebook import NextCheckDueCondition, RulebookSettings, RuleDefinition
 
 
 def _patch_streamlit(monkeypatch, **st_overrides) -> MagicMock:
@@ -137,8 +137,8 @@ class TestRenderRulebookSection:
         _render_rulebook_section()
 
         caption_calls = [call.args[0] for call in st_mock.caption.call_args_list]
-        assert any("Needs Review" in text and "Waiting For Input" in text for text in caption_calls)
-        assert any("fall back to Manual Triage" in text for text in caption_calls)
+        assert any("Needs Review" in text and "Waiting For Input" in text for text in caption_calls)  # nosec B101
+        assert any("fall back to Manual Triage" in text for text in caption_calls)  # nosec B101
 
     def test_rule_preview_uses_priority_then_original_order(self, monkeypatch) -> None:
         """Rules with the same priority preserve their configured order."""
@@ -178,7 +178,7 @@ class TestRenderRulebookSection:
             for call in st_mock.markdown.call_args_list
             if call.args and call.args[0].startswith("**")
         ]
-        assert ordered_rules == [
+        assert ordered_rules == [  # nosec B101
             "**First Configured** (priority 10, enabled)",
             "**Second Configured** (priority 10, enabled)",
             "**Lower Priority** (priority 30, enabled)",
