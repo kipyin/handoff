@@ -50,6 +50,7 @@ from handoff.data.queries import (
     query_concluded_handoffs,
     query_handoffs,
     query_now_items,
+    query_open_handoffs_for_now,
     query_risk_handoffs,
     query_upcoming_handoffs,
 )
@@ -101,6 +102,7 @@ __all__ = [
     "query_action_handoffs",
     "query_risk_handoffs",
     "query_concluded_handoffs",
+    "query_open_handoffs_for_now",
     "list_pitchmen",
     "list_pitchmen_with_open_handoffs",
     "get_projects_with_handoff_summary",

@@ -458,9 +458,11 @@ def test_service_get_now_snapshot_contract(session, monkeypatch) -> None:
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
+    from handoff.rulebook import build_default_rulebook_settings
+
     monkeypatch.setattr(
-        "handoff.services.handoff_service.get_deadline_near_days",
-        lambda: 1,
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: build_default_rulebook_settings(deadline_near_days=1),
     )
 
     p = Project(name="Work")
@@ -492,19 +494,18 @@ def test_service_get_now_snapshot_contract(session, monkeypatch) -> None:
 
 def test_service_get_now_snapshot_uses_prefetched_supporting_data(monkeypatch) -> None:
     """Prefetched projects/pitchmen are returned directly without extra list queries."""
+    from handoff.rulebook import build_default_rulebook_settings
+
     monkeypatch.setattr(
-        "handoff.services.handoff_service.get_deadline_near_days",
-        lambda: 1,
-    )
-    monkeypatch.setattr("handoff.services.handoff_service.query_risk_handoffs", lambda **kwargs: [])
-    monkeypatch.setattr(
-        "handoff.services.handoff_service.query_action_handoffs", lambda **kwargs: []
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: build_default_rulebook_settings(deadline_near_days=1),
     )
     monkeypatch.setattr(
-        "handoff.services.handoff_service.query_upcoming_handoffs", lambda **kwargs: []
+        "handoff.services.handoff_service._query_open_handoffs_for_now",
+        lambda **kwargs: [],
     )
     monkeypatch.setattr(
-        "handoff.services.handoff_service.query_concluded_handoffs",
+        "handoff.services.handoff_service._query_concluded_handoffs",
         lambda **kwargs: [],
     )
     monkeypatch.setattr(
@@ -540,9 +541,11 @@ def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
+    from handoff.rulebook import build_default_rulebook_settings
+
     monkeypatch.setattr(
-        "handoff.services.handoff_service.get_deadline_near_days",
-        lambda: 1,
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: build_default_rulebook_settings(deadline_near_days=1),
     )
 
     p = Project(name="Work")
@@ -597,8 +600,77 @@ def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -
     assert snapshot.projects[0].name == "Work"
 
 
+def test_service_get_now_snapshot_rulebook_parity_with_legacy_queries(session, monkeypatch) -> None:
+    """Default rulebook produces same open-section membership as legacy query logic."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    _patch_date(monkeypatch, FixedDate)
+    from handoff.rulebook import build_default_rulebook_settings
+
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: build_default_rulebook_settings(deadline_near_days=1),
+    )
+
+    p = Project(name="Work")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    data.create_handoff(
+        project_id=p.id,
+        need_back="Due now",
+        next_check=date(2026, 3, 9),
+    )
+    data.create_handoff(
+        project_id=p.id,
+        need_back="Later",
+        next_check=date(2026, 4, 1),
+    )
+    risk_h = data.create_handoff(
+        project_id=p.id,
+        need_back="At risk",
+        next_check=date(2026, 3, 9),
+        deadline=date(2026, 3, 10),
+    )
+    data.create_check_in(
+        handoff_id=risk_h.id,
+        check_in_type=CheckInType.DELAYED,
+        check_in_date=date(2026, 3, 9),
+    )
+    concluded_h = data.create_handoff(
+        project_id=p.id,
+        need_back="Closed",
+        next_check=date(2026, 3, 9),
+    )
+    data.create_check_in(
+        handoff_id=concluded_h.id,
+        check_in_type=CheckInType.CONCLUDED,
+        check_in_date=date(2026, 3, 9),
+    )
+
+    snapshot = get_now_snapshot()
+
+    legacy_risk = {h.id for h in query_risk_handoffs(deadline_near_days=1)}
+    legacy_action = {h.id for h in query_action_handoffs(deadline_near_days=1)}
+    legacy_upcoming = {h.id for h in query_upcoming_handoffs(deadline_near_days=1)}
+
+    snapshot_risk_ids = {h.id for h in snapshot.risk}
+    snapshot_action_ids = {h.id for h in snapshot.action}
+    snapshot_upcoming_ids = {h.id for h in snapshot.upcoming}
+
+    assert snapshot_risk_ids == legacy_risk
+    assert snapshot_action_ids == legacy_action
+    assert snapshot_upcoming_ids == legacy_upcoming
+
+
 def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
-    """Snapshot query fan-out uses parsed search/date filters for risk/action/upcoming sections."""
+    """Snapshot query fan-out uses parsed search/date filters for open and concluded sections."""
     parsed = SimpleNamespace(
         text_query="release gate",
         next_check_min=date(2026, 3, 1),
@@ -607,26 +679,15 @@ def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
         deadline_max=date(2026, 4, 5),
     )
     monkeypatch.setattr("handoff.services.handoff_service.parse_search_query", lambda _: parsed)
-    monkeypatch.setattr("handoff.services.handoff_service.get_deadline_near_days", lambda: 3)
 
-    risk_calls: list[dict[str, object]] = []
-    action_calls: list[dict[str, object]] = []
-    upcoming_calls: list[dict[str, object]] = []
+    open_calls: list[dict[str, object]] = []
     concluded_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "handoff.services.handoff_service.query_risk_handoffs",
-        lambda **kwargs: risk_calls.append(kwargs) or [],
+        "handoff.services.handoff_service._query_open_handoffs_for_now",
+        lambda **kwargs: open_calls.append(kwargs) or [],
     )
     monkeypatch.setattr(
-        "handoff.services.handoff_service.query_action_handoffs",
-        lambda **kwargs: action_calls.append(kwargs) or [],
-    )
-    monkeypatch.setattr(
-        "handoff.services.handoff_service.query_upcoming_handoffs",
-        lambda **kwargs: upcoming_calls.append(kwargs) or [],
-    )
-    monkeypatch.setattr(
-        "handoff.services.handoff_service.query_concluded_handoffs",
+        "handoff.services.handoff_service._query_concluded_handoffs",
         lambda **kwargs: concluded_calls.append(kwargs) or [],
     )
 
@@ -652,7 +713,6 @@ def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
         "project_ids": [7],
         "pitchman_names": ["Alice"],
         "search_text": "release gate",
-        "deadline_near_days": 3,
         "next_check_min": date(2026, 3, 1),
         "next_check_max": date(2026, 3, 31),
         "deadline_min": date(2026, 3, 5),
@@ -665,9 +725,7 @@ def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
         "search_text": "release gate",
         "include_archived_projects": True,
     }
-    assert risk_calls == [open_expected]
-    assert action_calls == [open_expected]
-    assert upcoming_calls == [open_expected]
+    assert open_calls == [open_expected]
     assert concluded_calls == [concluded_expected]
     assert list_projects_calls == [{"include_archived": True}]
     assert list_pitchmen_calls == [{"include_archived_projects": True}]
