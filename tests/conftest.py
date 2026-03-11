@@ -5,6 +5,9 @@ from __future__ import annotations
 from datetime import UTC, date, datetime
 
 import pytest
+from sqlmodel import Session, SQLModel, create_engine
+
+from handoff.models import CheckIn, CheckInType, Handoff, Project
 
 # Patch Streamlit ButtonGroup.indices for AppTest compatibility with segmented_control.
 # See https://github.com/streamlit/streamlit/issues/11338
@@ -23,9 +26,6 @@ try:
     element_tree.ButtonGroup.indices = _safe_indices
 except (ImportError, AttributeError):
     pass
-from sqlmodel import Session, SQLModel, create_engine
-
-from handoff.models import CheckIn, CheckInType, Handoff, Project
 
 
 @pytest.fixture

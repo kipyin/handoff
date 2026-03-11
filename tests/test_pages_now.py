@@ -665,8 +665,14 @@ def test_render_item_snooze_preset_callback_updates_date(
     """Selecting a snooze preset updates the date in session state."""
     from handoff.dates import add_business_days
 
+    class _FrozenDate(date):
+        @classmethod
+        def today(cls) -> date:  # type: ignore[override]
+            return date(2026, 3, 10)
+
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    monkeypatch.setattr("handoff.pages.now.date", _FrozenDate)
     handoff = _make_fake_handoff(handoff_id=94, need_back="Preset date")
 
     _render_item(
@@ -686,7 +692,7 @@ def test_render_item_snooze_preset_callback_updates_date(
     st_mock.session_state[preset_key] = "3d"
     on_change(**kwargs)
 
-    expected = add_business_days(date.today(), 3)
+    expected = add_business_days(_FrozenDate.today(), 3)
     assert st_mock.session_state[kwargs["date_key"]] == expected
 
 

@@ -785,7 +785,12 @@ def render_now_page() -> None:
 
     add_expanded = st.session_state.get(_NOW_ADD_EXPANDED_KEY, False)
     if add_expanded:
-        st.markdown("**➕ Add handoff**")
+        st.button(
+            "➕ Add handoff",
+            key="now_add_handoff_collapse",
+            on_click=_collapse_add_form,
+            help="Collapse the add form",
+        )
         _render_add_form(project_by_name, snapshot.pitchmen, "now")
     else:
         try:
