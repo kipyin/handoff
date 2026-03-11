@@ -463,6 +463,7 @@ def _render_item(
     show_check_in_controls: bool = False,
     allow_actions: bool = True,
     allow_reopen: bool = False,
+    match_explanation: str | None = None,
 ) -> None:
     """Render one handoff item in an expander."""
     handoff_id = handoff.id
@@ -507,6 +508,8 @@ def _render_item(
     # Auto-expand for due action items so check-in controls are visible without clicking
     is_due_action = show_check_in_controls and _is_check_in_due(handoff)
     with st.expander(header, expanded=editing or keep_expanded_for_mode or is_due_action):
+        if match_explanation:
+            st.caption(match_explanation)
         if not editing and allow_actions and show_check_in_controls:
             _render_check_in_flow(handoff, key_prefix=key_prefix, allow_actions=allow_actions)
         elif not editing and allow_reopen:
@@ -770,6 +773,11 @@ def render_now_page() -> None:
                 is_risk=True,
                 show_check_in_controls=True,
                 allow_actions=True,
+                match_explanation=(
+                    snapshot.section_explanations.get(handoff.id, "") or None
+                    if handoff.id is not None
+                    else None
+                ),
             )
 
     # --- Action section ---
@@ -784,6 +792,11 @@ def render_now_page() -> None:
                 "now_action",
                 project_by_name=project_by_name,
                 show_check_in_controls=True,
+                match_explanation=(
+                    snapshot.section_explanations.get(handoff.id, "") or None
+                    if handoff.id is not None
+                    else None
+                ),
             )
 
     # --- Upcoming section ---
@@ -798,6 +811,11 @@ def render_now_page() -> None:
                 key_prefix="now_upcoming",
                 project_by_name=project_by_name,
                 show_check_in_controls=True,
+                match_explanation=(
+                    snapshot.section_explanations.get(handoff.id, "") or None
+                    if handoff.id is not None
+                    else None
+                ),
             )
 
     # --- Concluded section ---

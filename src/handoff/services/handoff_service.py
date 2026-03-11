@@ -88,9 +88,13 @@ def get_now_snapshot(
     risk: list[Handoff] = []
     action: list[Handoff] = []
     upcoming: list[Handoff] = []
+    section_explanations: dict[int, str] = {}
 
     for handoff in open_handoffs:
         match_result = evaluate_open_handoff(handoff, settings=rulebook, today=today)
+        h_id = handoff.id
+        if h_id is not None:
+            section_explanations[h_id] = match_result.explanation
         if match_result.section_id == BuiltInSection.RISK.value:
             risk.append(handoff)
         elif match_result.section_id == BuiltInSection.ACTION_REQUIRED.value:
@@ -124,6 +128,7 @@ def get_now_snapshot(
         concluded=concluded,
         projects=projects,
         pitchmen=pitchmen,
+        section_explanations=section_explanations,
     )
 
 
