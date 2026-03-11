@@ -10,6 +10,7 @@ from sqlmodel import select
 
 from handoff.models import CheckInType, Handoff, Project
 from handoff.rulebook import (
+    DEFAULT_RISK_RULE_ID,
     BuiltInSection,
     DeadlineWithinDaysCondition,
     LatestCheckInTypeIsCondition,
@@ -49,6 +50,17 @@ def _patch_session_context(monkeypatch, session) -> None:
 
     for mod in (_da, _dh, _dio, _dp, _dq):
         monkeypatch.setattr(mod, "session_context", _session_context)
+
+
+def _default_risk_deadline_days(rulebook: RulebookSettings) -> int:
+    """Extract the default risk rule's deadline-near threshold."""
+    risk_rule = next(rule for rule in rulebook.rules if rule.rule_id == DEFAULT_RISK_RULE_ID)
+    deadline_condition = next(
+        condition
+        for condition in risk_rule.conditions
+        if isinstance(condition, DeadlineWithinDaysCondition)
+    )
+    return deadline_condition.days
 
 
 def test_get_export_payload_via_service(session, monkeypatch) -> None:
@@ -221,6 +233,18 @@ def test_get_rulebook_settings_invalid_rulebook_payload_returns_defaults(
     assert settings == build_default_rulebook_settings()
 
 
+def test_get_rulebook_settings_missing_rulebook_uses_deadline_near_days(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When rulebook is missing, fallback defaults should reuse deadline_near_days."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    (tmp_path / "handoff_settings.json").write_text('{"deadline_near_days": 6}', encoding="utf-8")
+
+    loaded = settings_service.get_rulebook_settings()
+
+    assert _default_risk_deadline_days(loaded) == 6
+
+
 def test_get_rulebook_settings_valid_returns_persisted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -300,3 +324,19 @@ def test_reset_rulebook_settings_saves_defaults(
 
     loaded = settings_service.get_rulebook_settings()
     assert loaded.rules[0].rule_id == "default_risk_deadline_near_and_delayed"
+
+
+def test_reset_rulebook_settings_uses_deadline_near_days(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """reset_rulebook_settings rebuilds defaults with persisted deadline_near_days."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    settings_service.set_deadline_near_days(7)
+
+    custom = build_default_rulebook_settings(deadline_near_days=1)
+    settings_service.save_rulebook_settings(custom)
+
+    settings_service.reset_rulebook_settings()
+
+    loaded = settings_service.get_rulebook_settings()
+    assert _default_risk_deadline_days(loaded) == 7
