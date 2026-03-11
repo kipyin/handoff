@@ -14,11 +14,13 @@ from handoff.rulebook import (
     DeadlineWithinDaysCondition,
     LatestCheckInTypeIsCondition,
     NextCheckDueCondition,
-    RulebookSettings,
     RuleConditionType,
     RuleDefinition,
     RuleMatchResult,
+    RulebookSettings,
     build_default_rulebook_settings,
+    rule_condition_from_dict,
+    rule_condition_to_dict,
 )
 
 
@@ -185,6 +187,9 @@ def test_rule_condition_and_match_result_validation() -> None:
     with pytest.raises(ValueError, match="days >= 0"):
         DeadlineWithinDaysCondition(days=-1)
 
+    with pytest.raises(ValueError, match="CheckInType value"):
+        LatestCheckInTypeIsCondition(check_in_type="delayed")  # type: ignore[arg-type]
+
     fallback_result = RuleMatchResult(
         section_id=BuiltInSection.UPCOMING.value,
         explanation="No enabled rule matched; item falls back to Upcoming.",
@@ -208,6 +213,73 @@ def test_rule_condition_and_match_result_validation() -> None:
             matched_rule_id="   ",
             is_fallback=False,
         )
+
+    with pytest.raises(ValueError, match="must not include matched_rule_id"):
+        RuleMatchResult(
+            section_id=BuiltInSection.UPCOMING.value,
+            explanation="No enabled rule matched; item falls back to Upcoming.",
+            matched_rule_id="risk_rule",
+            is_fallback=True,
+        )
+
+
+def test_rule_condition_serialization_and_invalid_payloads() -> None:
+    """Condition serialization roundtrips and malformed payloads fail fast."""
+    roundtrip_conditions = (
+        DeadlineWithinDaysCondition(days=3),
+        LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),
+        NextCheckDueCondition(include_missing_next_check=True),
+    )
+    for condition in roundtrip_conditions:
+        payload = rule_condition_to_dict(condition)
+        assert rule_condition_from_dict(payload) == condition
+
+    with pytest.raises(ValueError, match="must be a dict"):
+        rule_condition_from_dict(["not", "a", "dict"])  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="Unknown rule condition type"):
+        rule_condition_from_dict({"condition_type": "unknown_condition"})
+
+    with pytest.raises(ValueError, match="Unsupported rule condition type"):
+        rule_condition_to_dict(object())  # type: ignore[arg-type]
+
+
+def test_rulebook_from_dict_validation_and_deadline_day_normalization() -> None:
+    """Typed contracts reject malformed dictionaries and normalize near-day input."""
+    with pytest.raises(ValueError, match="payload must be a dict"):
+        RuleDefinition.from_dict(["bad"])  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="conditions must be a list"):
+        RuleDefinition.from_dict(
+            {
+                "rule_id": "r1",
+                "name": "Rule 1",
+                "section_id": BuiltInSection.RISK.value,
+                "conditions": "not-a-list",
+            }
+        )
+
+    with pytest.raises(ValueError, match=r"conditions\[0\] must be a dict"):
+        RuleDefinition.from_dict(
+            {
+                "rule_id": "r1",
+                "name": "Rule 1",
+                "section_id": BuiltInSection.RISK.value,
+                "conditions": ["bad-item"],
+            }
+        )
+
+    with pytest.raises(ValueError, match="rules must be a list"):
+        RulebookSettings.from_dict({"rules": "not-a-list"})  # type: ignore[arg-type]
+
+    settings = build_default_rulebook_settings(deadline_near_days=-5)
+    risk_rule = settings.rules[0]
+    normalized_days = next(
+        condition.days
+        for condition in risk_rule.conditions
+        if isinstance(condition, DeadlineWithinDaysCondition)
+    )
+    assert normalized_days == 0
 
 
 def test_default_rules_mirror_current_section_semantics(session, monkeypatch) -> None:
