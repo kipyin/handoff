@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import date
 
 import pytest
 
@@ -19,6 +19,7 @@ from handoff.rulebook import (
     RuleDefinition,
     RuleMatchResult,
     build_default_rulebook_settings,
+    evaluate_open_handoff,
 )
 
 
@@ -45,79 +46,6 @@ def _patch_date(monkeypatch, fixed_date_class) -> None:
 
     monkeypatch.setattr(_dh, "date", fixed_date_class)
     monkeypatch.setattr(_dq, "date", fixed_date_class)
-
-
-def _latest_check_in(handoff: Handoff):
-    """Return latest check-in by (check_in_date, created_at, id)."""
-    if not handoff.check_ins:
-        return None
-    return max(
-        handoff.check_ins,
-        key=lambda check_in: (
-            check_in.check_in_date,
-            check_in.created_at,
-            check_in.id or 0,
-        ),
-    )
-
-
-def _is_open(handoff: Handoff) -> bool:
-    """Mirror latest-check-in lifecycle semantics for open status."""
-    latest = _latest_check_in(handoff)
-    return latest is None or latest.check_in_type != CheckInType.CONCLUDED
-
-
-def _matches_condition(condition, handoff: Handoff, *, today: date) -> bool:
-    """Evaluate one condition against a handoff."""
-    if isinstance(condition, DeadlineWithinDaysCondition):
-        cutoff = today + timedelta(days=condition.days)
-        return handoff.deadline is not None and handoff.deadline <= cutoff
-
-    if isinstance(condition, LatestCheckInTypeIsCondition):
-        latest = _latest_check_in(handoff)
-        return latest is not None and latest.check_in_type == condition.check_in_type
-
-    if isinstance(condition, NextCheckDueCondition):
-        if handoff.next_check is None:
-            return condition.include_missing_next_check
-        return handoff.next_check <= today
-
-    msg = f"Unhandled condition type: {type(condition)!r}"
-    raise ValueError(msg)
-
-
-def _classify_with_rulebook(
-    handoffs: list[Handoff], settings: RulebookSettings, *, today: date
-) -> dict[str, set[str]]:
-    """Classify handoffs according to typed defaults and lifecycle fallback semantics."""
-    grouped: dict[str, set[str]] = {
-        BuiltInSection.RISK.value: set(),
-        BuiltInSection.ACTION_REQUIRED.value: set(),
-        BuiltInSection.UPCOMING.value: set(),
-        BuiltInSection.CONCLUDED.value: set(),
-    }
-
-    ordered_rules = sorted(
-        [rule for rule in settings.rules if rule.enabled],
-        key=lambda rule: rule.priority,
-    )
-    for handoff in handoffs:
-        if not _is_open(handoff):
-            grouped[settings.concluded_section].add(handoff.need_back)
-            continue
-
-        matched = False
-        for rule in ordered_rules:
-            if all(
-                _matches_condition(condition, handoff, today=today) for condition in rule.conditions
-            ):
-                grouped[rule.section_id].add(handoff.need_back)
-                matched = True
-                break
-        if not matched:
-            grouped[settings.open_items_fallback_section].add(handoff.need_back)
-
-    return grouped
 
 
 def test_default_rulebook_contract_and_fallback_semantics() -> None:
@@ -208,6 +136,136 @@ def test_rule_condition_and_match_result_validation() -> None:
             matched_rule_id="   ",
             is_fallback=False,
         )
+
+
+def test_rule_evaluation_uses_priority_order_and_match_explanation() -> None:
+    """Rule evaluation is exclusive, priority-based, and returns the rule reason."""
+    handoff = Handoff(
+        project_id=1,
+        need_back="Needs attention",
+        next_check=date(2026, 3, 9),
+        deadline=date(2026, 3, 10),
+    )
+    handoff.check_ins = [
+        CheckIn(
+            handoff_id=1,
+            check_in_date=date(2026, 3, 9),
+            check_in_type=CheckInType.DELAYED,
+        )
+    ]
+    settings = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="first_priority",
+                name="First priority",
+                section_id="first",
+                priority=10,
+                match_reason="First rule wins.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="second_priority",
+                name="Second priority",
+                section_id="second",
+                priority=20,
+                match_reason="Second rule should not win.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+        ),
+    )
+
+    result = evaluate_open_handoff(handoff, settings=settings, today=date(2026, 3, 9))
+
+    assert result == RuleMatchResult(
+        section_id="first",
+        explanation="First rule wins.",
+        matched_rule_id="first_priority",
+        is_fallback=False,
+    )
+
+
+def test_rule_evaluation_skips_disabled_rules_and_keeps_stable_same_priority_order() -> None:
+    """Disabled rules are ignored and same-priority rules keep declaration order."""
+    handoff = Handoff(
+        project_id=1,
+        need_back="Due now",
+        next_check=date(2026, 3, 9),
+    )
+    settings = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="disabled",
+                name="Disabled",
+                section_id="disabled",
+                priority=5,
+                enabled=False,
+                match_reason="Disabled rule.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="first_same_priority",
+                name="First same priority",
+                section_id="first_same_priority",
+                priority=10,
+                match_reason="First enabled same-priority rule wins.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="second_same_priority",
+                name="Second same priority",
+                section_id="second_same_priority",
+                priority=10,
+                match_reason="Second enabled same-priority rule loses.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+        ),
+    )
+
+    result = evaluate_open_handoff(handoff, settings=settings, today=date(2026, 3, 9))
+
+    assert result.section_id == "first_same_priority"
+    assert result.matched_rule_id == "first_same_priority"
+    assert result.explanation == "First enabled same-priority rule wins."
+
+
+def test_rule_evaluation_falls_back_for_unmatched_open_handoffs() -> None:
+    """Open handoffs without a rule match fall back to the configured section."""
+    handoff = Handoff(
+        project_id=1,
+        need_back="Future check",
+        next_check=date(2026, 3, 12),
+        deadline=date(2026, 3, 20),
+    )
+
+    result = evaluate_open_handoff(handoff, today=date(2026, 3, 9))
+
+    assert result == RuleMatchResult(
+        section_id=BuiltInSection.UPCOMING.value,
+        explanation="No enabled rule matched; item falls back to Upcoming.",
+        matched_rule_id=None,
+        is_fallback=True,
+    )
+
+
+def test_rule_evaluation_rejects_concluded_handoffs() -> None:
+    """Concluded handoffs remain outside the open-item rule engine."""
+    handoff = Handoff(
+        project_id=1,
+        need_back="Done",
+        next_check=date(2026, 3, 9),
+    )
+    handoff.check_ins = [
+        CheckIn(
+            handoff_id=1,
+            check_in_date=date(2026, 3, 9),
+            check_in_type=CheckInType.CONCLUDED,
+        )
+    ]
+
+    with pytest.raises(ValueError, match="only supports open handoffs"):
+        evaluate_open_handoff(handoff, today=date(2026, 3, 9))
 
 
 def test_default_rules_mirror_current_section_semantics(session, monkeypatch) -> None:
@@ -321,7 +379,18 @@ def test_default_rules_mirror_current_section_semantics(session, monkeypatch) ->
 
     settings = build_default_rulebook_settings(deadline_near_days=near_days)
     all_handoffs = data.query_handoffs(include_concluded=True)
-    predicted = _classify_with_rulebook(all_handoffs, settings, today=today)
+    predicted: dict[str, set[str]] = {
+        BuiltInSection.RISK.value: set(),
+        BuiltInSection.ACTION_REQUIRED.value: set(),
+        BuiltInSection.UPCOMING.value: set(),
+        BuiltInSection.CONCLUDED.value: set(),
+    }
+    for handoff in all_handoffs:
+        if not data.handoff_is_open(handoff):
+            predicted[settings.concluded_section].add(handoff.need_back)
+            continue
+        match = evaluate_open_handoff(handoff, settings=settings, today=today)
+        predicted[match.section_id].add(handoff.need_back)
 
     risk_names = {
         handoff.need_back for handoff in data.query_risk_handoffs(deadline_near_days=near_days)
