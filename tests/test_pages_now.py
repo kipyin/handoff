@@ -160,7 +160,9 @@ def test_render_now_page_archived_only_projects_shows_toggle_hint(
 
     assert list_project_calls == [False, True]
     st_mock.info.assert_called_once()
-    assert "No active projects." in st_mock.info.call_args[0][0]
+    info_msg = st_mock.info.call_args[0][0]
+    assert "No active projects." in info_msg
+    assert "Include archived projects" in info_msg
 
 
 def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1420,6 +1422,14 @@ def test_is_check_in_due_future_date() -> None:
     assert _is_check_in_due(h) is False
 
 
+def test_is_check_in_due_none() -> None:
+    """Returns False when next_check is None."""
+    from types import SimpleNamespace
+
+    h = SimpleNamespace(next_check=None)
+    assert _is_check_in_due(h) is False
+
+
 def test_save_check_in_submission_with_missing_next_check_key_sets_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1561,10 +1571,10 @@ def test_save_reopen_submission_logs_instrumentation(
     assert call_args[1] == "now_reopen"
 
 
-def test_save_reopen_submission_with_error_raises_and_logs(
+def test_save_reopen_submission_with_error_logs_and_sets_flash(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Reopen with error still logs instrumentation before catching exception."""
+    """Reopen error logs instrumentation and sets flash instead of raising."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
 
@@ -1673,28 +1683,6 @@ def test_render_now_page_flash_success_displays(monkeypatch: pytest.MonkeyPatch)
     render_now_page()
 
     st_mock.success.assert_called_once_with("Operation successful")
-
-
-def test_render_now_page_no_projects_with_include_archived_false_shows_info(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """When include_archived=False and no active projects, shows info about archived projects."""
-    st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = False
-    monkeypatch.setattr("handoff.pages.now.st", st_mock)
-
-    # First call: no active projects; second call: projects exist when checking all
-    archived_project = SimpleNamespace(id=1, name="Archived")
-    monkeypatch.setattr(
-        "handoff.pages.now.list_projects",
-        lambda include_archived: [] if not include_archived else [archived_project],
-    )
-
-    render_now_page()
-
-    # Should show info about archived projects
-    info_calls = [c[0][0] for c in st_mock.info.call_args_list if c[0]]
-    assert any("Include archived projects" in str(call) for call in info_calls)
 
 
 def test_render_now_page_no_projects_with_include_archived_true_shows_create_info(

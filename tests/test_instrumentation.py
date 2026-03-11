@@ -51,7 +51,7 @@ def test_time_action_yields_control_to_block() -> None:
     """time_action yields control and allows the block to execute."""
     execution_count = 0
 
-    with time_action("test_action"):
+    with patch("handoff.instrumentation.logger"), time_action("test_action"):
         execution_count += 1
 
     assert execution_count == 1
