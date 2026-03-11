@@ -17,6 +17,7 @@ from handoff.pages.system_settings import (
     _render_rulebook_section,
     _render_send_log_section,
 )
+from handoff.rulebook import NextCheckDueCondition, RulebookSettings, RuleDefinition
 
 
 def _patch_streamlit(monkeypatch, **st_overrides) -> MagicMock:
@@ -107,6 +108,81 @@ class TestRenderRulebookSection:
         st_mock.success.assert_called_once()
         msg = st_mock.success.call_args[0][0].lower()
         assert "reset" in msg or "default" in msg
+
+    def test_caption_uses_rulebook_sections_and_fallback(self, monkeypatch) -> None:
+        """Caption reflects configured sections and fallback, not hard-coded labels."""
+        settings = RulebookSettings(
+            version=1,
+            rules=(
+                RuleDefinition(
+                    rule_id="rule_two",
+                    name="Two",
+                    section_id="waiting_for_input",
+                    priority=20,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+                RuleDefinition(
+                    rule_id="rule_one",
+                    name="One",
+                    section_id="needs_review",
+                    priority=10,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+            ),
+            open_items_fallback_section="manual_triage",
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        monkeypatch.setattr("handoff.pages.system_settings.get_rulebook_settings", lambda: settings)
+
+        _render_rulebook_section()
+
+        caption_calls = [call.args[0] for call in st_mock.caption.call_args_list]
+        assert any("Needs Review" in text and "Waiting For Input" in text for text in caption_calls)  # nosec B101
+        assert any("fall back to Manual Triage" in text for text in caption_calls)  # nosec B101
+
+    def test_rule_preview_uses_priority_then_original_order(self, monkeypatch) -> None:
+        """Rules with the same priority preserve their configured order."""
+        settings = RulebookSettings(
+            version=1,
+            rules=(
+                RuleDefinition(
+                    rule_id="z_rule",
+                    name="First Configured",
+                    section_id="risk",
+                    priority=10,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+                RuleDefinition(
+                    rule_id="a_rule",
+                    name="Second Configured",
+                    section_id="action_required",
+                    priority=10,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+                RuleDefinition(
+                    rule_id="b_rule",
+                    name="Lower Priority",
+                    section_id="upcoming",
+                    priority=30,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+            ),
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        monkeypatch.setattr("handoff.pages.system_settings.get_rulebook_settings", lambda: settings)
+
+        _render_rulebook_section()
+
+        ordered_rules = [
+            call.args[0]
+            for call in st_mock.markdown.call_args_list
+            if call.args and call.args[0].startswith("**")
+        ]
+        assert ordered_rules == [  # nosec B101
+            "**First Configured** (priority 10, enabled)",
+            "**Second Configured** (priority 10, enabled)",
+            "**Lower Priority** (priority 30, enabled)",
+        ]
 
 
 class TestRenderAboutSection:
