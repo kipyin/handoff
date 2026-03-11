@@ -526,9 +526,11 @@ def render_now_page() -> None:
         project_ids=project_ids,
         pitchman_names=pitchman_names,
         search_text=search_text,
+        projects=projects,
+        pitchmen=pitchmen,
     )
 
-    _render_add_form(project_by_name, pitchmen, "now")
+    _render_add_form(project_by_name, snapshot.pitchmen, "now")
 
     # --- Risk section ---
     st.markdown("---")
