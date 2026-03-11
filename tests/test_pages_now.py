@@ -146,9 +146,12 @@ def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch)
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    prefetched_projects = [mock_project]
+    prefetched_pitchmen = ["Alice"]
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: prefetched_projects)
     monkeypatch.setattr(
-        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+        "handoff.pages.now.list_pitchmen_with_open_handoffs",
+        lambda **kwargs: prefetched_pitchmen,
     )
 
     snapshot_calls: list[dict] = []
@@ -166,8 +169,8 @@ def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch)
     assert "project_ids" in snapshot_calls[0]
     assert "pitchman_names" in snapshot_calls[0]
     assert "search_text" in snapshot_calls[0]
-    assert snapshot_calls[0]["projects"] == [mock_project]
-    assert snapshot_calls[0]["pitchmen"] == ["Alice"]
+    assert snapshot_calls[0]["projects"] is prefetched_projects
+    assert snapshot_calls[0]["pitchmen"] is prefetched_pitchmen
 
 
 def test_render_now_page_add_form_uses_snapshot_pitchmen(
