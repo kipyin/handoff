@@ -371,6 +371,47 @@ def query_now_items(
     return result
 
 
+def query_open_handoffs_for_now(
+    *,
+    project_ids: list[int] | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
+    next_check_min: date | None = None,
+    next_check_max: date | None = None,
+    deadline_min: date | None = None,
+    deadline_max: date | None = None,
+    include_archived_projects: bool = False,
+) -> list[Handoff]:
+    """Return all open handoffs matching Now-page filters for rulebook evaluation.
+
+    Used by the rulebook-backed Now snapshot. Returns handoffs without section
+    classification; the service layer evaluates each against the rulebook.
+    """
+    with session_context() as session:
+        stmt = select(Handoff).options(
+            selectinload(Handoff.project), selectinload(Handoff.check_ins)
+        )
+        stmt = stmt.where(_latest_check_in_is_open_predicate())
+        if not include_archived_projects:
+            stmt = stmt.where(Handoff.project.has(Project.is_archived.is_(False)))
+        stmt = _apply_handoff_filters(
+            stmt,
+            project_ids=project_ids,
+            pitchman_names=pitchman_names,
+            search_text=search_text,
+            next_check_min=next_check_min,
+            next_check_max=next_check_max,
+            deadline_min=deadline_min,
+            deadline_max=deadline_max,
+        )
+        stmt = stmt.order_by(
+            Handoff.next_check.asc().nulls_last(),
+            Handoff.deadline.asc().nulls_last(),
+            Handoff.created_at.asc(),
+        )
+        return list(session.exec(stmt).unique().all())
+
+
 def query_upcoming_handoffs(
     *,
     project_ids: list[int] | None = None,

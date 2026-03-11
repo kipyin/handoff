@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from handoff.data import conclude_handoff as _conclude_handoff
 from handoff.data import create_check_in as _create_check_in
@@ -15,15 +15,43 @@ from handoff.data import query_action_handoffs as _query_action_handoffs
 from handoff.data import query_concluded_handoffs as _query_concluded_handoffs
 from handoff.data import query_handoffs as _query_handoffs
 from handoff.data import query_now_items as _query_now_items
+from handoff.data import query_open_handoffs_for_now as _query_open_handoffs_for_now
 from handoff.data import query_risk_handoffs as _query_risk_handoffs
 from handoff.data import query_upcoming_handoffs as _query_upcoming_handoffs
 from handoff.data import reopen_handoff as _reopen_handoff
 from handoff.data import update_handoff as _update_handoff
 from handoff.models import CheckIn, CheckInType, Handoff, Project
 from handoff.page_models import HandoffQuery, NowSnapshot
+from handoff.rulebook import BuiltInSection, evaluate_open_handoff
 from handoff.search_parse import parse_search_query
 from handoff.services.project_service import list_projects
-from handoff.services.settings_service import get_deadline_near_days
+from handoff.services.settings_service import get_rulebook_settings
+
+UPCOMING_SECTION_LIMIT = 20
+
+
+def _sort_risk_handoffs(handoffs: list[Handoff]) -> list[Handoff]:
+    """Sort risk section by deadline, then next_check, then created_at."""
+    return sorted(
+        handoffs,
+        key=lambda h: (
+            h.deadline or date.max,
+            h.next_check or date.max,
+            h.created_at or datetime.max,
+        ),
+    )
+
+
+def _sort_action_or_upcoming_handoffs(handoffs: list[Handoff]) -> list[Handoff]:
+    """Sort action/upcoming by next_check, then deadline, then created_at."""
+    return sorted(
+        handoffs,
+        key=lambda h: (
+            h.next_check or date.max,
+            h.deadline or date.max,
+            h.created_at or datetime.max,
+        ),
+    )
 
 
 def get_now_snapshot(
@@ -38,35 +66,51 @@ def get_now_snapshot(
     """Return the full Now-page payload for rendering.
 
     Orchestrates section queries (Risk, Action required, Upcoming, Concluded)
-    with shared filters. Section semantics and order match the current
-    default behavior.
-
-    Callers may pass pre-fetched projects and pitchmen to avoid redundant
-    queries when the page has already loaded them for filters/add form.
+    with shared filters. Open handoffs are grouped via the rulebook engine;
+    Concluded remains lifecycle-driven.
     """
-    deadline_near_days = get_deadline_near_days()
     parsed = parse_search_query(search_text or "")
     open_common = {
         "project_ids": project_ids,
         "pitchman_names": pitchman_names,
         "search_text": parsed.text_query,
-        "deadline_near_days": deadline_near_days,
         "next_check_min": parsed.next_check_min,
         "next_check_max": parsed.next_check_max,
         "deadline_min": parsed.deadline_min,
         "deadline_max": parsed.deadline_max,
         "include_archived_projects": include_archived_projects,
     }
+    open_handoffs = _query_open_handoffs_for_now(**open_common)
+
+    rulebook = get_rulebook_settings()
+    today = date.today()
+
+    risk: list[Handoff] = []
+    action: list[Handoff] = []
+    upcoming: list[Handoff] = []
+
+    for handoff in open_handoffs:
+        match_result = evaluate_open_handoff(handoff, settings=rulebook, today=today)
+        if match_result.section_id == BuiltInSection.RISK.value:
+            risk.append(handoff)
+        elif match_result.section_id == BuiltInSection.ACTION_REQUIRED.value:
+            action.append(handoff)
+        elif match_result.section_id == BuiltInSection.UPCOMING.value:
+            upcoming.append(handoff)
+        # Custom section ids from user config are dropped for now; v1 only renders built-ins.
+
+    risk = _sort_risk_handoffs(risk)
+    action = _sort_action_or_upcoming_handoffs(action)
+    upcoming = _sort_action_or_upcoming_handoffs(upcoming)[:UPCOMING_SECTION_LIMIT]
+
     concluded_common = {
         "project_ids": project_ids,
         "pitchman_names": pitchman_names,
         "search_text": parsed.text_query,
         "include_archived_projects": include_archived_projects,
     }
-    risk = query_risk_handoffs(**open_common)
-    action = query_action_handoffs(**open_common)
-    upcoming = query_upcoming_handoffs(**open_common)
-    concluded = query_concluded_handoffs(**concluded_common)
+    concluded = _query_concluded_handoffs(**concluded_common)
+
     if projects is None:
         projects = list_projects(include_archived=include_archived_projects)
     if pitchmen is None:
