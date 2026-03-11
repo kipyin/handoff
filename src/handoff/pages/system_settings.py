@@ -42,7 +42,14 @@ from handoff.version import __version__ as APP_VERSION
 
 
 def _format_condition(condition: RuleCondition) -> str:
-    """Return a short human-readable description of a rule condition."""
+    """Return a human-readable description of a rule condition.
+
+    Args:
+        condition (RuleCondition): The rule condition to format.
+
+    Returns:
+        str: A short description of the condition (e.g., "Deadline within 3 day(s)").
+    """
     if isinstance(condition, DeadlineWithinDaysCondition):
         return f"Deadline within {condition.days} day(s)"
     if isinstance(condition, LatestCheckInTypeIsCondition):
@@ -56,7 +63,12 @@ def _format_condition(condition: RuleCondition) -> str:
 
 
 def _render_rulebook_section() -> None:
-    """Render read-only rulebook preview and reset-to-defaults."""
+    """Render a read-only preview of active rules and a reset-to-defaults button.
+
+    Displays the current rulebook settings in a collapsible section, showing each rule's
+    name, priority, enabled status, conditions, and match reason. Allows users to reset
+    the rulebook to built-in defaults.
+    """
     st.markdown("### Open-item rules")
     settings = get_rulebook_settings()
     section_labels = sorted({rule.section_id.replace("_", " ").title() for rule in settings.rules})
