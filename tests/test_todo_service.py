@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -729,6 +729,129 @@ def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
     assert concluded_calls == [concluded_expected]
     assert list_projects_calls == [{"include_archived": True}]
     assert list_pitchmen_calls == [{"include_archived_projects": True}]
+
+
+def test_service_get_now_snapshot_drops_custom_sections_sorts_and_limits(monkeypatch) -> None:
+    """Snapshot keeps built-ins only and applies canonical section sort/limit rules."""
+    from handoff.rulebook import BuiltInSection, RuleMatchResult
+
+    parsed = SimpleNamespace(
+        text_query="",
+        next_check_min=None,
+        next_check_max=None,
+        deadline_min=None,
+        deadline_max=None,
+    )
+    monkeypatch.setattr("handoff.services.handoff_service.parse_search_query", lambda _: parsed)
+
+    rulebook_settings = object()
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: rulebook_settings,
+    )
+
+    risk_later = Handoff(
+        project_id=1,
+        need_back="risk-later",
+        next_check=date(2026, 3, 10),
+        deadline=date(2026, 3, 12),
+        created_at=datetime(2026, 3, 1, 12, 0, 0),
+    )
+    risk_earlier = Handoff(
+        project_id=1,
+        need_back="risk-earlier",
+        next_check=date(2026, 3, 10),
+        deadline=date(2026, 3, 11),
+        created_at=datetime(2026, 3, 1, 11, 0, 0),
+    )
+    action_later = Handoff(
+        project_id=1,
+        need_back="action-later",
+        next_check=date(2026, 3, 11),
+        deadline=date(2026, 3, 20),
+        created_at=datetime(2026, 3, 1, 10, 0, 0),
+    )
+    action_earlier = Handoff(
+        project_id=1,
+        need_back="action-earlier",
+        next_check=date(2026, 3, 10),
+        deadline=date(2026, 3, 25),
+        created_at=datetime(2026, 3, 1, 9, 0, 0),
+    )
+    custom_section_item = Handoff(
+        project_id=1,
+        need_back="custom-item",
+        next_check=date(2026, 3, 10),
+        created_at=datetime(2026, 3, 1, 8, 0, 0),
+    )
+
+    upcoming_items = [
+        Handoff(
+            project_id=1,
+            need_back=f"upcoming-{idx:02d}",
+            next_check=date(2026, 4, 1) + timedelta(days=idx),
+            created_at=datetime(2026, 3, 1, 7, 0, 0) + timedelta(minutes=idx),
+        )
+        for idx in range(22)
+    ]
+
+    open_handoffs = [
+        risk_later,
+        action_later,
+        custom_section_item,
+        *reversed(upcoming_items),
+        risk_earlier,
+        action_earlier,
+    ]
+    monkeypatch.setattr(
+        "handoff.services.handoff_service._query_open_handoffs_for_now",
+        lambda **kwargs: open_handoffs,
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service._query_concluded_handoffs",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr("handoff.services.handoff_service.list_projects", lambda **kwargs: [])
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.list_pitchmen_with_open_handoffs",
+        lambda **kwargs: [],
+    )
+
+    def _evaluate(handoff: Handoff, *, settings, today) -> RuleMatchResult:
+        assert settings is rulebook_settings
+        if handoff.need_back.startswith("risk-"):
+            section_id = BuiltInSection.RISK.value
+        elif handoff.need_back.startswith("action-"):
+            section_id = BuiltInSection.ACTION_REQUIRED.value
+        elif handoff.need_back.startswith("upcoming-"):
+            section_id = BuiltInSection.UPCOMING.value
+        else:
+            section_id = "custom.section"
+        return RuleMatchResult(
+            section_id=section_id,
+            explanation="Matched in test",
+            matched_rule_id=f"rule-{section_id}",
+            is_fallback=False,
+        )
+
+    monkeypatch.setattr("handoff.services.handoff_service.evaluate_open_handoff", _evaluate)
+
+    snapshot = get_now_snapshot()
+
+    assert [h.need_back for h in snapshot.risk] == ["risk-earlier", "risk-later"]
+    assert [h.need_back for h in snapshot.action] == ["action-earlier", "action-later"]
+    upcoming_names = [h.need_back for h in snapshot.upcoming]
+    assert len(upcoming_names) == 20
+    assert upcoming_names[0] == "upcoming-00"
+    assert upcoming_names[-1] == "upcoming-19"
+    assert "upcoming-20" not in upcoming_names
+    assert "upcoming-21" not in upcoming_names
+    all_visible_names = {
+        *[h.need_back for h in snapshot.risk],
+        *[h.need_back for h in snapshot.action],
+        *[h.need_back for h in snapshot.upcoming],
+    }
+    assert "custom-item" not in all_visible_names
 
 
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:

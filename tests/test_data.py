@@ -835,6 +835,89 @@ def test_query_now_items(session, monkeypatch) -> None:
     assert "Check due" not in at_risk_names
 
 
+def test_query_open_handoffs_for_now_filters_and_orders(session, monkeypatch) -> None:
+    """Open-now query excludes closed rows and orders by next_check/deadline/created_at."""
+    _patch_session_context(monkeypatch, session)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    first = Handoff(
+        project_id=active.id,
+        need_back="First by deadline",
+        pitchman="Alice",
+        next_check=date(2026, 3, 10),
+        deadline=date(2026, 3, 20),
+        created_at=datetime(2026, 3, 1, 9, 0, 0),
+    )
+    second = Handoff(
+        project_id=active.id,
+        need_back="Second by deadline",
+        pitchman="Alice",
+        next_check=date(2026, 3, 10),
+        deadline=date(2026, 3, 21),
+        created_at=datetime(2026, 3, 1, 8, 0, 0),
+    )
+    no_next = Handoff(
+        project_id=active.id,
+        need_back="No next check goes last",
+        pitchman="Alice",
+        next_check=None,
+        deadline=None,
+        created_at=datetime(2026, 3, 1, 7, 0, 0),
+    )
+    closed = Handoff(
+        project_id=active.id,
+        need_back="Closed item",
+        pitchman="Alice",
+        next_check=date(2026, 3, 9),
+        created_at=datetime(2026, 3, 1, 6, 0, 0),
+    )
+    other_pitchman = Handoff(
+        project_id=active.id,
+        need_back="Other pitchman",
+        pitchman="Bob",
+        next_check=date(2026, 3, 9),
+        created_at=datetime(2026, 3, 1, 5, 0, 0),
+    )
+    archived_item = Handoff(
+        project_id=archived.id,
+        need_back="Archived item",
+        pitchman="Alice",
+        next_check=date(2026, 3, 9),
+        created_at=datetime(2026, 3, 1, 4, 0, 0),
+    )
+    session.add_all([first, second, no_next, closed, other_pitchman, archived_item])
+    session.commit()
+    session.refresh(closed)
+
+    session.add(
+        CheckIn(
+            handoff_id=closed.id,
+            check_in_date=date(2026, 3, 9),
+            check_in_type=CheckInType.CONCLUDED,
+        )
+    )
+    session.commit()
+
+    default_results = data.query_open_handoffs_for_now(pitchman_names=["Alice"])
+    default_names = [h.need_back for h in default_results]
+    assert default_names == [
+        "First by deadline",
+        "Second by deadline",
+        "No next check goes last",
+    ]
+
+    all_results = data.query_open_handoffs_for_now(
+        pitchman_names=["Alice"],
+        include_archived_projects=True,
+    )
+    all_names = [h.need_back for h in all_results]
+    assert "Archived item" in all_names
+
+
 def test_query_action_handoffs(session, monkeypatch) -> None:
     """query_action_handoffs returns due open handoffs, excluding Risk."""
     _patch_session_context(monkeypatch, session)
