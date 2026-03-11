@@ -21,7 +21,58 @@ from handoff.data import reopen_handoff as _reopen_handoff
 from handoff.data import snooze_handoff as _snooze_handoff
 from handoff.data import update_handoff as _update_handoff
 from handoff.models import CheckIn, CheckInType, Handoff
-from handoff.page_models import HandoffQuery
+from handoff.page_models import HandoffQuery, NowSnapshot
+from handoff.search_parse import parse_search_query
+from handoff.services.project_service import list_projects
+from handoff.services.settings_service import get_deadline_near_days
+
+
+def get_now_snapshot(
+    *,
+    include_archived_projects: bool = False,
+    project_ids: list[int] | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
+) -> NowSnapshot:
+    """Return the full Now-page payload for rendering.
+
+    Orchestrates section queries (Risk, Action required, Upcoming, Concluded)
+    with shared filters. Section semantics and order match the current
+    default behavior.
+    """
+    deadline_near_days = get_deadline_near_days()
+    parsed = parse_search_query(search_text or "")
+    open_common = {
+        "project_ids": project_ids,
+        "pitchman_names": pitchman_names,
+        "search_text": parsed.text_query,
+        "deadline_near_days": deadline_near_days,
+        "next_check_min": parsed.next_check_min,
+        "next_check_max": parsed.next_check_max,
+        "deadline_min": parsed.deadline_min,
+        "deadline_max": parsed.deadline_max,
+        "include_archived_projects": include_archived_projects,
+    }
+    concluded_common = {
+        "project_ids": project_ids,
+        "pitchman_names": pitchman_names,
+        "search_text": parsed.text_query,
+        "include_archived_projects": include_archived_projects,
+    }
+    risk = query_risk_handoffs(**open_common)
+    action = query_action_handoffs(**open_common)
+    upcoming = query_upcoming_handoffs(**open_common)
+    concluded = query_concluded_handoffs(**concluded_common)
+    projects = list_projects(include_archived=include_archived_projects)
+    pitchmen = list_pitchmen_with_open_handoffs(include_archived_projects=include_archived_projects)
+    return NowSnapshot(
+        risk=risk,
+        action=action,
+        upcoming=upcoming,
+        concluded=concluded,
+        projects=projects,
+        pitchmen=pitchmen,
+    )
 
 
 def create_handoff(

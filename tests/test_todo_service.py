@@ -15,6 +15,7 @@ from handoff.services import (
     create_handoff,
     delete_handoff,
     get_handoff_close_date,
+    get_now_snapshot,
     list_pitchmen,
     list_pitchmen_with_open_handoffs,
     query_action_handoffs,
@@ -443,6 +444,115 @@ def test_service_query_risk_handoffs_include_archived_projects(session, monkeypa
     ]
     assert "Active risk" in all_names
     assert "Archived risk" in all_names
+
+
+def test_service_get_now_snapshot_contract(session, monkeypatch) -> None:
+    """get_now_snapshot returns a NowSnapshot with all sections and supporting data."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    _patch_date(monkeypatch, FixedDate)
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_deadline_near_days",
+        lambda: 1,
+    )
+
+    p = Project(name="Work")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    data.create_handoff(
+        project_id=p.id,
+        need_back="Action due",
+        next_check=date(2026, 3, 9),
+    )
+
+    snapshot = get_now_snapshot()
+
+    assert hasattr(snapshot, "risk")
+    assert hasattr(snapshot, "action")
+    assert hasattr(snapshot, "upcoming")
+    assert hasattr(snapshot, "concluded")
+    assert hasattr(snapshot, "projects")
+    assert hasattr(snapshot, "pitchmen")
+    assert isinstance(snapshot.risk, list)
+    assert isinstance(snapshot.action, list)
+    assert isinstance(snapshot.upcoming, list)
+    assert isinstance(snapshot.concluded, list)
+    assert isinstance(snapshot.projects, list)
+    assert isinstance(snapshot.pitchmen, list)
+
+
+def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -> None:
+    """get_now_snapshot places handoffs in correct sections by default semantics."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    _patch_date(monkeypatch, FixedDate)
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_deadline_near_days",
+        lambda: 1,
+    )
+
+    p = Project(name="Work")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    data.create_handoff(
+        project_id=p.id,
+        need_back="Due now",
+        next_check=date(2026, 3, 9),
+    )
+    data.create_handoff(
+        project_id=p.id,
+        need_back="Later",
+        next_check=date(2026, 4, 1),
+    )
+    risk_h = data.create_handoff(
+        project_id=p.id,
+        need_back="At risk",
+        next_check=date(2026, 3, 9),
+        deadline=date(2026, 3, 10),
+    )
+    data.create_check_in(
+        handoff_id=risk_h.id,
+        check_in_type=CheckInType.DELAYED,
+        check_in_date=date(2026, 3, 9),
+    )
+    concluded_h = data.create_handoff(
+        project_id=p.id,
+        need_back="Closed",
+        next_check=date(2026, 3, 9),
+    )
+    data.create_check_in(
+        handoff_id=concluded_h.id,
+        check_in_type=CheckInType.CONCLUDED,
+        check_in_date=date(2026, 3, 9),
+    )
+
+    snapshot = get_now_snapshot()
+
+    risk_names = [h.need_back for h in snapshot.risk]
+    action_names = [h.need_back for h in snapshot.action]
+    upcoming_names = [h.need_back for h in snapshot.upcoming]
+    concluded_names = [h.need_back for h in snapshot.concluded]
+
+    assert "At risk" in risk_names
+    assert "Due now" in action_names
+    assert "Later" in upcoming_names
+    assert "Closed" in concluded_names
+    assert len(snapshot.projects) >= 1
+    assert snapshot.projects[0].name == "Work"
 
 
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:
