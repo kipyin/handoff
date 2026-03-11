@@ -9,6 +9,25 @@ This release focuses on two product themes:
 
 This release does not include AI features. Those are explicitly deferred to a later release.
 
+## AI model suggestions by PR
+
+When implementing each PR, consider the suggested model tier. **Fast** for well-scoped, pattern-following work; **Harder** for finicky state, core logic, or critical integration.
+
+| Tier | Models |
+|------|--------|
+| **Fast** | sonnet-4.6, gemini-3-flash, cursor composer 1.5 |
+| **Harder** | gpt-5.4, opus-4.6, codex-5.3 |
+
+| PR | Tier | PR | Tier | PR | Tier |
+|----|------|----|------|----|------|
+| 1.1 Snapshot contract | Fast | 1.2 Reduce reruns | Harder | 1.3 Keyboard shortcuts | Fast |
+| 1.4 Quick actions | Fast | 1.5 Instrumentation | Fast | 2.1 Rulebook contracts | Harder |
+| 2.2 Rule engine | Harder | 2.3 Persist settings | Fast | 3.1 Rulebook adoption | Harder |
+| 3.2 Match explanations | Fast | 4.1 Preview/reset | Fast | 4.2 Editable rulebook | Harder |
+| 4.3 Custom sections | Harder | 5.1 Parity coverage | Harder | 5.2 Release notes | Fast |
+
+Each PR section below has a short rationale for its suggestion.
+
 ## Why this release now
 
 The current product already has a strong core workflow:
@@ -184,6 +203,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Revert the snapshot service and restore page-side orchestration.
 - Keep the old query functions intact until this PR is fully validated.
 
+**AI model suggestion:** Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — structural refactor with clear patterns; contract definition and orchestration move are straightforward.
+
 ### PR 1.2 - Reduce disruptive reruns in Now-page actions
 
 #### Goals/Scope
@@ -221,6 +242,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Revert the new state-management changes only.
 - Fall back to the prior explicit rerun behavior if any focus/state regressions appear.
 
+**AI model suggestion:** Harder (gpt-5.4, opus-4.6, codex-5.3) — Streamlit state and rerun behavior are finicky; preserving context across edits requires careful reasoning about session state and widget lifecycle.
+
 ### PR 1.3 - Keyboard shortcuts and focus navigation
 
 #### Goals/Scope
@@ -257,6 +280,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Revert shortcut bindings and focus-navigation changes only.
 - Keep the underlying action services unchanged so rollback is isolated.
 
+**AI model suggestion:** Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — wiring existing actions to keyboard events; mostly integration work with straightforward scope.
+
 ### PR 1.4 - Quick actions and low-risk interaction polish
 
 #### Goals/Scope
@@ -292,6 +317,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Revert the new quick-action controls only.
 - Keep the underlying action services unchanged so rollback is low risk.
 
+**AI model suggestion:** Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — small UI additions like snooze presets; low-risk, well-scoped changes.
+
 ### PR 1.5 - Lightweight Now-page instrumentation
 
 #### Goals/Scope
@@ -326,6 +353,8 @@ The release is split into phases. Each phase is designed to ship value independe
 
 - Remove the instrumentation helpers and log calls.
 - No schema or persistent user-data rollback should be required.
+
+**AI model suggestion:** Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — lightweight timing and logging; simple, local instrumentation.
 
 ---
 
@@ -378,6 +407,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Revert the typed rulebook contracts.
 - Keep old query-driven behavior untouched and active.
 
+**AI model suggestion:** Harder (gpt-5.4, opus-4.6, codex-5.3) — foundational design for a new subsystem; getting typed models, conditions, and defaults right affects all downstream work.
+
 ### PR 2.2 - Implement rule evaluation engine for open handoffs
 
 #### Goals/Scope
@@ -414,6 +445,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Revert the evaluation engine.
 - Continue using the old section query path unchanged.
 
+**AI model suggestion:** Harder (gpt-5.4, opus-4.6, codex-5.3) — core logic for rule evaluation; deterministic matching, exclusivity, and match explanations require careful handling of edge cases.
+
 ### PR 2.3 - Persist global rulebook settings
 
 #### Goals/Scope
@@ -447,6 +480,8 @@ The release is split into phases. Each phase is designed to ship value independe
 
 - Revert rulebook persistence support.
 - Ignore saved rulebook data and use built-in defaults only.
+
+**AI model suggestion:** Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — follows existing settings JSON patterns; validation and fallback are well-specified.
 
 ---
 
@@ -500,6 +535,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Revert the Now-page integration layer.
 - Restore the previous query-based grouping path.
 
+**AI model suggestion:** Harder (gpt-5.4, opus-4.6, codex-5.3) — critical integration point; perfect parity with existing behavior and correct rulebook wiring require careful reasoning.
+
 ### PR 3.2 - Surface "why this matched" explanations in the UI
 
 #### Goals/Scope
@@ -534,6 +571,8 @@ The release is split into phases. Each phase is designed to ship value independe
 
 - Remove explanation rendering while keeping rulebook matching intact.
 - Fall back to minimal section headers if needed.
+
+**AI model suggestion:** Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — mostly presentation logic; displaying existing match explanations in the UI.
 
 ---
 
@@ -586,6 +625,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Remove the preview/reset UI.
 - Keep the underlying persisted defaults and engine available.
 
+**AI model suggestion:** Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — read-only preview and reset; straightforward UI with clear behavior.
+
 ### PR 4.2 - Minimal editable rulebook UI
 
 #### Goals/Scope
@@ -622,6 +663,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Revert the editing UI and keep read-only preview/reset support.
 - Preserve fallback-to-default behavior if saved configs prove unstable.
 
+**AI model suggestion:** Harder (gpt-5.4, opus-4.6, codex-5.3) — form handling, validation, and error states; more edge cases and interaction complexity.
+
 ### PR 4.3 - Support user-defined additional open sections
 
 #### Goals/Scope
@@ -657,6 +700,8 @@ The release is split into phases. Each phase is designed to ship value independe
 
 - Revert custom-section creation while preserving built-in rule support.
 - Reset all custom sections to defaults if rollback is needed in production-like environments.
+
+**AI model suggestion:** Harder (gpt-5.4, opus-4.6, codex-5.3) — extends engine and UI with new capabilities; add/remove/reorder flows and matching semantics involve more moving parts.
 
 ---
 
@@ -708,6 +753,8 @@ The release is split into phases. Each phase is designed to ship value independe
 - Revert new tests only if they are found to be incorrect.
 - Keep functional code changes isolated from test-only changes where possible.
 
+**AI model suggestion:** Harder (gpt-5.4, opus-4.6, codex-5.3) — parity and regression tests require understanding both old and new semantics; designing high-signal coverage benefits from deeper reasoning.
+
 ### PR 5.2 - Release notes and operator guidance
 
 #### Goals/Scope
@@ -739,6 +786,8 @@ The release is split into phases. Each phase is designed to ship value independe
 
 - Revert documentation updates independently if needed.
 - Functional code remains untouched.
+
+**AI model suggestion:** Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — prose and explanation; straightforward documentation updates.
 
 ---
 
