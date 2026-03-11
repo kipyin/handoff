@@ -1199,6 +1199,32 @@ def test_render_check_in_flow_delayed_mode_uses_delayed_type(
     assert calls[0]["next_check_date"] == date(2026, 3, 20)
 
 
+@pytest.mark.parametrize(
+    ("mode", "expected_label"),
+    [
+        ("on_track", "Current progress (optional)"),
+        ("delayed", "Why delayed? (optional)"),
+        ("concluded", "Conclusion (optional)"),
+    ],
+)
+def test_render_check_in_flow_note_label_per_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    expected_label: str,
+) -> None:
+    """Each check-in mode shows the correct distinct label on its note text area."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=50, next_check=date(2026, 3, 20))
+    st_mock.session_state["now_action_check_in_mode_50"] = mode
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    text_area_labels = [call[0][0] for call in st_mock.text_area.call_args_list if call[0]]
+    assert expected_label in text_area_labels
+
+
 def test_render_reopen_flow_save_value_error_shows_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
