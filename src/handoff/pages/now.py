@@ -694,29 +694,31 @@ def render_now_page() -> None:
         value=False,
         key="now_include_archived_projects",
     )
-    projects = list_projects(include_archived=include_archived_projects)
-    if not projects:
-        if include_archived_projects:
-            st.info("No projects yet. Create one on the Projects page.")
-        else:
-            all_projects = list_projects(include_archived=True)
-            if all_projects:
-                st.info(
-                    "No active projects. Turn on 'Include archived projects' to view archived work."
-                )
-            else:
-                st.info("No projects yet. Create one on the Projects page.")
-        return
-
-    pitchmen = list_pitchmen_with_open_handoffs(include_archived_projects=include_archived_projects)
-    project_by_name = {p.name: p for p in projects}
-    project_ids, pitchman_names, search_text = _render_filters(
-        project_by_name=project_by_name,
-        pitchmen=pitchmen,
-        key_prefix="now",
-    )
-
     with time_action("now_render"):
+        projects = list_projects(include_archived=include_archived_projects)
+        if not projects:
+            if include_archived_projects:
+                st.info("No projects yet. Create one on the Projects page.")
+            else:
+                all_projects = list_projects(include_archived=True)
+                if all_projects:
+                    st.info(
+                        "No active projects. Turn on 'Include archived projects' "
+                        "to view archived work."
+                    )
+                else:
+                    st.info("No projects yet. Create one on the Projects page.")
+            return
+
+        pitchmen = list_pitchmen_with_open_handoffs(
+            include_archived_projects=include_archived_projects
+        )
+        project_by_name = {p.name: p for p in projects}
+        project_ids, pitchman_names, search_text = _render_filters(
+            project_by_name=project_by_name,
+            pitchmen=pitchmen,
+            key_prefix="now",
+        )
         snapshot = get_now_snapshot(
             include_archived_projects=include_archived_projects,
             project_ids=project_ids,

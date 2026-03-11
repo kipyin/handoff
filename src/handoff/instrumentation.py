@@ -8,13 +8,14 @@ no external telemetry.
 from __future__ import annotations
 
 import time
+from collections.abc import Iterator
 from contextlib import contextmanager
 
 from loguru import logger
 
 
 @contextmanager
-def time_action(name: str):
+def time_action(name: str) -> Iterator[None]:
     """Context manager that logs elapsed time in milliseconds for a named action.
 
     Use for render and key action flows to support observability and
