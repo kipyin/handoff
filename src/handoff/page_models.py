@@ -5,6 +5,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from handoff.models import Handoff, Project
+
+
+@dataclass(slots=True)
+class NowSnapshot:
+    """Page-facing contract for the Now page.
+
+    Contains the full payload needed to render Risk, Action required,
+    Upcoming, and Concluded sections in the canonical order, plus
+    supporting data for filters and add form.
+    """
+
+    risk: list[Handoff]
+    action: list[Handoff]
+    upcoming: list[Handoff]
+    concluded: list[Handoff]
+    projects: list[Project]
+    pitchmen: list[str]
+
 
 @dataclass(slots=True, frozen=True)
 class HandoffQuery:

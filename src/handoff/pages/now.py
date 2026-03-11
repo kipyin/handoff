@@ -12,18 +12,13 @@ import streamlit as st
 
 from handoff.dates import add_business_days, format_date_smart, format_risk_reason
 from handoff.models import CheckIn, CheckInType, Handoff, Project
-from handoff.search_parse import parse_search_query
 from handoff.services import (
     add_check_in,
     conclude_handoff,
     create_handoff,
-    get_deadline_near_days,
+    get_now_snapshot,
     list_pitchmen_with_open_handoffs,
     list_projects,
-    query_action_handoffs,
-    query_concluded_handoffs,
-    query_risk_handoffs,
-    query_upcoming_handoffs,
     reopen_handoff,
     snooze_handoff,
     update_handoff,
@@ -526,58 +521,24 @@ def render_now_page() -> None:
         key_prefix="now",
     )
 
-    parsed = parse_search_query(search_text or "")
-    deadline_near_days = get_deadline_near_days()
-    risk = query_risk_handoffs(
+    snapshot = get_now_snapshot(
+        include_archived_projects=include_archived_projects,
         project_ids=project_ids,
         pitchman_names=pitchman_names,
-        search_text=parsed.text_query,
-        deadline_near_days=deadline_near_days,
-        next_check_min=parsed.next_check_min,
-        next_check_max=parsed.next_check_max,
-        deadline_min=parsed.deadline_min,
-        deadline_max=parsed.deadline_max,
-        include_archived_projects=include_archived_projects,
+        search_text=search_text,
+        projects=projects,
+        pitchmen=pitchmen,
     )
 
-    action = query_action_handoffs(
-        project_ids=project_ids,
-        pitchman_names=pitchman_names,
-        search_text=parsed.text_query,
-        deadline_near_days=deadline_near_days,
-        next_check_min=parsed.next_check_min,
-        next_check_max=parsed.next_check_max,
-        deadline_min=parsed.deadline_min,
-        deadline_max=parsed.deadline_max,
-        include_archived_projects=include_archived_projects,
-    )
-    upcoming = query_upcoming_handoffs(
-        project_ids=project_ids,
-        pitchman_names=pitchman_names,
-        search_text=parsed.text_query,
-        deadline_near_days=deadline_near_days,
-        next_check_min=parsed.next_check_min,
-        next_check_max=parsed.next_check_max,
-        deadline_min=parsed.deadline_min,
-        deadline_max=parsed.deadline_max,
-        include_archived_projects=include_archived_projects,
-    )
-    concluded = query_concluded_handoffs(
-        project_ids=project_ids,
-        pitchman_names=pitchman_names,
-        search_text=parsed.text_query,
-        include_archived_projects=include_archived_projects,
-    )
-
-    _render_add_form(project_by_name, pitchmen, "now")
+    _render_add_form(project_by_name, snapshot.pitchmen, "now")
 
     # --- Risk section ---
     st.markdown("---")
     st.markdown("**Risk**")
-    if not risk:
+    if not snapshot.risk:
         st.caption("No at-risk handoffs.")
     else:
-        for handoff in risk:
+        for handoff in snapshot.risk:
             _render_item(
                 handoff,
                 "now_risk",
@@ -590,10 +551,10 @@ def render_now_page() -> None:
     # --- Action section ---
     st.markdown("---")
     st.markdown("**Action required**")
-    if not action:
+    if not snapshot.action:
         st.info("Nothing needs attention right now. Add handoffs or check back later.")
     else:
-        for handoff in action:
+        for handoff in snapshot.action:
             _render_item(
                 handoff,
                 "now_action",
@@ -604,10 +565,10 @@ def render_now_page() -> None:
     # --- Upcoming section ---
     st.markdown("---")
     st.markdown("**Upcoming**")
-    if not upcoming:
+    if not snapshot.upcoming:
         st.caption("No upcoming handoffs.")
     else:
-        for handoff in upcoming:
+        for handoff in snapshot.upcoming:
             _render_item(
                 handoff,
                 key_prefix="now_upcoming",
@@ -618,10 +579,10 @@ def render_now_page() -> None:
     # --- Concluded section ---
     st.markdown("---")
     st.markdown("**Concluded**")
-    if not concluded:
+    if not snapshot.concluded:
         st.caption("No concluded handoffs.")
     else:
-        for handoff in concluded:
+        for handoff in snapshot.concluded:
             _render_item(
                 handoff,
                 key_prefix="now_concluded",
