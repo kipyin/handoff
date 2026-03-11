@@ -8,10 +8,13 @@ from typing import Any
 
 from handoff.data import get_export_payload as _get_export_payload
 from handoff.data import import_payload as _import_payload
+from handoff.rulebook import RulebookSettings, build_default_rulebook_settings
 
 DEFAULT_DEADLINE_NEAR_DAYS = 1
 DEADLINE_NEAR_DAYS_MIN = 1
 DEADLINE_NEAR_DAYS_MAX = 14
+
+RULEBOOK_SETTINGS_KEY = "rulebook"
 
 
 def _get_settings_path() -> Path:
@@ -63,6 +66,36 @@ def set_deadline_near_days(value: int) -> None:
     settings = _load_settings()
     settings["deadline_near_days"] = n
     _save_settings(settings)
+
+
+def get_rulebook_settings() -> RulebookSettings:
+    """Return global rulebook settings from disk. Fall back to defaults if invalid/missing."""
+    settings = _load_settings()
+    rulebook_payload = settings.get(RULEBOOK_SETTINGS_KEY)
+    if rulebook_payload is None:
+        return build_default_rulebook_settings(deadline_near_days=get_deadline_near_days())
+    if not isinstance(rulebook_payload, dict):
+        return build_default_rulebook_settings(deadline_near_days=get_deadline_near_days())
+    try:
+        parsed = RulebookSettings.from_dict(rulebook_payload)
+        if not parsed.rules:
+            return build_default_rulebook_settings(deadline_near_days=get_deadline_near_days())
+        return parsed
+    except (ValueError, KeyError, TypeError):
+        return build_default_rulebook_settings(deadline_near_days=get_deadline_near_days())
+
+
+def save_rulebook_settings(settings: RulebookSettings) -> None:
+    """Persist the global rulebook to settings JSON. Preserves other settings keys."""
+    data = _load_settings()
+    data[RULEBOOK_SETTINGS_KEY] = settings.to_dict()
+    _save_settings(data)
+
+
+def reset_rulebook_settings() -> None:
+    """Reset the rulebook to built-in defaults and persist."""
+    defaults = build_default_rulebook_settings(deadline_near_days=get_deadline_near_days())
+    save_rulebook_settings(defaults)
 
 
 def get_export_payload() -> dict[str, Any]:
