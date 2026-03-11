@@ -643,10 +643,10 @@ def test_render_now_page_item_with_context_renders_markdown(
     assert any("Important context here" in c for c in markdown_calls)
 
 
-def test_render_now_page_section_explanations_rendered_as_caption(
+def test_render_now_page_section_explanations_rendered_for_open_sections(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Rule-based section explanations appear as captions inside expanders."""
+    """Rule-based explanations appear for Risk, Action, and Upcoming items."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -657,12 +657,26 @@ def test_render_now_page_section_explanations_rendered_as_caption(
         need_back="At risk item",
         deadline=date(2026, 3, 9),
     )
+    action_handoff = _make_fake_handoff(
+        handoff_id=11,
+        need_back="Action item",
+        next_check=date(2026, 3, 9),
+    )
+    upcoming_handoff = _make_fake_handoff(
+        handoff_id=12,
+        need_back="Upcoming item",
+        next_check=date(2026, 3, 20),
+    )
     monkeypatch.setattr(
         "handoff.pages.now.get_now_snapshot",
         lambda **kwargs: _make_fake_snapshot(
             risk=[risk_handoff],
+            action=[action_handoff],
+            upcoming=[upcoming_handoff],
             section_explanations={
                 10: "Deadline is near and latest check-in is delayed.",
+                11: "Next check date is due today.",
+                12: "No risk or action rules matched.",
             },
         ),
     )
@@ -671,6 +685,8 @@ def test_render_now_page_section_explanations_rendered_as_caption(
 
     caption_calls = [str(c) for c in st_mock.caption.call_args_list]
     assert any("Deadline is near and latest check-in is delayed" in c for c in caption_calls)
+    assert any("Next check date is due today" in c for c in caption_calls)
+    assert any("No risk or action rules matched" in c for c in caption_calls)
 
 
 def test_render_item_edit_save_validation_sets_flash_error(
