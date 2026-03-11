@@ -490,6 +490,46 @@ def test_service_get_now_snapshot_contract(session, monkeypatch) -> None:
     assert isinstance(snapshot.pitchmen, list)
 
 
+def test_service_get_now_snapshot_uses_prefetched_supporting_data(monkeypatch) -> None:
+    """Prefetched projects/pitchmen are returned directly without extra list queries."""
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_deadline_near_days",
+        lambda: 1,
+    )
+    monkeypatch.setattr("handoff.services.handoff_service.query_risk_handoffs", lambda **kwargs: [])
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.query_action_handoffs", lambda **kwargs: []
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.query_upcoming_handoffs", lambda **kwargs: []
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.query_concluded_handoffs",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.list_projects",
+        lambda **kwargs: pytest.fail("list_projects should not be called when prefetching"),
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.list_pitchmen_with_open_handoffs",
+        lambda **kwargs: pytest.fail(
+            "list_pitchmen_with_open_handoffs should not be called when prefetching"
+        ),
+    )
+
+    prefetched_projects = [Project(name="Prefetched project")]
+    prefetched_pitchmen = ["Alice", "Bob"]
+
+    snapshot = get_now_snapshot(
+        projects=prefetched_projects,
+        pitchmen=prefetched_pitchmen,
+    )
+
+    assert snapshot.projects is prefetched_projects
+    assert snapshot.pitchmen is prefetched_pitchmen
+
+
 def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -> None:
     """get_now_snapshot places handoffs in correct sections by default semantics."""
     _patch_session_context(monkeypatch, session)
@@ -631,39 +671,6 @@ def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
     assert concluded_calls == [concluded_expected]
     assert list_projects_calls == [{"include_archived": True}]
     assert list_pitchmen_calls == [{"include_archived_projects": True}]
-
-
-def test_service_get_now_snapshot_uses_prefetched_supporting_data(monkeypatch) -> None:
-    """Prefetched projects/pitchmen bypass extra list queries in snapshot service."""
-    parsed = SimpleNamespace(
-        text_query="",
-        next_check_min=None,
-        next_check_max=None,
-        deadline_min=None,
-        deadline_max=None,
-    )
-    monkeypatch.setattr("handoff.services.handoff_service.parse_search_query", lambda _: parsed)
-    monkeypatch.setattr("handoff.services.handoff_service.get_deadline_near_days", lambda: 1)
-    monkeypatch.setattr("handoff.services.handoff_service.query_risk_handoffs", lambda **_: [])
-    monkeypatch.setattr("handoff.services.handoff_service.query_action_handoffs", lambda **_: [])
-    monkeypatch.setattr("handoff.services.handoff_service.query_upcoming_handoffs", lambda **_: [])
-    monkeypatch.setattr("handoff.services.handoff_service.query_concluded_handoffs", lambda **_: [])
-    monkeypatch.setattr(
-        "handoff.services.handoff_service.list_projects",
-        lambda **_: pytest.fail("list_projects should not be called when projects are pre-fetched"),
-    )
-    monkeypatch.setattr(
-        "handoff.services.handoff_service.list_pitchmen_with_open_handoffs",
-        lambda **_: pytest.fail("list_pitchmen_with_open_handoffs should not be called"),
-    )
-
-    prefetched_projects = [Project(name="Prefetched")]
-    prefetched_pitchmen = ["Alice", "Bob"]
-
-    snapshot = get_now_snapshot(projects=prefetched_projects, pitchmen=prefetched_pitchmen)
-
-    assert snapshot.projects is prefetched_projects
-    assert snapshot.pitchmen is prefetched_pitchmen
 
 
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:

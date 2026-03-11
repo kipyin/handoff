@@ -161,3 +161,85 @@ def test_sizecheck_cli_surfaces_warnings_and_fails_on_violations(monkeypatch) ->
     assert "warning: src/handoff/io.py: 80 bytes (80% of limit)" in result.stdout
     assert "The following files exceed the limit (100 bytes):" in result.stdout
     assert "src/handoff/data.py: 1,234 bytes (max 100)" in result.stdout
+
+
+def test_sizecheck_cli_forwards_options_and_paths(monkeypatch) -> None:
+    """`handoff sizecheck` should pass options/paths through to run_sizecheck."""
+    captured: dict[str, object] = {}
+
+    def fake_run_sizecheck(paths, *, default_path, max_bytes, warn_threshold):
+        captured["paths"] = paths
+        captured["default_path"] = default_path
+        captured["max_bytes"] = max_bytes
+        captured["warn_threshold"] = warn_threshold
+        return True, [], ["src/example.py: 9 bytes (90% of limit)"]
+
+    monkeypatch.setattr(cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "sizecheck",
+            "--path",
+            "custom-src",
+            "--max-bytes",
+            "10",
+            "--warn-threshold",
+            "0.9",
+            "scripts/cli.py",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured == {
+        "paths": ["scripts/cli.py"],
+        "default_path": "custom-src",
+        "max_bytes": 10,
+        "warn_threshold": 0.9,
+    }
+    assert "warning: src/example.py: 9 bytes (90% of limit)" in result.stdout
+    assert "All files under 10 bytes." in result.stdout
+
+
+def test_sizecheck_cli_exits_nonzero_on_violations(monkeypatch) -> None:
+    """`handoff sizecheck` should fail fast when any file exceeds the limit."""
+
+    def fake_run_sizecheck(_paths, *, default_path, max_bytes, warn_threshold):
+        del default_path, warn_threshold
+        return False, [f"src/too_big.py: {max_bytes + 1} bytes (max {max_bytes})"], []
+
+    monkeypatch.setattr(cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+
+    result = RUNNER.invoke(cli.app, ["sizecheck", "--max-bytes", "10"])
+
+    assert result.exit_code == 1
+    assert "The following files exceed the limit (10 bytes):" in result.stdout
+    assert "src/too_big.py: 11 bytes (max 10)" in result.stdout
+
+
+def test_ci_runs_sizecheck_with_fixed_src_settings(monkeypatch) -> None:
+    """`handoff ci` should always run sizecheck against src/ only."""
+    calls = _capture_run_cmd(monkeypatch)
+    sizecheck_calls: list[dict[str, object]] = []
+
+    def fake_sizecheck(**kwargs) -> None:
+        sizecheck_calls.append(kwargs)
+
+    monkeypatch.setattr(cli, "sizecheck", fake_sizecheck)
+
+    cli.ci(["--fix"])
+
+    assert calls == [
+        ["uv", "run", "ruff", "format", "."],
+        ["uv", "run", "ruff", "check", "--fix", "."],
+        ["uv", "run", "pyright", "src", "scripts"],
+        ["uv", "run", "pytest", "."],
+    ]
+    assert sizecheck_calls == [
+        {
+            "extra_args": [],
+            "path": "src",
+            "max_bytes": 32 * 1024,
+            "warn_threshold": 0.9,
+        }
+    ]
