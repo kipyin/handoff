@@ -1700,7 +1700,13 @@ def test_render_check_in_flow_save_clears_mode_and_shows_success(
 
     _render_check_in_flow(handoff, key_prefix="now_action")
 
+    assert len(calls) == 1
+    assert calls[0]["handoff_id"] == 111
+    assert calls[0]["check_in_type"] == CheckInType.ON_TRACK
+    assert calls[0]["note"] == "done"
+    assert calls[0]["next_check_date"] == date(2026, 3, 13)
     # Check that mode key was cleared after save
     assert "now_action_check_in_mode_111" not in st_mock.session_state
     # Check that success message was set
     assert "now_flash_success" in st_mock.session_state
+    assert "Checked in today" in str(st_mock.session_state.get("now_flash_success", ""))
