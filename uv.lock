@@ -260,7 +260,7 @@ wheels = [
 
 [[package]]
 name = "handoff"
-version = "2026.3.10"
+version = "2026.3.11"
 source = { editable = "." }
 dependencies = [
     { name = "loguru" },
@@ -285,7 +285,7 @@ requires-dist = [
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "platformdirs", specifier = ">=4.0.0" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
-    { name = "streamlit", specifier = ">=1.40.0" },
+    { name = "streamlit", specifier = ">=1.52.0" },
 ]
 
 [package.metadata.requires-dev]

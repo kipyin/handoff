@@ -25,11 +25,12 @@ Apply tags in this order. Use the first tag that matches.
   - Ruff/formatting cleanup, pyright fixes
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
 
-## 2026.3.11 [Recommended]
+## 2026.3.11 [Breaking]
 
-- **Improvement**
-  - **Now page action row cleanup:** Removed Snooze; Edit is now inline with On-track | Delayed | Conclude in a single row. No Actions popover.
-  - **Distinct check-in labels:** Check-in form shows "Current progress (optional)" for On-track, "Why delayed? (optional)" for Delayed, and "Conclusion (optional)" for Conclude, so users see the right prompt for each check-in type.
+- **Feature**
+  - **Now page keyboard shortcut:** Press `a` to expand the Add handoff form. Shortcuts caption shown on the page.
+- **Breaking**
+  - **Streamlit 1.52+ required:** Minimum Streamlit version bumped from 1.40 to 1.52 for `st.button(shortcut=...)` support. Full reinstall needed for embedded builds. Users who patch-update in-place get a try/except fallback: the button works without the shortcut if their bundled Streamlit is older.
 
 ## 2026.3.10 [Recommended]
 

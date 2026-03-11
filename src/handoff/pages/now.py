@@ -765,13 +765,22 @@ def render_now_page() -> None:
         st.markdown("**➕ Add handoff**")
         _render_add_form(project_by_name, snapshot.pitchmen, "now")
     else:
-        st.button(
-            "➕ Add handoff (a)",
-            shortcut="a",
-            key="now_add_handoff_trigger",
-            on_click=_expand_add_form,
-            help="Open the add form to create a new handoff",
-        )
+        try:
+            st.button(
+                "➕ Add handoff (a)",
+                shortcut="a",
+                key="now_add_handoff_trigger",
+                on_click=_expand_add_form,
+                help="Open the add form to create a new handoff",
+            )
+        except TypeError:
+            # Fallback for in-app updater: old embedded Streamlit lacks shortcut param
+            st.button(
+                "➕ Add handoff (a)",
+                key="now_add_handoff_trigger",
+                on_click=_expand_add_form,
+                help="Open the add form to create a new handoff",
+            )
     st.caption("Shortcuts: **a** Add handoff")
 
     # --- Risk section ---

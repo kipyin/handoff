@@ -1,11 +1,11 @@
 [project]
 name = "handoff"
-version = "2026.3.10"
+version = "2026.3.11"
 description = "Handoff — see who's on the hook across all your projects."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "streamlit>=1.40.0",
+    "streamlit>=1.52.0",
     "sqlmodel>=0.0.22",
     "loguru>=0.7.0",
     "platformdirs>=4.0.0",

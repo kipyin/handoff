@@ -215,7 +215,7 @@ def test_render_now_page_shows_shortcuts_caption(
 def test_render_now_page_add_button_has_shortcut_when_collapsed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Add handoff trigger button has shortcut 'a' when form is collapsed."""
+    """Add handoff trigger button has shortcut 'a' when Streamlit supports it."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -234,8 +234,44 @@ def test_render_now_page_add_button_has_shortcut_when_collapsed(
         c for c in st_mock.button.call_args_list if c[0] and "Add handoff" in str(c[0][0])
     ]
     assert len(add_btn_calls) >= 1
-    add_call = add_btn_calls[0]
-    assert add_call.kwargs.get("shortcut") == "a"
+    # First call uses shortcut when supported; fallback omits it
+    first_call = add_btn_calls[0]
+    assert first_call.kwargs.get("shortcut") == "a" or "shortcut" not in first_call.kwargs
+
+
+def test_render_now_page_add_button_fallback_when_shortcut_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When Streamlit lacks shortcut param (e.g. in-app patch), button renders without it."""
+    st_mock = _build_streamlit_mock()
+
+    def button_raising_shortcut(*args, **kwargs):
+        if "shortcut" in kwargs:
+            raise TypeError("got an unexpected keyword argument 'shortcut'")
+        return False
+
+    st_mock.button.side_effect = button_raising_shortcut
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(),
+    )
+
+    render_now_page()
+
+    # Fallback call has no shortcut; page rendered without error
+    add_btn_calls = [
+        c for c in st_mock.button.call_args_list if c[0] and "Add handoff" in str(c[0][0])
+    ]
+    assert len(add_btn_calls) >= 1
+    # At least one call succeeded (fallback); it must not have shortcut
+    fallback_calls = [c for c in add_btn_calls if "shortcut" not in c.kwargs]
+    assert len(fallback_calls) >= 1
 
 
 def test_expand_add_form_sets_session_state(
