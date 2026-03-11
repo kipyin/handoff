@@ -353,7 +353,7 @@ def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
     with st.form(key=form_key):
         if selected_mode == "concluded":
             st.text_area(
-                "Conclusion (optional)",
+                "Conclusion note (optional)",
                 key=note_key,
             )
             st.form_submit_button(
@@ -367,11 +367,7 @@ def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
                 },
             )
         else:
-            note_label = (
-                "Current progress (optional)"
-                if selected_mode == "on_track"
-                else "Why delayed? (optional)"
-            )
+            note_label = "Note (optional)" if selected_mode == "on_track" else "Reason (optional)"
             st.text_area(note_label, key=note_key)
             default_next_check = (
                 handoff.next_check
