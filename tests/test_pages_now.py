@@ -303,6 +303,29 @@ def test_collapse_add_form_clears_session_state(
     assert _NOW_ADD_EXPANDED_KEY not in st_mock.session_state
 
 
+def test_render_now_page_trigger_button_not_shown_when_form_expanded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the add form is expanded, the trigger button is not rendered."""
+    st_mock = _build_streamlit_mock()
+    st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(),
+    )
+
+    render_now_page()
+
+    add_btn_calls = [
+        c for c in st_mock.button.call_args_list if c[0] and "Add handoff" in str(c[0][0])
+    ]
+    assert len(add_btn_calls) == 0
+
+
 def test_render_now_page_add_form_expands_when_add_expanded_true(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -842,6 +865,139 @@ def test_render_add_form_missing_need_back_sets_flash_error(
     assert create_calls == []
     assert st_mock.session_state["now_flash_error"] == "Need back is required."
     assert "now_flash_success" not in st_mock.session_state
+
+
+def test_render_add_form_validation_failure_does_not_collapse_form(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Failed add submission does not collapse the add form so the user can correct input."""
+    st_mock = _build_streamlit_mock()
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
+    st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    create_calls: list[dict[str, object]] = []
+    monkeypatch.setattr("handoff.pages.now.create_handoff", lambda **kw: create_calls.append(kw))
+    st_mock.session_state["now_add_project"] = "Work"
+    st_mock.session_state["now_add_who"] = "Alex"
+    st_mock.session_state["now_add_need"] = "   "
+    st_mock.session_state["now_add_next"] = date(2026, 3, 25)
+    st_mock.session_state["now_add_deadline"] = None
+    st_mock.session_state["now_add_context"] = ""
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    assert create_calls == []
+    assert _NOW_ADD_EXPANDED_KEY in st_mock.session_state
+
+
+def test_render_add_form_close_button_collapses_form_without_save(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clicking Close dismisses the add form without persisting any handoff."""
+    st_mock = _build_streamlit_mock()
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Close")
+    st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    create_calls: list[dict[str, object]] = []
+    monkeypatch.setattr("handoff.pages.now.create_handoff", lambda **kw: create_calls.append(kw))
+    st_mock.session_state["now_add_project"] = "Work"
+    st_mock.session_state["now_add_who"] = "Alex"
+    st_mock.session_state["now_add_need"] = "Some deliverable"
+    st_mock.session_state["now_add_next"] = date(2026, 3, 25)
+    st_mock.session_state["now_add_deadline"] = None
+    st_mock.session_state["now_add_context"] = ""
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    assert create_calls == []
+    assert _NOW_ADD_EXPANDED_KEY not in st_mock.session_state
+
+
+def test_render_add_form_invalid_project_sets_flash_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Add form with an unknown project name rejects the submission."""
+    st_mock = _build_streamlit_mock()
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    create_calls: list[dict[str, object]] = []
+    monkeypatch.setattr("handoff.pages.now.create_handoff", lambda **kw: create_calls.append(kw))
+    st_mock.session_state["now_add_project"] = "DoesNotExist"
+    st_mock.session_state["now_add_who"] = "Alex"
+    st_mock.session_state["now_add_need"] = "Ship release notes"
+    st_mock.session_state["now_add_next"] = date(2026, 3, 25)
+    st_mock.session_state["now_add_deadline"] = None
+    st_mock.session_state["now_add_context"] = ""
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    assert create_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a project."
+
+
+def test_render_add_form_invalid_next_check_sets_flash_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Add form with a non-date next_check value rejects the submission."""
+    st_mock = _build_streamlit_mock()
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    create_calls: list[dict[str, object]] = []
+    monkeypatch.setattr("handoff.pages.now.create_handoff", lambda **kw: create_calls.append(kw))
+    st_mock.session_state["now_add_project"] = "Work"
+    st_mock.session_state["now_add_who"] = "Alex"
+    st_mock.session_state["now_add_need"] = "Ship release notes"
+    st_mock.session_state["now_add_next"] = "not-a-date"
+    st_mock.session_state["now_add_deadline"] = None
+    st_mock.session_state["now_add_context"] = ""
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    assert create_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a valid next check date."
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_label"),
+    [
+        ("on_track", "Current progress (optional)"),
+        ("delayed", "Why delayed? (optional)"),
+    ],
+)
+def test_render_check_in_flow_note_label_matches_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+    expected_label: str,
+) -> None:
+    """Check-in note text_area uses the correct label for on_track and delayed modes."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=50, next_check=date(2026, 3, 9))
+    st_mock.session_state["now_action_check_in_mode_50"] = mode
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    text_area_labels = [call[0][0] for call in st_mock.text_area.call_args_list if call[0]]
+    assert expected_label in text_area_labels
+
+
+def test_render_check_in_flow_conclude_uses_conclusion_label(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Conclude mode uses 'Conclusion (optional)' label for the note field."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=51, next_check=date(2026, 3, 9))
+    st_mock.session_state["now_action_check_in_mode_51"] = "concluded"
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    text_area_labels = [call[0][0] for call in st_mock.text_area.call_args_list if call[0]]
+    assert "Conclusion (optional)" in text_area_labels
 
 
 def test_render_check_in_flow_due_shows_due_caption(monkeypatch: pytest.MonkeyPatch) -> None:
