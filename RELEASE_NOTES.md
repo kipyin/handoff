@@ -29,6 +29,7 @@ Apply tags in this order. Use the first tag that matches.
 
 - **Improvement**
   - **Now page action row cleanup:** Removed Snooze; Edit is now inline with On-track | Delayed | Conclude in a single row. No Actions popover.
+  - **Distinct check-in labels:** Check-in form shows "Current progress (optional)" for On-track, "Why delayed? (optional)" for Delayed, and "Conclusion (optional)" for Conclude, so users see the right prompt for each check-in type.
 
 ## 2026.3.10 [Recommended]
 
