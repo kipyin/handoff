@@ -1422,3 +1422,291 @@ def test_is_check_in_due_none() -> None:
 
     h = SimpleNamespace(next_check=None)
     assert _is_check_in_due(h) is False
+
+
+# --- Regression tests for PR #88: Snooze removal + segmented_control ---
+
+
+def test_render_item_auto_expands_due_action_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Due action items auto-expand so check-in controls are visible without clicking."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr("handoff.pages.now.date", FixedDate)
+
+    # Handoff due today should auto-expand
+    due_handoff = _make_fake_handoff(
+        handoff_id=100,
+        need_back="Due now",
+        next_check=date(2026, 3, 9),
+    )
+    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+
+    _render_item(
+        due_handoff,
+        key_prefix="now_action",
+        project_by_name=project_by_name,
+        show_check_in_controls=True,
+        allow_actions=True,
+    )
+
+    # Expander should be expanded due to is_due_action logic
+    assert st_mock.expander.call_args.kwargs["expanded"] is True
+
+
+def test_render_item_does_not_auto_expand_future_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Future action items do not auto-expand (unless check-in mode is active)."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    # Handoff due in the future should not auto-expand
+    future_handoff = _make_fake_handoff(
+        handoff_id=101,
+        need_back="Future check",
+        next_check=date(2099, 1, 1),
+    )
+    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+
+    _render_item(
+        future_handoff,
+        key_prefix="now_action",
+        project_by_name=project_by_name,
+        show_check_in_controls=True,
+        allow_actions=True,
+    )
+
+    # Expander should not be expanded (no active mode, not due)
+    assert st_mock.expander.call_args.kwargs["expanded"] is False
+
+
+def test_render_check_in_flow_edit_button_visible_with_allow_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edit button is visible in check-in flow when allow_actions is True."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=102, next_check=date(2026, 3, 20))
+
+    _render_check_in_flow(
+        handoff,
+        key_prefix="now_action",
+        allow_actions=True,
+    )
+
+    edit_buttons = [
+        call[0][0] for call in st_mock.button.call_args_list if call[0] and call[0][0] == "Edit"
+    ]
+    assert len(edit_buttons) == 1
+
+
+def test_render_check_in_flow_edit_button_hidden_without_allow_actions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edit button is not rendered when allow_actions is False."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=103, next_check=date(2026, 3, 20))
+
+    _render_check_in_flow(
+        handoff,
+        key_prefix="now_concluded",
+        allow_actions=False,
+    )
+
+    edit_buttons = [
+        call[0][0] for call in st_mock.button.call_args_list if call[0] and call[0][0] == "Edit"
+    ]
+    assert len(edit_buttons) == 0
+
+
+def test_render_check_in_flow_segmented_control_options_correct(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Segmented control always shows on_track, delayed, concluded options."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=104, next_check=date(2026, 3, 20))
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    seg_calls = st_mock.segmented_control.call_args_list
+    assert len(seg_calls) >= 1
+    options = seg_calls[0].kwargs.get(
+        "options", seg_calls[0].args[1] if len(seg_calls[0].args) > 1 else []
+    )
+    assert list(options) == ["on_track", "delayed", "concluded"]
+
+
+def test_render_check_in_flow_segmented_control_has_format_func(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Segmented control uses format_func to display friendly labels."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=105, next_check=date(2026, 3, 20))
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    seg_calls = st_mock.segmented_control.call_args_list
+    assert len(seg_calls) >= 1
+    format_func = seg_calls[0].kwargs.get("format_func")
+    assert format_func is not None
+    # Verify format_func produces correct labels
+    assert format_func("on_track") == "On-track"
+    assert format_func("delayed") == "Delayed"
+    assert format_func("concluded") == "Conclude"
+
+
+def test_render_check_in_flow_segmented_control_key_matches_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Segmented control key follows the naming pattern for state management."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=106, next_check=date(2026, 3, 20))
+
+    _render_check_in_flow(handoff, key_prefix="now_risk")
+
+    seg_calls = st_mock.segmented_control.call_args_list
+    assert len(seg_calls) >= 1
+    key = seg_calls[0].kwargs.get("key")
+    assert key == "now_risk_check_in_mode_106"
+
+
+def test_render_check_in_flow_note_label_on_track_unchanged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On-track mode shows 'Current progress (optional)' label."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=107, next_check=date(2026, 3, 20))
+    st_mock.session_state["now_action_check_in_mode_107"] = "on_track"
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    text_area_labels = [call[0][0] for call in st_mock.text_area.call_args_list if call[0]]
+    assert "Current progress (optional)" in text_area_labels
+
+
+def test_render_check_in_flow_note_label_delayed_changed_from_why_delayed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Delayed mode shows 'Why? (optional)' label (was 'Why delayed?')."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=108, next_check=date(2026, 3, 20))
+    st_mock.session_state["now_action_check_in_mode_108"] = "delayed"
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    text_area_labels = [call[0][0] for call in st_mock.text_area.call_args_list if call[0]]
+    assert "Why? (optional)" in text_area_labels
+    # Verify the old label is NOT used
+    assert not any("Why delayed?" in label for label in text_area_labels)
+
+
+def test_render_item_columns_layout_for_check_in_controls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Check-in flow uses [3, 1] column layout for segmented control + Edit button."""
+    st_mock = _build_streamlit_mock()
+    columns_calls: list = []
+
+    def _capture_columns(spec):
+        columns_calls.append(spec)
+        return [_Ctx() for _ in range(2)]  # Return 2 contexts for [3, 1]
+
+    st_mock.columns.side_effect = _capture_columns
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=109, next_check=date(2026, 3, 20))
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    # Verify columns([3, 1]) was called for layout
+    assert [3, 1] in columns_calls
+
+
+def test_render_check_in_flow_upcoming_shows_controls_and_edit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Upcoming items render check-in segmented control with Edit button."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    upcoming_handoff = _make_fake_handoff(
+        handoff_id=110,
+        need_back="Upcoming item",
+        next_check=date(2099, 4, 1),
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(upcoming=[upcoming_handoff]),
+    )
+
+    render_now_page()
+
+    # Verify segmented control is rendered
+    assert st_mock.segmented_control.called
+    # Verify Edit button is visible in upcoming items
+    labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
+    assert "Edit" in labels
+
+
+def test_render_check_in_flow_save_clears_mode_and_shows_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Saving check-in clears the mode state and shows success message."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save check-in")
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    calls: list[dict[str, object]] = []
+
+    def _fake_add_check_in(
+        handoff_id: int,
+        *,
+        check_in_type: CheckInType,
+        note: str | None,
+        next_check_date: date,
+    ) -> None:
+        calls.append(
+            {
+                "handoff_id": handoff_id,
+                "check_in_type": check_in_type,
+                "note": note,
+                "next_check_date": next_check_date,
+            }
+        )
+
+    monkeypatch.setattr("handoff.pages.now.add_check_in", _fake_add_check_in)
+    handoff = _make_fake_handoff(handoff_id=111, next_check=date(2026, 3, 12))
+    st_mock.session_state["now_action_check_in_mode_111"] = "on_track"
+    st_mock.session_state["now_action_check_in_form_111_on_track_note"] = "done"
+    st_mock.session_state["now_action_check_in_form_111_on_track_next_check"] = date(2026, 3, 13)
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    assert len(calls) == 1
+    assert calls[0]["handoff_id"] == 111
+    assert calls[0]["check_in_type"] == CheckInType.ON_TRACK
+    assert calls[0]["note"] == "done"
+    assert calls[0]["next_check_date"] == date(2026, 3, 13)
+    # Check that mode key was cleared after save
+    assert "now_action_check_in_mode_111" not in st_mock.session_state
+    # Check that success message was set
+    assert "now_flash_success" in st_mock.session_state
+    assert "Checked in today" in str(st_mock.session_state.get("now_flash_success", ""))
