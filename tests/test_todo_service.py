@@ -484,12 +484,14 @@ def test_service_get_now_snapshot_contract(session, monkeypatch) -> None:
     assert hasattr(snapshot, "concluded")
     assert hasattr(snapshot, "projects")
     assert hasattr(snapshot, "pitchmen")
+    assert hasattr(snapshot, "section_explanations")
     assert isinstance(snapshot.risk, list)
     assert isinstance(snapshot.action, list)
     assert isinstance(snapshot.upcoming, list)
     assert isinstance(snapshot.concluded, list)
     assert isinstance(snapshot.projects, list)
     assert isinstance(snapshot.pitchmen, list)
+    assert isinstance(snapshot.section_explanations, dict)
 
 
 def test_service_get_now_snapshot_uses_prefetched_supporting_data(monkeypatch) -> None:

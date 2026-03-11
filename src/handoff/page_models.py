@@ -15,6 +15,10 @@ class NowSnapshot:
     Contains the full payload needed to render Risk, Action required,
     Upcoming, and Concluded sections in the canonical order, plus
     supporting data for filters and add form.
+
+    section_explanations maps handoff_id to a short "why this matched"
+    explanation for rulebook-driven sections (Risk, Action required,
+    Upcoming). Concluded handoffs are not included.
     """
 
     risk: list[Handoff]
@@ -23,6 +27,7 @@ class NowSnapshot:
     concluded: list[Handoff]
     projects: list[Project]
     pitchmen: list[str]
+    section_explanations: dict[int, str]
 
 
 @dataclass(slots=True, frozen=True)

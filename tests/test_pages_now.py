@@ -35,6 +35,7 @@ def _make_fake_snapshot(
     concluded: list | None = None,
     projects: list | None = None,
     pitchmen: list | None = None,
+    section_explanations: dict | None = None,
 ) -> NowSnapshot:
     """Build a minimal NowSnapshot for Now page tests."""
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -45,6 +46,7 @@ def _make_fake_snapshot(
         concluded=concluded or [],
         projects=projects or [mock_project],
         pitchmen=pitchmen or [],
+        section_explanations=section_explanations or {},
     )
 
 
@@ -639,6 +641,36 @@ def test_render_now_page_item_with_context_renders_markdown(
 
     markdown_calls = [str(c) for c in st_mock.markdown.call_args_list]
     assert any("Important context here" in c for c in markdown_calls)
+
+
+def test_render_now_page_section_explanations_rendered_as_caption(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rule-based section explanations appear as captions inside expanders."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    risk_handoff = _make_fake_handoff(
+        handoff_id=10,
+        need_back="At risk item",
+        deadline=date(2026, 3, 9),
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(
+            risk=[risk_handoff],
+            section_explanations={
+                10: "Deadline is near and latest check-in is delayed.",
+            },
+        ),
+    )
+
+    render_now_page()
+
+    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
+    assert any("Deadline is near and latest check-in is delayed" in c for c in caption_calls)
 
 
 def test_render_item_edit_save_validation_sets_flash_error(
