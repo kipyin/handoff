@@ -44,7 +44,10 @@ from handoff.services.project_service import (
 from handoff.services.settings_service import (
     get_deadline_near_days,
     get_export_payload,
+    get_rulebook_settings,
     import_payload,
+    reset_rulebook_settings,
+    save_rulebook_settings,
     set_deadline_near_days,
 )
 
@@ -65,6 +68,7 @@ __all__ = [
     "get_exportable_metrics",
     "get_export_payload",
     "get_per_pitchman_throughput",
+    "get_rulebook_settings",
     "get_per_project_throughput",
     "get_pitchman_load",
     "get_projects_with_handoff_summary",
@@ -81,6 +85,8 @@ __all__ = [
     "query_upcoming_handoffs",
     "reopen_handoff",
     "rename_project",
+    "reset_rulebook_settings",
+    "save_rulebook_settings",
     "set_deadline_near_days",
     "snooze_handoff",
     "unarchive_project",

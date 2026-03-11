@@ -1,4 +1,4 @@
-"""Tests for settings service layer (get_export_payload, import_payload, deadline_near_days)."""
+"""Tests for settings service (export, import, deadline_near_days, rulebook)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,15 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-from handoff.models import Handoff, Project
+from handoff.models import CheckInType, Handoff, Project
+from handoff.rulebook import (
+    BuiltInSection,
+    DeadlineWithinDaysCondition,
+    LatestCheckInTypeIsCondition,
+    RulebookSettings,
+    RuleDefinition,
+    build_default_rulebook_settings,
+)
 from handoff.services import settings_service
 
 
@@ -161,3 +169,134 @@ def test_set_deadline_near_days_clamps_and_persists(
     assert (tmp_path / "handoff_settings.json").read_text(encoding="utf-8") == (
         '{\n  "deadline_near_days": 5\n}'
     )
+
+
+# --- rulebook persistence ---
+
+
+def test_get_rulebook_settings_missing_file_returns_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When settings file does not exist, return built-in defaults."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    assert not (tmp_path / "handoff_settings.json").exists()
+
+    settings = settings_service.get_rulebook_settings()
+
+    assert settings == build_default_rulebook_settings()
+
+
+def test_get_rulebook_settings_invalid_json_returns_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When settings file has invalid JSON, return defaults."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    (tmp_path / "handoff_settings.json").write_text("not valid json {", encoding="utf-8")
+
+    settings = settings_service.get_rulebook_settings()
+
+    assert settings == build_default_rulebook_settings()
+
+
+def test_get_rulebook_settings_invalid_rulebook_payload_returns_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When rulebook key is invalid or malformed, return defaults."""
+    _patch_settings_path(monkeypatch, tmp_path)
+
+    (tmp_path / "handoff_settings.json").write_text('{"rulebook": "not a dict"}', encoding="utf-8")
+    settings = settings_service.get_rulebook_settings()
+    assert settings == build_default_rulebook_settings()
+
+    (tmp_path / "handoff_settings.json").write_text(
+        '{"rulebook": {"version": 1, "rules": "not a list"}}', encoding="utf-8"
+    )
+    settings = settings_service.get_rulebook_settings()
+    assert settings == build_default_rulebook_settings()
+
+    (tmp_path / "handoff_settings.json").write_text(
+        '{"rulebook": {"version": 1, "rules": []}}', encoding="utf-8"
+    )
+    settings = settings_service.get_rulebook_settings()
+    assert settings == build_default_rulebook_settings()
+
+
+def test_get_rulebook_settings_valid_returns_persisted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When rulebook is valid, return the persisted settings."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    custom = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="custom_risk",
+                name="Custom Risk",
+                section_id=BuiltInSection.RISK.value,
+                priority=5,
+                match_reason="Custom rule.",
+                conditions=(
+                    DeadlineWithinDaysCondition(days=2),
+                    LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),
+                ),
+            ),
+            build_default_rulebook_settings().rules[1],
+        ),
+    )
+    settings_service.save_rulebook_settings(custom)
+
+    loaded = settings_service.get_rulebook_settings()
+
+    assert loaded.rules[0].rule_id == "custom_risk"
+    assert loaded.rules[0].name == "Custom Risk"
+
+
+def test_save_rulebook_settings_persists_and_preserves_other_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """save_rulebook_settings persists the rulebook and does not overwrite deadline_near_days."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    settings_service.set_deadline_near_days(5)
+
+    custom = build_default_rulebook_settings(deadline_near_days=3)
+    settings_service.save_rulebook_settings(custom)
+
+    assert settings_service.get_deadline_near_days() == 5
+    loaded = settings_service.get_rulebook_settings()
+    assert loaded.version == custom.version
+    assert len(loaded.rules) == len(build_default_rulebook_settings().rules)
+
+    raw = (tmp_path / "handoff_settings.json").read_text(encoding="utf-8")
+    assert "deadline_near_days" in raw
+    assert "rulebook" in raw
+
+
+def test_reset_rulebook_settings_saves_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """reset_rulebook_settings writes built-in defaults to disk."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    custom = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="custom_risk",
+                name="Custom Risk",
+                section_id=BuiltInSection.RISK.value,
+                priority=5,
+                match_reason="Custom.",
+                conditions=(
+                    DeadlineWithinDaysCondition(days=1),
+                    LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),
+                ),
+            ),
+            build_default_rulebook_settings().rules[1],
+        ),
+    )
+    settings_service.save_rulebook_settings(custom)
+    assert settings_service.get_rulebook_settings().rules[0].rule_id == "custom_risk"
+
+    settings_service.reset_rulebook_settings()
+
+    loaded = settings_service.get_rulebook_settings()
+    assert loaded.rules[0].rule_id == "default_risk_deadline_near_and_delayed"
