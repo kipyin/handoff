@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from handoff.models import CheckIn, CheckInType
+from handoff.page_models import NowSnapshot
 from handoff.pages.now import (
     _check_in_header,
     _is_check_in_due,
@@ -17,6 +18,27 @@ from handoff.pages.now import (
     _render_reopen_flow,
     render_now_page,
 )
+
+
+def _make_fake_snapshot(
+    *,
+    risk: list | None = None,
+    action: list | None = None,
+    upcoming: list | None = None,
+    concluded: list | None = None,
+    projects: list | None = None,
+    pitchmen: list | None = None,
+) -> NowSnapshot:
+    """Build a minimal NowSnapshot for Now page tests."""
+    mock_project = SimpleNamespace(id=1, name="Work")
+    return NowSnapshot(
+        risk=risk or [],
+        action=action or [],
+        upcoming=upcoming or [],
+        concluded=concluded or [],
+        projects=projects or [mock_project],
+        pitchmen=pitchmen or [],
+    )
 
 
 def _make_fake_handoff(
@@ -76,7 +98,6 @@ def test_render_now_page_no_projects_shows_info(monkeypatch: pytest.MonkeyPatch)
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [])
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     render_now_page()
     st_mock.info.assert_called_once()
     assert "No projects" in st_mock.info.call_args[0][0]
@@ -97,7 +118,6 @@ def test_render_now_page_archived_only_projects_shows_toggle_hint(
         return [archived_project] if include_archived else []
 
     monkeypatch.setattr("handoff.pages.now.list_projects", _list_projects)
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
 
     render_now_page()
 
@@ -106,8 +126,8 @@ def test_render_now_page_archived_only_projects_shows_toggle_hint(
     assert "No active projects." in st_mock.info.call_args[0][0]
 
 
-def test_render_now_page_queries_phase2_sections(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Now page calls risk/action/upcoming/concluded query functions."""
+def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Now page calls get_now_snapshot with filters from the UI."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -115,43 +135,65 @@ def test_render_now_page_queries_phase2_sections(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
     )
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 3)
 
-    risk_calls: list[dict] = []
-    action_calls: list[dict] = []
-    upcoming_calls: list[dict] = []
-    concluded_calls: list[dict] = []
-    monkeypatch.setattr(
-        "handoff.pages.now.query_risk_handoffs", lambda **kwargs: risk_calls.append(kwargs) or []
-    )
-    monkeypatch.setattr(
-        "handoff.pages.now.query_action_handoffs",
-        lambda **kwargs: action_calls.append(kwargs) or [],
-    )
-    monkeypatch.setattr(
-        "handoff.pages.now.query_upcoming_handoffs",
-        lambda **kwargs: upcoming_calls.append(kwargs) or [],
-    )
-    monkeypatch.setattr(
-        "handoff.pages.now.query_concluded_handoffs",
-        lambda **kwargs: concluded_calls.append(kwargs) or [],
-    )
+    snapshot_calls: list[dict] = []
+
+    def _capture_snapshot(**kwargs):
+        snapshot_calls.append(kwargs)
+        return _make_fake_snapshot()
+
+    monkeypatch.setattr("handoff.pages.now.get_now_snapshot", _capture_snapshot)
 
     render_now_page()
 
-    assert len(risk_calls) == 1
-    assert len(action_calls) == 1
-    assert len(upcoming_calls) == 1
-    assert len(concluded_calls) == 1
-    assert "project_ids" in risk_calls[0]
-    assert "pitchman_names" in action_calls[0]
-    assert concluded_calls[0]["include_archived_projects"] is False
+    assert len(snapshot_calls) == 1
+    assert snapshot_calls[0]["include_archived_projects"] is False
+    assert "project_ids" in snapshot_calls[0]
+    assert "pitchman_names" in snapshot_calls[0]
+    assert "search_text" in snapshot_calls[0]
+    assert snapshot_calls[0]["projects"] == [mock_project]
+    assert snapshot_calls[0]["pitchmen"] == ["Alice"]
 
 
-def test_render_now_page_include_archived_projects_passed_to_queries(
+def test_render_now_page_add_form_uses_snapshot_pitchmen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Now page passes the include-archived toggle through all section queries."""
+    """Now page uses snapshot.pitchmen for add form options."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(pitchmen=["Bob", "Carol"]),
+    )
+    add_form_calls: list[dict] = []
+
+    def _capture_add_form(project_by_name, pitchmen, key_prefix):
+        add_form_calls.append(
+            {
+                "project_by_name": project_by_name,
+                "pitchmen": pitchmen,
+                "key_prefix": key_prefix,
+            }
+        )
+
+    monkeypatch.setattr("handoff.pages.now._render_add_form", _capture_add_form)
+
+    render_now_page()
+
+    assert len(add_form_calls) == 1
+    assert add_form_calls[0]["pitchmen"] == ["Bob", "Carol"]
+    assert add_form_calls[0]["key_prefix"] == "now"
+
+
+def test_render_now_page_include_archived_projects_passed_to_snapshot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Now page passes the include-archived toggle to get_now_snapshot."""
     st_mock = _build_streamlit_mock()
     st_mock.checkbox.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
@@ -160,40 +202,25 @@ def test_render_now_page_include_archived_projects_passed_to_queries(
     monkeypatch.setattr(
         "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
     )
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 3)
 
-    risk_calls: list[dict] = []
-    action_calls: list[dict] = []
-    upcoming_calls: list[dict] = []
-    concluded_calls: list[dict] = []
-    monkeypatch.setattr(
-        "handoff.pages.now.query_risk_handoffs", lambda **kwargs: risk_calls.append(kwargs) or []
-    )
-    monkeypatch.setattr(
-        "handoff.pages.now.query_action_handoffs",
-        lambda **kwargs: action_calls.append(kwargs) or [],
-    )
-    monkeypatch.setattr(
-        "handoff.pages.now.query_upcoming_handoffs",
-        lambda **kwargs: upcoming_calls.append(kwargs) or [],
-    )
-    monkeypatch.setattr(
-        "handoff.pages.now.query_concluded_handoffs",
-        lambda **kwargs: concluded_calls.append(kwargs) or [],
-    )
+    snapshot_calls: list[dict] = []
+
+    def _capture_snapshot(**kwargs):
+        snapshot_calls.append(kwargs)
+        return _make_fake_snapshot()
+
+    monkeypatch.setattr("handoff.pages.now.get_now_snapshot", _capture_snapshot)
 
     render_now_page()
 
-    assert risk_calls[0]["include_archived_projects"] is True
-    assert action_calls[0]["include_archived_projects"] is True
-    assert upcoming_calls[0]["include_archived_projects"] is True
-    assert concluded_calls[0]["include_archived_projects"] is True
+    assert len(snapshot_calls) == 1
+    assert snapshot_calls[0]["include_archived_projects"] is True
 
 
-def test_render_now_page_include_archived_projects_passed_to_pitchmen_query(
+def test_render_now_page_include_archived_passed_to_list_pitchmen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Now page forwards include-archived toggle to pitchman query."""
+    """Now page forwards include-archived toggle to list_pitchmen_with_open_handoffs."""
     st_mock = _build_streamlit_mock()
     st_mock.checkbox.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
@@ -204,11 +231,10 @@ def test_render_now_page_include_archived_projects_passed_to_pitchmen_query(
         "handoff.pages.now.list_pitchmen_with_open_handoffs",
         lambda **kwargs: pitchmen_calls.append(kwargs) or ["Alice"],
     )
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 3)
-    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(),
+    )
 
     render_now_page()
 
@@ -234,17 +260,16 @@ def test_render_now_page_action_item_shows_check_in_buttons(
     monkeypatch.setattr(
         "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
     )
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 3)
 
     action_handoff = _make_fake_handoff(
         handoff_id=1,
         need_back="Due now",
         next_check=date(2026, 3, 9),
     )
-    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [action_handoff])
-    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(action=[action_handoff]),
+    )
 
     render_now_page()
 
@@ -264,17 +289,16 @@ def test_render_now_page_risk_item_shows_check_in_buttons(
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     risk_handoff = _make_fake_handoff(
         handoff_id=22,
         need_back="Risk check",
         next_check=date(2026, 3, 12),
         deadline=date(2026, 3, 10),
     )
-    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [risk_handoff])
-    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(risk=[risk_handoff]),
+    )
 
     render_now_page()
 
@@ -294,18 +318,15 @@ def test_render_now_page_upcoming_item_shows_check_in_buttons(
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     upcoming_handoff = _make_fake_handoff(
         handoff_id=23,
         need_back="Upcoming check",
         next_check=date(2026, 4, 1),
     )
-    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
     monkeypatch.setattr(
-        "handoff.pages.now.query_upcoming_handoffs", lambda **kw: [upcoming_handoff]
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(upcoming=[upcoming_handoff]),
     )
-    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
 
     render_now_page()
 
@@ -323,13 +344,11 @@ def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.Mon
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
-    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
     monkeypatch.setattr(
-        "handoff.pages.now.query_concluded_handoffs",
-        lambda **kw: [_make_fake_handoff(handoff_id=9, need_back="Closed item")],
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(
+            concluded=[_make_fake_handoff(handoff_id=9, need_back="Closed item")]
+        ),
     )
 
     render_now_page()
@@ -345,16 +364,15 @@ def test_render_now_page_risk_section_renders_items(monkeypatch: pytest.MonkeyPa
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     risk_handoff = _make_fake_handoff(
         handoff_id=2,
         need_back="At risk",
         deadline=date(2026, 3, 9),
     )
-    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [risk_handoff])
-    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(risk=[risk_handoff]),
+    )
 
     render_now_page()
 
@@ -369,18 +387,15 @@ def test_render_now_page_upcoming_section_renders_items(monkeypatch: pytest.Monk
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     upcoming_handoff = _make_fake_handoff(
         handoff_id=3,
         need_back="Check later",
         next_check=date(2026, 4, 1),
     )
-    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
     monkeypatch.setattr(
-        "handoff.pages.now.query_upcoming_handoffs", lambda **kw: [upcoming_handoff]
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(upcoming=[upcoming_handoff]),
     )
-    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
 
     render_now_page()
 
@@ -397,18 +412,15 @@ def test_render_now_page_item_with_context_renders_markdown(
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
     handoff_with_notes = _make_fake_handoff(
         handoff_id=4,
         need_back="Has notes",
         notes="Important context here",
     )
-    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
     monkeypatch.setattr(
-        "handoff.pages.now.query_upcoming_handoffs", lambda **kw: [handoff_with_notes]
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(upcoming=[handoff_with_notes]),
     )
-    monkeypatch.setattr("handoff.pages.now.query_concluded_handoffs", lambda **kw: [])
 
     render_now_page()
 
@@ -492,13 +504,11 @@ def test_render_now_page_concluded_item_shows_reopen_button(
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
     monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
-    monkeypatch.setattr("handoff.pages.now.get_deadline_near_days", lambda: 1)
-    monkeypatch.setattr("handoff.pages.now.query_risk_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_action_handoffs", lambda **kw: [])
-    monkeypatch.setattr("handoff.pages.now.query_upcoming_handoffs", lambda **kw: [])
     monkeypatch.setattr(
-        "handoff.pages.now.query_concluded_handoffs",
-        lambda **kw: [_make_fake_handoff(handoff_id=15, need_back="Closed item")],
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(
+            concluded=[_make_fake_handoff(handoff_id=15, need_back="Closed item")]
+        ),
     )
 
     render_now_page()
