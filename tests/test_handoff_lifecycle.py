@@ -43,14 +43,14 @@ def test_latest_check_in_prefers_date_then_created_at_then_id() -> None:
         created_at=afternoon,
     )
     higher_id_on_tie = CheckIn(
-        id=2,
+        id=3,
         handoff_id=1,
         check_in_date=same_day,
         check_in_type=CheckInType.ON_TRACK,
         created_at=afternoon,
     )
     lower_id_on_tie = CheckIn(
-        id=1,
+        id=2,
         handoff_id=1,
         check_in_date=same_day,
         check_in_type=CheckInType.CONCLUDED,
