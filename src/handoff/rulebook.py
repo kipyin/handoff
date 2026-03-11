@@ -17,7 +17,8 @@ from datetime import date, timedelta
 from enum import StrEnum
 from typing import Any
 
-from handoff.models import CheckIn, CheckInType, Handoff
+from handoff.handoff_lifecycle import _latest_check_in, handoff_is_open
+from handoff.models import CheckInType, Handoff
 
 DEFAULT_RULEBOOK_VERSION = 1
 DEFAULT_RISK_RULE_ID = "default_risk_deadline_near_and_delayed"
@@ -266,26 +267,6 @@ class RuleMatchResult:
                 raise ValueError("matched_rule_id must be non-empty for non-fallback match results")
 
 
-def _latest_check_in(handoff: Handoff) -> CheckIn | None:
-    """Return the latest check-in on a handoff trail, or None."""
-    if not handoff.check_ins:
-        return None
-    return max(
-        handoff.check_ins,
-        key=lambda check_in: (
-            check_in.check_in_date,
-            check_in.created_at,
-            check_in.id or 0,
-        ),
-    )
-
-
-def _handoff_is_open(handoff: Handoff) -> bool:
-    """Return True when the handoff is open under latest-check-in semantics."""
-    latest = _latest_check_in(handoff)
-    return latest is None or latest.check_in_type != CheckInType.CONCLUDED
-
-
 def _ordered_enabled_rules(settings: RulebookSettings) -> tuple[RuleDefinition, ...]:
     """Return enabled rules in deterministic priority order."""
     return tuple(
@@ -338,7 +319,7 @@ def evaluate_open_handoff(
     settings = settings or DEFAULT_RULEBOOK_SETTINGS
     if not settings.first_match_wins:
         raise ValueError("rule evaluation only supports first_match_wins=True")
-    if not _handoff_is_open(handoff):
+    if not handoff_is_open(handoff):
         raise ValueError("rule evaluation only supports open handoffs")
 
     evaluation_day = today or date.today()
