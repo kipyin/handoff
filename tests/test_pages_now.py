@@ -12,8 +12,8 @@ from handoff.models import CheckIn, CheckInType
 from handoff.page_models import NowSnapshot
 from handoff.pages.now import (
     _check_in_header,
-    _render_add_form,
     _is_check_in_due,
+    _render_add_form,
     _render_check_in_flow,
     _render_check_in_trail,
     _render_item,
