@@ -65,9 +65,9 @@ def _format_condition(condition: RuleCondition) -> str:
 def _render_rulebook_section() -> None:
     """Render a read-only preview of active rules and a reset-to-defaults button.
 
-    Displays the current rulebook settings in a collapsible section, showing each rule's
-    name, priority, enabled status, conditions, and match reason. Allows users to reset
-    the rulebook to built-in defaults.
+    Displays the current rulebook settings, showing each rule's name, priority, enabled
+    status, conditions, and match reason. Also provides a button to reset the rulebook
+    to the built-in defaults.
     """
     st.markdown("### Open-item rules")
     settings = get_rulebook_settings()
