@@ -24,6 +24,9 @@ from handoff.services import (
     update_handoff,
 )
 
+# Snooze presets: label -> business days from today
+SNOOZE_PRESETS: dict[str, int] = {"1d": 1, "3d": 3, "1w": 5}
+
 _NOW_FLASH_SUCCESS_KEY = "now_flash_success"
 _NOW_FLASH_ERROR_KEY = "now_flash_error"
 _NOW_ADD_EXPANDED_KEY = "now_add_expanded"
@@ -317,6 +320,13 @@ def _snooze_from_state(*, handoff_id: int, date_key: str) -> None:
     _set_flash_success(f"Snoozed to {format_date_smart(to_date)}.")
 
 
+def _apply_snooze_preset(*, date_key: str, preset_key: str) -> None:
+    """Update the snooze date in session state from the selected preset."""
+    preset = st.session_state.get(preset_key, "1d")
+    if preset in SNOOZE_PRESETS:
+        st.session_state[date_key] = add_business_days(date.today(), SNOOZE_PRESETS[preset])
+
+
 def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
     """Render on-track/delayed/conclude check-in forms for open handoffs."""
     handoff_id = handoff.id
@@ -520,6 +530,7 @@ def _render_item(
         if not editing and allow_actions:
             today = date.today()
             custom_date_key = f"{key_prefix}_custom_{handoff_id}"
+            preset_key = f"{key_prefix}_snooze_preset_{handoff_id}"
             with st.popover("Actions"):
                 r1c1, r1c2 = st.columns(2)
                 with r1c1:
@@ -530,19 +541,31 @@ def _render_item(
                         kwargs={"handoff_id": handoff_id},
                     )
                 with r1c2:
-                    st.date_input(
-                        "Date",
-                        value=add_business_days(today, 1),
-                        key=custom_date_key,
-                        label_visibility="collapsed",
-                    )
-                with r1c2:
-                    st.button(
-                        "Snooze",
-                        key=f"{key_prefix}_snooze_btn_{handoff_id}",
-                        on_click=_snooze_from_state,
-                        kwargs={"handoff_id": handoff_id, "date_key": custom_date_key},
-                    )
+                    snooze_col1, snooze_col2, snooze_col3 = st.columns(3)
+                    with snooze_col1:
+                        st.date_input(
+                            "Date",
+                            value=add_business_days(today, 1),
+                            key=custom_date_key,
+                            label_visibility="collapsed",
+                        )
+                    with snooze_col2:
+                        st.segmented_control(
+                            "Snooze",
+                            options=list(SNOOZE_PRESETS),
+                            default="1d",
+                            key=preset_key,
+                            label_visibility="collapsed",
+                            on_change=_apply_snooze_preset,
+                            kwargs={"date_key": custom_date_key, "preset_key": preset_key},
+                        )
+                    with snooze_col3:
+                        st.button(
+                            "Snooze",
+                            key=f"{key_prefix}_snooze_btn_{handoff_id}",
+                            on_click=_snooze_from_state,
+                            kwargs={"handoff_id": handoff_id, "date_key": custom_date_key},
+                        )
             editing = st.session_state.get("now_editing_handoff_id") == handoff_id
         elif not editing and allow_reopen:
             _render_reopen_flow(handoff, key_prefix=key_prefix)

@@ -87,6 +87,7 @@ def _build_streamlit_mock() -> MagicMock:
     st_mock.form_submit_button.return_value = False
     st_mock.date_input.return_value = date(2026, 3, 10)
     st_mock.selectbox.return_value = "Work"
+    st_mock.segmented_control.return_value = "1d"
     st_mock.columns.side_effect = lambda n: [
         _Ctx() for _ in range(n if isinstance(n, int) else len(n))
     ]
@@ -630,6 +631,63 @@ def test_render_item_snooze_callback_uses_state_date(monkeypatch: pytest.MonkeyP
 
     assert snooze_calls == [(90, date(2026, 3, 20))]
     assert st_mock.session_state["now_flash_success"].startswith("Snoozed to ")
+
+
+def test_render_item_snooze_presets_segmented_control_shown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Actions popover shows snooze presets (1d, 3d, 1w) via segmented_control."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=93, need_back="Check presets")
+
+    _render_item(
+        handoff,
+        key_prefix="now_action",
+        project_by_name={"Work": SimpleNamespace(id=1, name="Work")},
+        allow_actions=True,
+        show_check_in_controls=False,
+    )
+
+    assert st_mock.segmented_control.called
+    call = next(c for c in st_mock.segmented_control.call_args_list if c[0])
+    assert list(call.kwargs.get("options", call.args[1] if len(call.args) > 1 else [])) == [
+        "1d",
+        "3d",
+        "1w",
+    ]
+    assert call.kwargs.get("default") == "1d"
+
+
+def test_render_item_snooze_preset_callback_updates_date(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Selecting a snooze preset updates the date in session state."""
+    from handoff.dates import add_business_days
+
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=94, need_back="Preset date")
+
+    _render_item(
+        handoff,
+        key_prefix="now_action",
+        project_by_name={"Work": SimpleNamespace(id=1, name="Work")},
+        allow_actions=True,
+        show_check_in_controls=False,
+    )
+
+    # Simulate user selecting "3d" preset (on_change fires)
+    seg_call = next(c for c in st_mock.segmented_control.call_args_list if c[0])
+    on_change = seg_call.kwargs.get("on_change")
+    assert on_change is not None
+    kwargs = seg_call.kwargs.get("kwargs", {})
+    preset_key = seg_call.kwargs["key"]
+    st_mock.session_state[preset_key] = "3d"
+    on_change(**kwargs)
+
+    expected = add_business_days(date.today(), 3)
+    assert st_mock.session_state[kwargs["date_key"]] == expected
 
 
 def test_render_item_snooze_callback_invalid_date_sets_flash_error(
