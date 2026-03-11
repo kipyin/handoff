@@ -8,6 +8,7 @@ from datetime import date
 from loguru import logger
 from sqlmodel import select
 
+from handoff import handoff_lifecycle
 from handoff.data.activity import log_activity
 from handoff.db import session_context
 from handoff.models import CheckIn, CheckInType, Handoff
@@ -260,32 +261,22 @@ def conclude_handoff(handoff_id: int, note: str | None = None) -> CheckIn:
 
 def _latest_check_in(handoff: Handoff) -> CheckIn | None:
     """Return the latest check-in on a handoff trail, or None."""
-    if not handoff.check_ins:
-        return None
-    return max(
-        handoff.check_ins,
-        key=lambda ci: (ci.check_in_date, ci.created_at, ci.id or 0),
-    )
+    return handoff_lifecycle._latest_check_in(handoff)
 
 
 def handoff_is_open(handoff: Handoff) -> bool:
     """Return True when the latest check-in is not concluded."""
-    latest = _latest_check_in(handoff)
-    return latest is None or latest.check_in_type != CheckInType.CONCLUDED
+    return handoff_lifecycle.handoff_is_open(handoff)
 
 
 def handoff_is_closed(handoff: Handoff) -> bool:
     """Return True when the latest check-in is concluded."""
-    latest = _latest_check_in(handoff)
-    return latest is not None and latest.check_in_type == CheckInType.CONCLUDED
+    return handoff_lifecycle.handoff_is_closed(handoff)
 
 
 def get_handoff_close_date(handoff: Handoff) -> date | None:
     """Return the date of the most recent concluded check-in, if any."""
-    concluded = [ci for ci in handoff.check_ins if ci.check_in_type == CheckInType.CONCLUDED]
-    if not concluded:
-        return None
-    return max(ci.check_in_date for ci in concluded)
+    return handoff_lifecycle.get_handoff_close_date(handoff)
 
 
 def reopen_handoff(
