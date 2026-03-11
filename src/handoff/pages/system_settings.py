@@ -58,13 +58,19 @@ def _format_condition(condition: RuleCondition) -> str:
 def _render_rulebook_section() -> None:
     """Render read-only rulebook preview and reset-to-defaults."""
     st.markdown("### Open-item rules")
+    settings = get_rulebook_settings()
+    section_labels = sorted({rule.section_id.replace("_", " ").title() for rule in settings.rules})
+    sections_str = ", ".join(section_labels) if section_labels else "configured Now-page sections"
+    fallback_label = settings.open_items_fallback_section.replace("_", " ").title()
     st.caption(
-        "Rules that group open handoffs into Now-page sections (Risk, Action required, Upcoming). "
-        "First matching enabled rule wins. Unmatched items fall back to Upcoming."
+        f"Rules that group open handoffs into Now-page sections ({sections_str}). "
+        f"First matching enabled rule wins. Unmatched items fall back to {fallback_label}."
     )
 
-    settings = get_rulebook_settings()
-    for rule in sorted(settings.rules, key=lambda r: (r.priority, r.rule_id)):
+    for _, rule in sorted(
+        enumerate(settings.rules),
+        key=lambda item: (item[1].priority, item[0]),
+    ):
         status = "enabled" if rule.enabled else "disabled"
         conditions_str = "; ".join(_format_condition(c) for c in rule.conditions)
         st.markdown(f"**{rule.name}** (priority {rule.priority}, {status})")
