@@ -9,6 +9,25 @@ This release focuses on two product themes:
 
 This release does not include AI features. Those are explicitly deferred to a later release.
 
+## AI model suggestions by PR
+
+When implementing each PR, consider the suggested model tier. **Fast** for well-scoped, pattern-following work; **Harder** for finicky state, core logic, or critical integration.
+
+| Tier | Models |
+|------|--------|
+| **Fast** | sonnet-4.6, gemini-3-flash, cursor composer 1.5 |
+| **Harder** | gpt-5.4, opus-4.6, codex-5.3 |
+
+| PR | Tier | PR | Tier | PR | Tier |
+|----|------|----|------|----|------|
+| 1.1 Snapshot contract | Fast | 1.2 Reduce reruns | Harder | 1.3 Keyboard shortcuts | Fast |
+| 1.4 Quick actions | Fast | 1.5 Instrumentation | Fast | 2.1 Rulebook contracts | Harder |
+| 2.2 Rule engine | Harder | 2.3 Persist settings | Fast | 3.1 Rulebook adoption | Harder |
+| 3.2 Match explanations | Fast | 4.1 Preview/reset | Fast | 4.2 Editable rulebook | Harder |
+| 4.3 Custom sections | Harder | 5.1 Parity coverage | Harder | 5.2 Release notes | Fast |
+
+Each PR section below has a short rationale for its suggestion.
+
 ## Why this release now
 
 The current product already has a strong core workflow:
