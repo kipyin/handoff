@@ -26,6 +26,7 @@ from handoff.services import (
     query_risk_handoffs,
     query_upcoming_handoffs,
     reopen_handoff,
+    snooze_handoff,
     update_handoff,
 )
 
@@ -195,6 +196,27 @@ def test_service_update_handoff(session, monkeypatch) -> None:
     updated = update_handoff(handoff.id, need_back="Updated")
     assert updated is not None
     assert updated.need_back == "Updated"
+
+
+def test_service_snooze_handoff_updates_next_check(session, monkeypatch) -> None:
+    """snooze_handoff updates only next_check through service boundary."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    handoff = data.create_handoff(
+        project_id=p.id,
+        need_back="Snooze me",
+        next_check=date(2026, 3, 9),
+    )
+    assert handoff.id is not None
+
+    updated = snooze_handoff(handoff.id, to_date=date(2026, 3, 15))
+    assert updated is not None
+    assert updated.next_check == date(2026, 3, 15)
+    assert updated.need_back == "Snooze me"
 
 
 def test_service_delete_handoff(session, monkeypatch) -> None:
