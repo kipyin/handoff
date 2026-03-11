@@ -420,6 +420,12 @@ def test_now_page_add_form_creates_handoff(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
+    # Expand add form (shortcut target button when collapsed)
+    add_handoff_buttons = [b for b in at.button if "Add handoff" in getattr(b, "label", "")]
+    assert add_handoff_buttons, "Expected Add handoff button not found on Now page"
+    add_handoff_buttons[0].click().run(timeout=5)
+    assert len(at.exception) == 0
+
     need_back_inputs = [
         ti
         for ti in at.text_input

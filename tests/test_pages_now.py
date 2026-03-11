@@ -11,6 +11,7 @@ import pytest
 from handoff.models import CheckIn, CheckInType
 from handoff.page_models import NowSnapshot
 from handoff.pages.now import (
+    _NOW_ADD_EXPANDED_KEY,
     _check_in_header,
     _is_check_in_due,
     _render_add_form,
@@ -189,11 +190,153 @@ def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch)
     assert snapshot_calls[0]["pitchmen"] is prefetched_pitchmen
 
 
+def test_render_now_page_shows_shortcuts_caption(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Now page shows discoverable shortcuts caption."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(),
+    )
+
+    render_now_page()
+
+    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
+    assert any("Shortcuts" in c and "Add handoff" in c for c in caption_calls)
+
+
+def test_render_now_page_add_button_has_shortcut_when_collapsed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Add handoff trigger button has shortcut 'a' when Streamlit supports it."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(),
+    )
+
+    render_now_page()
+
+    add_btn_calls = [
+        c for c in st_mock.button.call_args_list if c[0] and "Add handoff" in str(c[0][0])
+    ]
+    assert len(add_btn_calls) >= 1
+    # First call uses shortcut when supported; fallback omits it
+    first_call = add_btn_calls[0]
+    assert first_call.kwargs.get("shortcut") == "a" or "shortcut" not in first_call.kwargs
+
+
+def test_render_now_page_add_button_fallback_when_shortcut_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When Streamlit lacks shortcut param (e.g. in-app patch), button renders without it."""
+    st_mock = _build_streamlit_mock()
+
+    def button_raising_shortcut(*args, **kwargs):
+        if "shortcut" in kwargs:
+            raise TypeError("got an unexpected keyword argument 'shortcut'")
+        return False
+
+    st_mock.button.side_effect = button_raising_shortcut
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(),
+    )
+
+    render_now_page()
+
+    # Fallback call has no shortcut; page rendered without error
+    add_btn_calls = [
+        c for c in st_mock.button.call_args_list if c[0] and "Add handoff" in str(c[0][0])
+    ]
+    assert len(add_btn_calls) >= 1
+    # At least one call succeeded (fallback); it must not have shortcut
+    fallback_calls = [c for c in add_btn_calls if "shortcut" not in c.kwargs]
+    assert len(fallback_calls) >= 1
+
+
+def test_expand_add_form_sets_session_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expand add form callback sets now_add_expanded in session state."""
+    from handoff.pages.now import _expand_add_form
+
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    _expand_add_form()
+
+    assert st_mock.session_state[_NOW_ADD_EXPANDED_KEY] is True
+
+
+def test_collapse_add_form_clears_session_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Collapse add form callback removes now_add_expanded from session state."""
+    from handoff.pages.now import _collapse_add_form
+
+    st_mock = _build_streamlit_mock()
+    st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    _collapse_add_form()
+
+    assert _NOW_ADD_EXPANDED_KEY not in st_mock.session_state
+
+
+def test_render_now_page_add_form_expands_when_add_expanded_true(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When now_add_expanded is True, the add form is rendered instead of the trigger button."""
+    st_mock = _build_streamlit_mock()
+    st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    add_form_called = []
+
+    def _track_add_form(*args, **kwargs):
+        add_form_called.append(True)
+
+    monkeypatch.setattr("handoff.pages.now._render_add_form", _track_add_form)
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(),
+    )
+
+    render_now_page()
+
+    assert add_form_called == [True]
+
+
 def test_render_now_page_add_form_uses_snapshot_pitchmen(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Now page uses snapshot.pitchmen for add form options."""
     st_mock = _build_streamlit_mock()
+    st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
@@ -387,7 +530,7 @@ def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.Mon
 
     render_now_page()
 
-    assert st_mock.expander.call_count >= 2  # add-form + concluded item
+    assert st_mock.expander.call_count >= 1  # concluded item (add form no longer uses expander)
     st_mock.dataframe.assert_not_called()
 
 
@@ -670,6 +813,7 @@ def test_render_add_form_submit_calls_create_handoff(monkeypatch: pytest.MonkeyP
     assert create_calls[0]["pitchman"] == "Alex"
     assert create_calls[0]["notes"] == "include PR links"
     assert st_mock.session_state["now_flash_success"] == "Added."
+    assert _NOW_ADD_EXPANDED_KEY not in st_mock.session_state
 
 
 def test_render_add_form_missing_need_back_sets_flash_error(
