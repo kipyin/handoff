@@ -557,7 +557,7 @@ def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -
 
 
 def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
-    """Snapshot query fan-out uses parsed search/date filters for each open section (risk/action/upcoming)."""
+    """Snapshot query fan-out uses parsed search/date filters for risk/action/upcoming sections."""
     parsed = SimpleNamespace(
         text_query="release gate",
         next_check_min=date(2026, 3, 1),
