@@ -609,30 +609,6 @@ def test_get_projects_with_handoff_summary(session, monkeypatch) -> None:
     assert s["concluded"] == 1
 
 
-def test_snooze_handoff(session, monkeypatch) -> None:
-    """snooze_handoff updates next_check only, leaves deadline unchanged."""
-    _patch_session_context(monkeypatch, session)
-    p = Project(name="P")
-    session.add(p)
-    session.commit()
-    session.refresh(p)
-
-    h = Handoff(
-        project_id=p.id,
-        need_back="Follow up",
-        next_check=date(2026, 1, 1),
-        deadline=date(2026, 6, 1),
-    )
-    session.add(h)
-    session.commit()
-    session.refresh(h)
-
-    updated = data.snooze_handoff(h.id, to_date=date(2026, 1, 15))
-    assert updated is not None
-    assert updated.next_check == date(2026, 1, 15)
-    assert updated.deadline == date(2026, 6, 1)
-
-
 def test_conclude_handoff(session, monkeypatch) -> None:
     """conclude_handoff adds a concluded check-in."""
     _patch_session_context(monkeypatch, session)

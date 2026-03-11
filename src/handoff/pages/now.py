@@ -25,7 +25,6 @@ from handoff.services import (
     query_risk_handoffs,
     query_upcoming_handoffs,
     reopen_handoff,
-    snooze_handoff,
     update_handoff,
 )
 
@@ -118,8 +117,8 @@ def _set_flash_success(message: str) -> None:
     st.session_state[_NOW_FLASH_SUCCESS_KEY] = message
 
 
-def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
-    """Render on-track/delayed/conclude check-in forms for open handoffs."""
+def _render_check_in_flow(handoff: Handoff, *, key_prefix: str, include_edit: bool = False) -> None:
+    """Render Edit (optional) + on-track/delayed/conclude actions for open handoffs."""
     handoff_id = handoff.id
     if handoff_id is None:
         return
@@ -133,16 +132,23 @@ def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
 
     mode_key = f"{key_prefix}_check_in_mode_{handoff_id}"
     selected_mode = st.session_state.get(mode_key)
-    c1, c2, c3 = st.columns(3)
-    with c1:
+    cols = st.columns(4 if include_edit else 3)
+    idx = 0
+    if include_edit:
+        with cols[idx]:
+            if st.button("Edit", key=f"{key_prefix}_edit_btn_{handoff_id}"):
+                st.session_state["now_editing_handoff_id"] = handoff_id
+                st.rerun()
+        idx += 1
+    with cols[idx]:
         if st.button("On-track", key=f"{key_prefix}_on_track_btn_{handoff_id}"):
             st.session_state[mode_key] = "on_track"
             st.rerun()
-    with c2:
+    with cols[idx + 1]:
         if st.button("Delayed", key=f"{key_prefix}_delayed_btn_{handoff_id}"):
             st.session_state[mode_key] = "delayed"
             st.rerun()
-    with c3:
+    with cols[idx + 2]:
         if st.button("Conclude", key=f"{key_prefix}_conclude_btn_{handoff_id}"):
             st.session_state[mode_key] = "concluded"
             st.rerun()
@@ -298,27 +304,7 @@ def _render_item(
             )
         else:
             if allow_actions and show_check_in_controls:
-                _render_check_in_flow(handoff, key_prefix=key_prefix)
-
-            if allow_actions:
-                today = date.today()
-                with st.popover("Actions"):
-                    r1c1, r1c2 = st.columns(2)
-                    with r1c1:
-                        if st.button("Edit", key=f"{key_prefix}_edit_btn_{handoff_id}"):
-                            st.session_state["now_editing_handoff_id"] = handoff_id
-                            st.rerun()
-                    with r1c2:
-                        custom_date = st.date_input(
-                            "Date",
-                            value=add_business_days(today, 1),
-                            key=f"{key_prefix}_custom_{handoff_id}",
-                            label_visibility="collapsed",
-                        )
-                    with r1c2:
-                        if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{handoff_id}"):
-                            snooze_handoff(handoff_id, to_date=custom_date)
-                            st.rerun()
+                _render_check_in_flow(handoff, key_prefix=key_prefix, include_edit=True)
             elif allow_reopen:
                 _render_reopen_flow(handoff, key_prefix=key_prefix)
 
@@ -491,10 +477,7 @@ def _render_add_form(
 def render_now_page() -> None:
     """Render the Now page with four sections: Risk | Action | Upcoming | Concluded."""
     st.subheader("Now")
-    st.caption(
-        "Minimize risks by clearing actions on time. "
-        "Use Snooze to follow up later, or Conclude when done."
-    )
+    st.caption("Minimize risks by clearing actions on time.")
     flash_message = st.session_state.pop(_NOW_FLASH_SUCCESS_KEY, None)
     if flash_message:
         st.success(flash_message)
