@@ -12,6 +12,7 @@ from handoff.models import CheckIn, CheckInType
 from handoff.page_models import NowSnapshot
 from handoff.pages.now import (
     _check_in_header,
+    _render_add_form,
     _is_check_in_due,
     _render_check_in_flow,
     _render_check_in_trail,
@@ -116,6 +117,21 @@ def test_render_now_page_no_projects_shows_info(monkeypatch: pytest.MonkeyPatch)
     render_now_page()
     st_mock.info.assert_called_once()
     assert "No projects" in st_mock.info.call_args[0][0]
+
+
+def test_render_now_page_flash_error_message_is_rendered_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Flash errors are displayed once and cleared from session state."""
+    st_mock = _build_streamlit_mock()
+    st_mock.session_state["now_flash_error"] = "Invalid form submission"
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [])
+
+    render_now_page()
+
+    st_mock.error.assert_called_once_with("Invalid form submission")
+    assert "now_flash_error" not in st_mock.session_state
 
 
 def test_render_now_page_archived_only_projects_shows_toggle_hint(
@@ -622,6 +638,65 @@ def test_render_item_keeps_expander_open_when_reopen_mode_active(
     assert st_mock.expander.call_args.kwargs["expanded"] is True
 
 
+def test_render_add_form_submit_calls_create_handoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Submitting Add persists a handoff using callback-driven state values."""
+    st_mock = _build_streamlit_mock()
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    create_calls: list[dict[str, object]] = []
+
+    def _fake_create_handoff(**kwargs) -> None:
+        create_calls.append(kwargs)
+
+    monkeypatch.setattr("handoff.pages.now.create_handoff", _fake_create_handoff)
+    st_mock.session_state["now_add_project"] = "Work"
+    st_mock.session_state["now_add_who"] = "  Alex  "
+    st_mock.session_state["now_add_need"] = "  Ship release notes  "
+    st_mock.session_state["now_add_next"] = date(2026, 3, 25)
+    st_mock.session_state["now_add_deadline"] = date(2026, 3, 31)
+    st_mock.session_state["now_add_context"] = "  include PR links  "
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    assert len(create_calls) == 1
+    assert create_calls[0]["project_id"] == 7
+    assert create_calls[0]["need_back"] == "Ship release notes"
+    assert create_calls[0]["next_check"] == date(2026, 3, 25)
+    assert create_calls[0]["deadline"] == date(2026, 3, 31)
+    assert create_calls[0]["pitchman"] == "Alex"
+    assert create_calls[0]["notes"] == "include PR links"
+    assert st_mock.session_state["now_flash_success"] == "Added."
+
+
+def test_render_add_form_missing_need_back_sets_flash_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Submitting Add with empty need-back fails validation and does not persist."""
+    st_mock = _build_streamlit_mock()
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    create_calls: list[dict[str, object]] = []
+
+    def _fake_create_handoff(**kwargs) -> None:
+        create_calls.append(kwargs)
+
+    monkeypatch.setattr("handoff.pages.now.create_handoff", _fake_create_handoff)
+    st_mock.session_state["now_add_project"] = "Work"
+    st_mock.session_state["now_add_who"] = "Alex"
+    st_mock.session_state["now_add_need"] = "   "
+    st_mock.session_state["now_add_next"] = date(2026, 3, 25)
+    st_mock.session_state["now_add_deadline"] = None
+    st_mock.session_state["now_add_context"] = ""
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    assert create_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Need back is required."
+    assert "now_flash_success" not in st_mock.session_state
+
+
 def test_render_check_in_flow_due_shows_due_caption(monkeypatch: pytest.MonkeyPatch) -> None:
     """Due handoffs keep due-state check-in messaging."""
     st_mock = _build_streamlit_mock()
@@ -658,6 +733,22 @@ def test_render_check_in_flow_mode_button_updates_state_without_explicit_rerun(
     _render_check_in_flow(handoff, key_prefix="now_action")
 
     assert st_mock.session_state["now_action_check_in_mode_77"] == "on_track"
+    st_mock.rerun.assert_not_called()
+
+
+def test_render_check_in_flow_cancel_clears_mode_without_rerun(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cancel in check-in flow clears mode state and avoids explicit rerun."""
+    st_mock = _build_streamlit_mock()
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Cancel")
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=78, next_check=date(2026, 3, 9))
+    st_mock.session_state["now_action_check_in_mode_78"] = "on_track"
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    assert "now_action_check_in_mode_78" not in st_mock.session_state
     st_mock.rerun.assert_not_called()
 
 
@@ -755,6 +846,39 @@ def test_render_reopen_flow_save_calls_reopen_handoff(monkeypatch: pytest.Monkey
     assert len(calls) == 1
     assert calls[0]["handoff_id"] == 19
     assert "Checked in today; next check set to" in st_mock.session_state["now_flash_success"]
+
+
+def test_render_reopen_flow_invalid_next_check_sets_flash_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invalid reopen date is rejected before calling reopen service."""
+    st_mock = _build_streamlit_mock()
+    st_mock.button.return_value = False
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save reopen")
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    reopen_calls: list[dict[str, object]] = []
+
+    def _fake_reopen_handoff(handoff_id: int, *, note: str | None, next_check_date: date) -> None:
+        reopen_calls.append(
+            {
+                "handoff_id": handoff_id,
+                "note": note,
+                "next_check_date": next_check_date,
+            }
+        )
+
+    monkeypatch.setattr("handoff.pages.now.reopen_handoff", _fake_reopen_handoff)
+    handoff = _make_fake_handoff(handoff_id=20, need_back="Closed")
+    st_mock.session_state["now_concluded_reopen_mode_20"] = "reopen"
+    st_mock.session_state["now_concluded_reopen_form_20_note"] = "reason"
+    st_mock.session_state["now_concluded_reopen_form_20_next_check"] = "tomorrow"
+
+    _render_reopen_flow(handoff, key_prefix="now_concluded")
+
+    assert reopen_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a valid next check-in date."
+    assert st_mock.session_state["now_concluded_reopen_mode_20"] == "reopen"
 
 
 def test_render_check_in_flow_save_sets_flash_message(monkeypatch: pytest.MonkeyPatch) -> None:
