@@ -1096,7 +1096,7 @@ def test_render_check_in_flow_delayed_mode_uses_delayed_type(
     ("mode", "expected_label"),
     [
         ("on_track", "Current progress (optional)"),
-        ("delayed", "Why delayed? (optional)"),
+        ("delayed", "Why? (optional)"),
         ("concluded", "Conclusion (optional)"),
     ],
 )
