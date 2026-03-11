@@ -21,16 +21,68 @@ from loguru import logger
 from handoff.backup_schema import BackupPayload
 from handoff.docs import get_readme_intro
 from handoff.logging import _get_logs_dir
+from handoff.rulebook import (
+    DeadlineWithinDaysCondition,
+    LatestCheckInTypeIsCondition,
+    NextCheckDueCondition,
+    RuleCondition,
+)
 from handoff.services.settings_service import (
     DEADLINE_NEAR_DAYS_MAX,
     DEADLINE_NEAR_DAYS_MIN,
     get_deadline_near_days,
     get_export_payload,
+    get_rulebook_settings,
     import_payload,
+    reset_rulebook_settings,
     set_deadline_near_days,
 )
 from handoff.update_ui import render_update_panel
 from handoff.version import __version__ as APP_VERSION
+
+
+def _format_condition(condition: RuleCondition) -> str:
+    """Return a short human-readable description of a rule condition."""
+    if isinstance(condition, DeadlineWithinDaysCondition):
+        return f"Deadline within {condition.days} day(s)"
+    if isinstance(condition, LatestCheckInTypeIsCondition):
+        label = condition.check_in_type.value.replace("_", " ")
+        return f"Latest check-in is {label}"
+    if isinstance(condition, NextCheckDueCondition):
+        if condition.include_missing_next_check:
+            return "Next check due or missing"
+        return "Next check due"
+    return "Unknown condition"
+
+
+def _render_rulebook_section() -> None:
+    """Render read-only rulebook preview and reset-to-defaults."""
+    st.markdown("### Open-item rules")
+    settings = get_rulebook_settings()
+    section_labels = sorted({rule.section_id.replace("_", " ").title() for rule in settings.rules})
+    sections_str = ", ".join(section_labels) if section_labels else "configured Now-page sections"
+    fallback_label = settings.open_items_fallback_section.replace("_", " ").title()
+    st.caption(
+        f"Rules that group open handoffs into Now-page sections ({sections_str}). "
+        f"First matching enabled rule wins. Unmatched items fall back to {fallback_label}."
+    )
+
+    for _, rule in sorted(
+        enumerate(settings.rules),
+        key=lambda item: (item[1].priority, item[0]),
+    ):
+        status = "enabled" if rule.enabled else "disabled"
+        conditions_str = "; ".join(_format_condition(c) for c in rule.conditions)
+        st.markdown(f"**{rule.name}** (priority {rule.priority}, {status})")
+        st.caption(f"Section: {rule.section_id.replace('_', ' ').title()} · {conditions_str}")
+        if rule.match_reason:
+            st.caption(f"Match reason: {rule.match_reason}")
+
+    if st.button("Reset to defaults", key="settings_rulebook_reset"):
+        reset_rulebook_settings()
+        st.success(
+            "Rulebook reset to built-in defaults. The Now page will use this from the next refresh."
+        )
 
 
 def _render_now_settings_section() -> None:
@@ -201,6 +253,9 @@ def render_system_settings_page() -> None:
 
     st.divider()
     _render_now_settings_section()
+
+    st.divider()
+    _render_rulebook_section()
 
     st.divider()
     _render_data_export_section()

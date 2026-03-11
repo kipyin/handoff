@@ -14,6 +14,7 @@ from handoff.pages.system_settings import (
     _render_about_section,
     _render_data_export_section,
     _render_data_import_section,
+    _render_rulebook_section,
     _render_send_log_section,
 )
 
@@ -58,6 +59,54 @@ class TestRenderSendLogSection:
         assert "log" in call_kwargs[1].get(
             "file_name", call_kwargs[0][0] if call_kwargs[0] else ""
         ).lower() or "log" in str(call_kwargs)
+
+
+class TestRenderRulebookSection:
+    def test_preview_renders_rules_and_caption(self, monkeypatch) -> None:
+        """Rulebook section displays active rules and caption."""
+        from handoff.rulebook import build_default_rulebook_settings
+
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.button.return_value = False
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_rulebook_settings",
+            build_default_rulebook_settings,
+        )
+
+        _render_rulebook_section()
+
+        st_mock.markdown.assert_any_call("### Open-item rules")
+        markdown_calls = [str(c) for c in st_mock.markdown.call_args_list]
+        assert any("Risk" in c for c in markdown_calls)
+        assert any("Action" in c for c in markdown_calls)
+        assert any("Open-item" in c or "Open-item rules" in c for c in markdown_calls)
+
+    def test_reset_button_calls_reset_and_shows_success(self, monkeypatch) -> None:
+        """When Reset button is clicked, reset_rulebook_settings is called and success shown."""
+        from handoff.rulebook import build_default_rulebook_settings
+
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.button.return_value = True
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_rulebook_settings",
+            build_default_rulebook_settings,
+        )
+        reset_called = []
+
+        def mock_reset() -> None:
+            reset_called.append(True)
+
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.reset_rulebook_settings",
+            mock_reset,
+        )
+
+        _render_rulebook_section()
+
+        assert reset_called == [True]
+        st_mock.success.assert_called_once()
+        msg = st_mock.success.call_args[0][0].lower()
+        assert "reset" in msg or "default" in msg
 
 
 class TestRenderAboutSection:
