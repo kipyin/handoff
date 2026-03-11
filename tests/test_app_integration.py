@@ -199,13 +199,13 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    # Due action items show "On-track / Delayed / Conclude" buttons in-line.
-    conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "Conclude"]
-    assert conclude_buttons, "Expected Conclude button not found on Now page"
-    conclude_buttons[0].click().run(timeout=5)
+    # Select "Conclude" from check-in segmented control via set_value.
+    button_groups = at.get("button_group")
+    assert button_groups, "Expected check-in segmented control not found"
+    button_groups[0].set_value(["concluded"]).run(timeout=5)
     assert len(at.exception) == 0
 
-    # After clicking Conclude, a save form appears.
+    # After selecting Conclude, a save form appears.
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"]
     assert save_buttons, "Expected 'Save conclude check-in' button not found"
     save_buttons[0].click().run(timeout=5)
@@ -235,9 +235,10 @@ def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: 
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    conclude_buttons = [b for b in at.button if getattr(b, "label", None) == "Conclude"]
-    assert conclude_buttons, "Expected Conclude button not found on Now page"
-    conclude_buttons[0].click().run(timeout=5)
+    # Select "Conclude" from check-in segmented control.
+    button_groups = at.get("button_group")
+    assert button_groups, "Expected check-in segmented control not found"
+    button_groups[0].set_value(["concluded"]).run(timeout=5)
     assert len(at.exception) == 0
 
     save_conclude_buttons = [
@@ -285,9 +286,10 @@ def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db:
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    on_track_buttons = [b for b in at.button if getattr(b, "label", None) == "On-track"]
-    assert on_track_buttons, "Expected On-track button not found on Now page"
-    on_track_buttons[0].click().run(timeout=5)
+    # Select "On-track" from check-in segmented control.
+    button_groups = at.get("button_group")
+    assert button_groups, "Expected check-in segmented control not found"
+    button_groups[0].set_value(["on_track"]).run(timeout=5)
     assert len(at.exception) == 0
 
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
@@ -327,9 +329,10 @@ def test_now_page_early_check_in_records_today_and_keeps_planned_next_check(
     at.run(timeout=5)
     assert len(at.exception) == 0
 
-    on_track_buttons = [b for b in at.button if getattr(b, "label", None) == "On-track"]
-    assert on_track_buttons, "Expected On-track button not found on Now page"
-    on_track_buttons[0].click().run(timeout=5)
+    # Select "On-track" from check-in segmented control (upcoming uses first button_group).
+    button_groups = at.get("button_group")
+    assert button_groups, "Expected check-in segmented control not found"
+    button_groups[0].set_value(["on_track"]).run(timeout=5)
     assert len(at.exception) == 0
 
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]

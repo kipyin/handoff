@@ -20,12 +20,11 @@ from handoff.services import (
     list_pitchmen_with_open_handoffs,
     list_projects,
     reopen_handoff,
-    snooze_handoff,
     update_handoff,
 )
 
-# Snooze presets: label -> business days from today
-SNOOZE_PRESETS: dict[str, int] = {"1d": 1, "3d": 3, "1w": 5}
+CHECK_IN_MODES = ["on_track", "delayed", "concluded"]
+CHECK_IN_MODE_LABELS = {"on_track": "On-track", "delayed": "Delayed", "concluded": "Conclude"}
 
 _NOW_FLASH_SUCCESS_KEY = "now_flash_success"
 _NOW_FLASH_ERROR_KEY = "now_flash_error"
@@ -310,24 +309,7 @@ def _save_add_submission(
     _set_flash_success("Added.")
 
 
-def _snooze_from_state(*, handoff_id: int, date_key: str) -> None:
-    """Snooze one handoff using the date currently stored in session state."""
-    to_date = st.session_state.get(date_key)
-    if not isinstance(to_date, date):
-        _set_flash_error("Select a valid snooze date.")
-        return
-    snooze_handoff(handoff_id, to_date=to_date)
-    _set_flash_success(f"Snoozed to {format_date_smart(to_date)}.")
-
-
-def _apply_snooze_preset(*, date_key: str, preset_key: str) -> None:
-    """Update the snooze date in session state from the selected preset."""
-    preset = st.session_state.get(preset_key, "1d")
-    if preset in SNOOZE_PRESETS:
-        st.session_state[date_key] = add_business_days(date.today(), SNOOZE_PRESETS[preset])
-
-
-def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
+def _render_check_in_flow(handoff: Handoff, *, key_prefix: str, allow_actions: bool = True) -> None:
     """Render on-track/delayed/conclude check-in forms for open handoffs."""
     handoff_id = handoff.id
     if handoff_id is None:
@@ -341,29 +323,24 @@ def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
         st.caption(f"Optional early check-in. Planned next check: {planned_label}.")
 
     mode_key = f"{key_prefix}_check_in_mode_{handoff_id}"
-    selected_mode = st.session_state.get(mode_key)
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.button(
-            "On-track",
-            key=f"{key_prefix}_on_track_btn_{handoff_id}",
-            on_click=_set_mode,
-            kwargs={"mode_key": mode_key, "mode": "on_track"},
+    row_col1, row_col2 = st.columns([3, 1])
+    with row_col1:
+        st.segmented_control(
+            "Check-in",
+            options=CHECK_IN_MODES,
+            default=None,
+            format_func=lambda s: CHECK_IN_MODE_LABELS.get(s, str(s)),
+            key=mode_key,
+            label_visibility="collapsed",
         )
-    with c2:
-        st.button(
-            "Delayed",
-            key=f"{key_prefix}_delayed_btn_{handoff_id}",
-            on_click=_set_mode,
-            kwargs={"mode_key": mode_key, "mode": "delayed"},
-        )
-    with c3:
-        st.button(
-            "Conclude",
-            key=f"{key_prefix}_conclude_btn_{handoff_id}",
-            on_click=_set_mode,
-            kwargs={"mode_key": mode_key, "mode": "concluded"},
-        )
+    with row_col2:
+        if allow_actions:
+            st.button(
+                "Edit",
+                key=f"{key_prefix}_edit_btn_{handoff_id}",
+                on_click=_set_editing_handoff,
+                kwargs={"handoff_id": handoff_id},
+            )
     selected_mode = st.session_state.get(mode_key)
 
     if selected_mode not in {"on_track", "delayed", "concluded"}:
@@ -390,9 +367,7 @@ def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
             )
         else:
             note_label = (
-                "Current progress (optional)"
-                if selected_mode == "on_track"
-                else "Why delayed? (optional)"
+                "Current progress (optional)" if selected_mode == "on_track" else "Why? (optional)"
             )
             st.text_area(note_label, key=note_key)
             default_next_check = (
@@ -523,50 +498,11 @@ def _render_item(
     keep_expanded_for_mode = (
         allow_actions and show_check_in_controls and has_active_check_in_mode
     ) or (allow_reopen and has_active_reopen_mode)
-    with st.expander(header, expanded=editing or keep_expanded_for_mode):
+    # Auto-expand for due action items so check-in controls are visible without clicking
+    is_due_action = show_check_in_controls and _is_check_in_due(handoff)
+    with st.expander(header, expanded=editing or keep_expanded_for_mode or is_due_action):
         if not editing and allow_actions and show_check_in_controls:
-            _render_check_in_flow(handoff, key_prefix=key_prefix)
-
-        if not editing and allow_actions:
-            today = date.today()
-            custom_date_key = f"{key_prefix}_custom_{handoff_id}"
-            preset_key = f"{key_prefix}_snooze_preset_{handoff_id}"
-            with st.popover("Actions"):
-                r1c1, r1c2 = st.columns(2)
-                with r1c1:
-                    st.button(
-                        "Edit",
-                        key=f"{key_prefix}_edit_btn_{handoff_id}",
-                        on_click=_set_editing_handoff,
-                        kwargs={"handoff_id": handoff_id},
-                    )
-                with r1c2:
-                    snooze_col1, snooze_col2, snooze_col3 = st.columns(3)
-                    with snooze_col1:
-                        st.date_input(
-                            "Date",
-                            value=add_business_days(today, 1),
-                            key=custom_date_key,
-                            label_visibility="collapsed",
-                        )
-                    with snooze_col2:
-                        st.segmented_control(
-                            "Snooze",
-                            options=list(SNOOZE_PRESETS),
-                            default="1d",
-                            key=preset_key,
-                            label_visibility="collapsed",
-                            on_change=_apply_snooze_preset,
-                            kwargs={"date_key": custom_date_key, "preset_key": preset_key},
-                        )
-                    with snooze_col3:
-                        st.button(
-                            "Snooze",
-                            key=f"{key_prefix}_snooze_btn_{handoff_id}",
-                            on_click=_snooze_from_state,
-                            kwargs={"handoff_id": handoff_id, "date_key": custom_date_key},
-                        )
-            editing = st.session_state.get("now_editing_handoff_id") == handoff_id
+            _render_check_in_flow(handoff, key_prefix=key_prefix, allow_actions=allow_actions)
         elif not editing and allow_reopen:
             _render_reopen_flow(handoff, key_prefix=key_prefix)
 

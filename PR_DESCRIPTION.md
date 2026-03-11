@@ -1,9 +1,11 @@
 # PR 1.4 - Quick actions and low-risk interaction polish
 
+Implements PR 1.4 from `release-plan-2026.3.11.md` plus **Issue #89**.
+
 ## Goals/Scope
 
 - Add small interaction wins on the Now page.
-- Prioritize quick snooze presets and other low-risk action affordances.
+- Prioritize quick action affordances (Issue #89: segmented control for check-in).
 - Improve visible explanations and transition feedback where helpful.
 
 ## Constraints
@@ -38,14 +40,19 @@
 
 ## Implementation summary
 
-### Snooze presets (segmented control)
+### Issue #89 — Check-in segmented control and layout
 
-- Added snooze presets **1d**, **3d**, **1w** (1 business day, 3 business days, 5 business days) using `st.segmented_control`.
-- Presets appear next to the date picker in the Actions popover.
-- Selecting a preset updates the snooze date immediately; the date picker remains for custom dates.
-- Layout: Date picker | Presets (1d | 3d | 1w) | Snooze button.
+- **On-track | Delayed | Conclude** replaced three buttons with `st.segmented_control`.
+- **Edit** button moved to the same row: `( On-Track | Delayed | Conclude ) [Edit]`.
+- **Snooze removed** — date picker, (+1d | +3d | +1w) presets, and Snooze button removed.
+- Layout matches Issue #89 spec: segment control + Edit on one row; Current progress / Why? textarea; Next check-in date picker; Save / Cancel.
+
+### Other changes
+
 - Added conftest patch for ButtonGroup.indices so AppTest works with segmented_control (Streamlit #11338).
+- Auto-expand expanders for due action items so check-in controls are visible without clicking.
+- Add handoff collapse button when form is expanded (fix: button was gone, label stayed).
 
 ### AI model suggestion
 
-Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — small UI additions like snooze presets; low-risk, well-scoped changes.
+Fast (sonnet-4.6, gemini-3-flash, cursor composer 1.5) — small UI additions; low-risk, well-scoped changes.
