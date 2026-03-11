@@ -21,6 +21,9 @@ import handoff.data as data
 import handoff.db as db
 from handoff.dates import add_business_days
 
+# AppTest can be slow on Windows CI; use higher timeout for CI resilience.
+APP_TEST_TIMEOUT = 15
+
 WORKSPACE = Path(__file__).resolve().parents[1]
 
 
@@ -93,7 +96,7 @@ def _now_page_entry() -> None:
 def test_projects_page_renders_with_app_test(app_test_db: Path) -> None:
     """Projects page renders create form (smoke test)."""
     at = AppTest.from_function(_projects_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("text_input")) >= 1 or len(at.get("info")) >= 1
 
@@ -114,12 +117,12 @@ def test_projects_page_archived_toggle_survives_models_reload(app_test_db: Path)
     assert data.archive_project(archived.id) is True
 
     at = AppTest.from_function(_projects_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
     assert len(at.checkbox) >= 1
 
     importlib.reload(models)
-    at.checkbox[0].check().run(timeout=5)
+    at.checkbox[0].check().run(timeout=APP_TEST_TIMEOUT)
 
     assert len(at.exception) == 0
     assert at.checkbox[0].value is True
@@ -129,7 +132,7 @@ def test_projects_page_archived_toggle_survives_models_reload(app_test_db: Path)
 def test_system_settings_page_renders_with_app_test(app_test_db: Path) -> None:
     """System Settings page renders (smoke test)."""
     at = AppTest.from_function(_system_settings_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("markdown")) >= 1
 
@@ -137,7 +140,7 @@ def test_system_settings_page_renders_with_app_test(app_test_db: Path) -> None:
 def test_dashboard_page_renders_with_app_test(app_test_db: Path) -> None:
     """Dashboard page renders metrics (smoke test)."""
     at = AppTest.from_function(_dashboard_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("metric")) >= 4
 
@@ -145,7 +148,7 @@ def test_dashboard_page_renders_with_app_test(app_test_db: Path) -> None:
 def test_about_page_renders_with_app_test(app_test_db: Path) -> None:
     """About page renders (smoke test)."""
     at = AppTest.from_function(_about_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("tabs")) >= 1 or len(at.get("markdown")) >= 1
 
@@ -153,7 +156,7 @@ def test_about_page_renders_with_app_test(app_test_db: Path) -> None:
 def test_now_page_renders_with_app_test(app_test_db: Path) -> None:
     """Now page renders (smoke test). With no projects, shows info message."""
     at = AppTest.from_function(_now_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.get("subheader")) >= 1
     assert len(at.get("info")) >= 1
     assert len(at.get("expander")) == 0
@@ -171,7 +174,7 @@ def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None
         pitchman="Alice",
     )
     at = AppTest.from_function(_now_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
     assert len(at.get("subheader")) >= 1
     assert len(at.get("expander")) >= 1
@@ -196,19 +199,19 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     assert handoff.id is not None
 
     at = AppTest.from_function(_now_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     # Select "Conclude" from check-in segmented control via set_value.
     button_groups = at.get("button_group")
     assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["concluded"]).run(timeout=5)
+    button_groups[0].set_value(["concluded"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     # After selecting Conclude, a save form appears.
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"]
     assert save_buttons, "Expected 'Save conclude check-in' button not found"
-    save_buttons[0].click().run(timeout=5)
+    save_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     # Handoff should no longer be open (concluded check-in was persisted).
@@ -232,30 +235,30 @@ def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: 
     assert handoff.id is not None
 
     at = AppTest.from_function(_now_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     # Select "Conclude" from check-in segmented control.
     button_groups = at.get("button_group")
     assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["concluded"]).run(timeout=5)
+    button_groups[0].set_value(["concluded"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_conclude_buttons = [
         b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"
     ]
     assert save_conclude_buttons, "Expected 'Save conclude check-in' button not found"
-    save_conclude_buttons[0].click().run(timeout=5)
+    save_conclude_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
     assert reopen_buttons, "Expected Reopen button not found in Concluded section"
-    reopen_buttons[0].click().run(timeout=5)
+    reopen_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Save reopen"]
     assert save_reopen_buttons, "Expected 'Save reopen' button not found"
-    save_reopen_buttons[0].click().run(timeout=5)
+    save_reopen_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     handoffs = data.query_handoffs(project_ids=[project.id], include_concluded=True)
@@ -283,18 +286,18 @@ def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db:
     assert handoff.id is not None
 
     at = AppTest.from_function(_now_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     # Select "On-track" from check-in segmented control.
     button_groups = at.get("button_group")
     assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["on_track"]).run(timeout=5)
+    button_groups[0].set_value(["on_track"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
     assert save_buttons, "Expected 'Save check-in' button not found"
-    save_buttons[0].click().run(timeout=5)
+    save_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     updated = next(
@@ -326,18 +329,18 @@ def test_now_page_early_check_in_records_today_and_keeps_planned_next_check(
     assert handoff.id is not None
 
     at = AppTest.from_function(_now_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     # Select "On-track" from check-in segmented control (upcoming uses first button_group).
     button_groups = at.get("button_group")
     assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["on_track"]).run(timeout=5)
+    button_groups[0].set_value(["on_track"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
     assert save_buttons, "Expected 'Save check-in' button not found"
-    save_buttons[0].click().run(timeout=5)
+    save_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     updated = next(
@@ -376,22 +379,22 @@ def test_now_page_archived_toggle_allows_reopen_under_latest_lifecycle(app_test_
     data.conclude_handoff(archived_handoff.id, note="Done in archived project")
 
     at = AppTest.from_function(_now_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
     assert not [b for b in at.button if getattr(b, "label", None) == "Reopen"]
 
     assert len(at.checkbox) >= 1
-    at.checkbox[0].check().run(timeout=5)
+    at.checkbox[0].check().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
     assert reopen_buttons, "Expected Reopen button once archived projects are included"
-    reopen_buttons[0].click().run(timeout=5)
+    reopen_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Save reopen"]
     assert save_reopen_buttons, "Expected Save reopen button after clicking Reopen"
-    save_reopen_buttons[0].click().run(timeout=5)
+    save_reopen_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     archived_concluded_names = [
@@ -420,13 +423,13 @@ def test_now_page_add_form_creates_handoff(app_test_db: Path) -> None:
     assert project.id is not None
 
     at = AppTest.from_function(_now_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     # Expand add form (shortcut target button when collapsed)
     add_handoff_buttons = [b for b in at.button if "Add handoff" in getattr(b, "label", "")]
     assert add_handoff_buttons, "Expected Add handoff button not found on Now page"
-    add_handoff_buttons[0].click().run(timeout=5)
+    add_handoff_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     need_back_inputs = [
@@ -435,11 +438,11 @@ def test_now_page_add_form_creates_handoff(app_test_db: Path) -> None:
         if getattr(ti, "key", None) == "now_add_need" or getattr(ti, "label", None) == "Need back"
     ]
     assert need_back_inputs, "Expected Need back text input not found on Now page"
-    need_back_inputs[0].input("New handoff from add form").run(timeout=5)
+    need_back_inputs[0].input("New handoff from add form").run(timeout=APP_TEST_TIMEOUT)
 
     add_buttons = [b for b in at.button if getattr(b, "label", None) == "Add"]
     assert add_buttons, "Expected Add button not found on Now page"
-    add_buttons[0].click().run(timeout=5)
+    add_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     handoffs = data.query_handoffs(project_ids=[project.id], include_concluded=True)
@@ -492,7 +495,7 @@ def test_dashboard_page_pm_metrics_smoke_with_seed_data(app_test_db: Path) -> No
     )
 
     at = AppTest.from_function(_dashboard_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     metric_labels = [getattr(metric, "label", None) for metric in at.metric]
@@ -505,7 +508,7 @@ def test_dashboard_page_pm_metrics_smoke_with_seed_data(app_test_db: Path) -> No
 def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
     """Full app (app.py with st.navigation) loads without exception."""
     at = AppTest.from_file(str(WORKSPACE / "app.py"))
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
     assert len(at.get("subheader")) >= 1 or len(at.get("info")) >= 1
 
@@ -513,7 +516,7 @@ def test_full_app_loads_with_app_test(app_test_db: Path) -> None:
 def test_projects_create_form_submit_no_error(app_test_db: Path) -> None:
     """Submitting the create-project form does not raise."""
     at = AppTest.from_function(_projects_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     project_name_inputs = [
@@ -523,11 +526,11 @@ def test_projects_create_form_submit_no_error(app_test_db: Path) -> None:
         or getattr(ti, "label", None) == "Project name"
     ]
     assert project_name_inputs, "Expected project-name text input not found on Projects page"
-    project_name_inputs[0].input("TestProjectFromForm").run(timeout=5)
+    project_name_inputs[0].input("TestProjectFromForm").run(timeout=APP_TEST_TIMEOUT)
 
     create_btns = [b for b in at.button if getattr(b, "label", None) == "Create"]
     assert create_btns, "Expected Create button not found on Projects page"
-    create_btns[0].click().run(timeout=5)
+    create_btns[0].click().run(timeout=APP_TEST_TIMEOUT)
 
     assert len(at.exception) == 0
 
@@ -535,10 +538,10 @@ def test_projects_create_form_submit_no_error(app_test_db: Path) -> None:
 def test_about_page_tab_switch_no_error(app_test_db: Path) -> None:
     """Switching About page tabs (README / Release notes) does not raise."""
     at = AppTest.from_function(_about_page_entry)
-    at.run(timeout=5)
+    at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     tabs = at.tabs
     assert len(tabs) == 2, f"Expected exactly 2 tabs on About page, got {len(tabs)}"
-    tabs[1].run(timeout=5)
+    tabs[1].run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0

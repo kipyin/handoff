@@ -340,6 +340,80 @@ def test_rule_evaluation_rejects_concluded_handoffs() -> None:
         evaluate_open_handoff(handoff, today=date(2026, 3, 9))
 
 
+def test_rule_evaluation_requires_first_match_wins_setting() -> None:
+    """Evaluation rejects settings that disable first-match-wins semantics."""
+    handoff = Handoff(
+        project_id=1,
+        need_back="Task",
+    )
+    settings = RulebookSettings(
+        version=1,
+        first_match_wins=False,
+        rules=(
+            RuleDefinition(
+                rule_id="rule",
+                name="Rule",
+                section_id=BuiltInSection.ACTION_REQUIRED.value,
+                priority=10,
+                conditions=(NextCheckDueCondition(),),
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="first_match_wins=True"):
+        evaluate_open_handoff(handoff, settings=settings, today=date(2026, 3, 9))
+
+
+def test_rule_evaluation_missing_next_check_toggle_and_default_explanation() -> None:
+    """Missing next_check matches only when enabled and uses default explanation fallback."""
+    handoff = Handoff(
+        project_id=1,
+        need_back="Unscheduled check-in",
+        next_check=None,
+    )
+    no_missing_match = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="due_only",
+                name="Due only",
+                section_id=BuiltInSection.ACTION_REQUIRED.value,
+                priority=10,
+                conditions=(NextCheckDueCondition(include_missing_next_check=False),),
+            ),
+        ),
+    )
+    missing_match = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="needs_schedule",
+                name="Needs schedule",
+                section_id=BuiltInSection.ACTION_REQUIRED.value,
+                priority=10,
+                match_reason="   ",
+                conditions=(NextCheckDueCondition(include_missing_next_check=True),),
+            ),
+        ),
+    )
+
+    fallback = evaluate_open_handoff(handoff, settings=no_missing_match, today=date(2026, 3, 9))
+    assert fallback == RuleMatchResult(
+        section_id=BuiltInSection.UPCOMING.value,
+        explanation="No enabled rule matched; item falls back to Upcoming.",
+        matched_rule_id=None,
+        is_fallback=True,
+    )
+
+    result = evaluate_open_handoff(handoff, settings=missing_match, today=date(2026, 3, 9))
+    assert result == RuleMatchResult(
+        section_id=BuiltInSection.ACTION_REQUIRED.value,
+        explanation="Matched Needs schedule.",
+        matched_rule_id="needs_schedule",
+        is_fallback=False,
+    )
+
+
 def test_default_rules_mirror_current_section_semantics(session, monkeypatch) -> None:
     """Default typed rules classify handoffs like current section queries."""
     _patch_session_context(monkeypatch, session)
