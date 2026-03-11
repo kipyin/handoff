@@ -26,6 +26,7 @@ from handoff.services import (
 
 _NOW_FLASH_SUCCESS_KEY = "now_flash_success"
 _NOW_FLASH_ERROR_KEY = "now_flash_error"
+_NOW_ADD_EXPANDED_KEY = "now_add_expanded"
 
 
 def _render_filters(
@@ -127,6 +128,16 @@ def _set_mode(*, mode_key: str, mode: str) -> None:
 def _clear_session_key(*, state_key: str) -> None:
     """Remove a session-state key when it exists."""
     st.session_state.pop(state_key, None)
+
+
+def _expand_add_form() -> None:
+    """Expand the Add handoff form (keyboard shortcut target)."""
+    st.session_state[_NOW_ADD_EXPANDED_KEY] = True
+
+
+def _collapse_add_form() -> None:
+    """Collapse the Add handoff form."""
+    st.session_state.pop(_NOW_ADD_EXPANDED_KEY, None)
 
 
 def _set_editing_handoff(*, handoff_id: int) -> None:
@@ -292,6 +303,7 @@ def _save_add_submission(
         pitchman=str(who_raw).strip() or None,
         notes=str(context_raw).strip() or None,
     )
+    _collapse_add_form()
     _set_flash_success("Added.")
 
 
@@ -649,10 +661,7 @@ def _render_add_form(
         pitchmen: List of pitchman names (unused but kept for UI symmetry).
         key_prefix: Prefix for Streamlit widget keys.
     """
-    with (
-        st.expander("➕ Add handoff", expanded=False),
-        st.form(key=f"{key_prefix}_add_form", clear_on_submit=True),
-    ):
+    with st.form(key=f"{key_prefix}_add_form", clear_on_submit=True):
         project_names = list(project_by_name)
         project_key = f"{key_prefix}_add_project"
         who_key = f"{key_prefix}_add_who"
@@ -682,19 +691,26 @@ def _render_add_form(
             placeholder="Notes, links, markdown…",
             key=context_key,
         )
-        st.form_submit_button(
-            "Add",
-            on_click=_save_add_submission,
-            kwargs={
-                "project_by_name": project_by_name,
-                "project_key": project_key,
-                "who_key": who_key,
-                "need_key": need_key,
-                "next_check_key": next_key,
-                "deadline_key": deadline_key,
-                "context_key": context_key,
-            },
-        )
+        col_submit, col_close = st.columns(2)
+        with col_submit:
+            st.form_submit_button(
+                "Add",
+                on_click=_save_add_submission,
+                kwargs={
+                    "project_by_name": project_by_name,
+                    "project_key": project_key,
+                    "who_key": who_key,
+                    "need_key": need_key,
+                    "next_check_key": next_key,
+                    "deadline_key": deadline_key,
+                    "context_key": context_key,
+                },
+            )
+        with col_close:
+            st.form_submit_button(
+                "Close",
+                on_click=_collapse_add_form,
+            )
 
 
 def render_now_page() -> None:
@@ -744,7 +760,19 @@ def render_now_page() -> None:
         pitchmen=pitchmen,
     )
 
-    _render_add_form(project_by_name, snapshot.pitchmen, "now")
+    add_expanded = st.session_state.get(_NOW_ADD_EXPANDED_KEY, False)
+    if add_expanded:
+        st.markdown("**➕ Add handoff**")
+        _render_add_form(project_by_name, snapshot.pitchmen, "now")
+    else:
+        st.button(
+            "➕ Add handoff (a)",
+            shortcut="a",
+            key="now_add_handoff_trigger",
+            on_click=_expand_add_form,
+            help="Open the add form to create a new handoff",
+        )
+    st.caption("Shortcuts: **a** Add handoff")
 
     # --- Risk section ---
     st.markdown("---")
