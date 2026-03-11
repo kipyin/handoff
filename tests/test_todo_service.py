@@ -555,12 +555,12 @@ def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -
     session.commit()
     session.refresh(p)
 
-    data.create_handoff(
+    action_h = data.create_handoff(
         project_id=p.id,
         need_back="Due now",
         next_check=date(2026, 3, 9),
     )
-    data.create_handoff(
+    upcoming_h = data.create_handoff(
         project_id=p.id,
         need_back="Later",
         next_check=date(2026, 4, 1),
@@ -598,6 +598,16 @@ def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -
     assert "Due now" in action_names
     assert "Later" in upcoming_names
     assert "Closed" in concluded_names
+    assert action_h.id is not None
+    assert upcoming_h.id is not None
+    assert risk_h.id is not None
+    assert concluded_h.id is not None
+    assert set(snapshot.section_explanations) == {action_h.id, upcoming_h.id, risk_h.id}
+    assert concluded_h.id not in snapshot.section_explanations
+    assert all(
+        snapshot.section_explanations[handoff_id].strip()
+        for handoff_id in (action_h.id, upcoming_h.id, risk_h.id)
+    )
     assert len(snapshot.projects) >= 1
     assert snapshot.projects[0].name == "Work"
 
