@@ -485,8 +485,19 @@ def _render_item(
     core = " · ".join(segments)
     header = risk_prefix + core
 
+    check_in_mode_key = f"{key_prefix}_check_in_mode_{handoff_id}"
+    reopen_mode_key = f"{key_prefix}_reopen_mode_{handoff_id}"
+    has_active_check_in_mode = st.session_state.get(check_in_mode_key) in {
+        "on_track",
+        "delayed",
+        "concluded",
+    }
+    has_active_reopen_mode = st.session_state.get(reopen_mode_key) == "reopen"
     editing = allow_actions and st.session_state.get("now_editing_handoff_id") == handoff_id
-    with st.expander(header, expanded=editing):
+    keep_expanded_for_mode = (
+        allow_actions and show_check_in_controls and has_active_check_in_mode
+    ) or (allow_reopen and has_active_reopen_mode)
+    with st.expander(header, expanded=editing or keep_expanded_for_mode):
         if not editing and allow_actions and show_check_in_controls:
             _render_check_in_flow(handoff, key_prefix=key_prefix)
 

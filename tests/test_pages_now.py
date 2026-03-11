@@ -15,6 +15,7 @@ from handoff.pages.now import (
     _is_check_in_due,
     _render_check_in_flow,
     _render_check_in_trail,
+    _render_item,
     _render_reopen_flow,
     render_now_page,
 )
@@ -414,6 +415,48 @@ def test_render_now_page_item_with_context_renders_markdown(
 
     markdown_calls = [str(c) for c in st_mock.markdown.call_args_list]
     assert any("Important context here" in c for c in markdown_calls)
+
+
+def test_render_item_keeps_expander_open_when_check_in_mode_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Active check-in mode keeps the handoff expander open across reruns."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=88, need_back="Needs check-in")
+    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    st_mock.session_state["now_action_check_in_mode_88"] = "on_track"
+
+    _render_item(
+        handoff,
+        key_prefix="now_action",
+        project_by_name=project_by_name,
+        show_check_in_controls=True,
+        allow_actions=True,
+    )
+
+    assert st_mock.expander.call_args.kwargs["expanded"] is True
+
+
+def test_render_item_keeps_expander_open_when_reopen_mode_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Active reopen mode keeps concluded handoff expander open."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=89, need_back="Closed")
+    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    st_mock.session_state["now_concluded_reopen_mode_89"] = "reopen"
+
+    _render_item(
+        handoff,
+        key_prefix="now_concluded",
+        project_by_name=project_by_name,
+        allow_actions=False,
+        allow_reopen=True,
+    )
+
+    assert st_mock.expander.call_args.kwargs["expanded"] is True
 
 
 def test_render_check_in_flow_due_shows_due_caption(monkeypatch: pytest.MonkeyPatch) -> None:
