@@ -321,10 +321,10 @@ def test_render_now_page_trigger_button_not_shown_when_form_expanded(
 
     render_now_page()
 
-    add_btn_calls = [
-        c for c in st_mock.button.call_args_list if c[0] and "Add handoff" in str(c[0][0])
+    trigger_btn_calls = [
+        c for c in st_mock.button.call_args_list if c[1].get("key") == "now_add_handoff_trigger"
     ]
-    assert len(add_btn_calls) == 0
+    assert len(trigger_btn_calls) == 0
 
 
 def test_render_now_page_add_form_expands_when_add_expanded_true(

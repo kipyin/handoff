@@ -29,10 +29,10 @@ def test_time_action_logs_even_on_exception() -> None:
     with (
         patch("handoff.instrumentation.logger") as mock_logger,
         pytest.raises(ValueError, match="oops"),
+        time_action("failing_action"),
     ):
-        with time_action("failing_action"):
-            time.sleep(0.01)
-            raise ValueError("oops")
+        time.sleep(0.01)
+        raise ValueError("oops")
 
     mock_logger.info.assert_called_once()
     args = mock_logger.info.call_args
