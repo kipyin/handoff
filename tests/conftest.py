@@ -9,6 +9,24 @@ from sqlmodel import Session, SQLModel, create_engine
 
 from handoff.models import CheckIn, CheckInType, Handoff, Project
 
+# Patch Streamlit ButtonGroup.indices for AppTest compatibility with segmented_control.
+# See https://github.com/streamlit/streamlit/issues/11338
+try:
+    from streamlit.testing.v1 import element_tree
+
+    _orig_indices = element_tree.ButtonGroup.indices.fget
+
+    @property
+    def _safe_indices(self):
+        try:
+            return _orig_indices(self)
+        except (ValueError, TypeError):
+            return [0] if self.options else []
+
+    element_tree.ButtonGroup.indices = _safe_indices
+except (ImportError, AttributeError):
+    pass
+
 
 @pytest.fixture
 def session():

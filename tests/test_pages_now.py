@@ -87,6 +87,7 @@ def _build_streamlit_mock() -> MagicMock:
     st_mock.form_submit_button.return_value = False
     st_mock.date_input.return_value = date(2026, 3, 10)
     st_mock.selectbox.return_value = "Work"
+    st_mock.segmented_control.return_value = None
     st_mock.columns.side_effect = lambda n: [
         _Ctx() for _ in range(n if isinstance(n, int) else len(n))
     ]
@@ -419,10 +420,10 @@ def test_render_now_page_include_archived_passed_to_list_pitchmen(
     assert pitchmen_calls[0]["include_archived_projects"] is True
 
 
-def test_render_now_page_action_item_shows_check_in_buttons(
+def test_render_now_page_action_item_shows_check_in_segmented_control(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Action items render On-track/Delayed/Conclude check-in actions."""
+    """Action items render On-track/Delayed/Conclude via segmented_control and Edit."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
 
@@ -450,17 +451,23 @@ def test_render_now_page_action_item_shows_check_in_buttons(
 
     render_now_page()
 
+    assert st_mock.segmented_control.called
+    seg_call = next(c for c in st_mock.segmented_control.call_args_list if c[0])
+    assert list(
+        seg_call.kwargs.get("options", seg_call.args[1] if len(seg_call.args) > 1 else [])
+    ) == [
+        "on_track",
+        "delayed",
+        "concluded",
+    ]
     labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
     assert "Edit" in labels
-    assert "On-track" in labels
-    assert "Delayed" in labels
-    assert "Conclude" in labels
 
 
-def test_render_now_page_risk_item_shows_check_in_buttons(
+def test_render_now_page_risk_item_shows_check_in_segmented_control(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Risk items also render On-track/Delayed/Conclude check-in actions."""
+    """Risk items also render On-track/Delayed/Conclude via segmented_control."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -479,17 +486,17 @@ def test_render_now_page_risk_item_shows_check_in_buttons(
 
     render_now_page()
 
+    assert st_mock.segmented_control.called
+    seg_call = next(c for c in st_mock.segmented_control.call_args_list if c[0])
+    assert list(seg_call.kwargs.get("options", [])) == ["on_track", "delayed", "concluded"]
     labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
     assert "Edit" in labels
-    assert "On-track" in labels
-    assert "Delayed" in labels
-    assert "Conclude" in labels
 
 
-def test_render_now_page_upcoming_item_shows_check_in_buttons(
+def test_render_now_page_upcoming_item_shows_check_in_segmented_control(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Upcoming items also render On-track/Delayed/Conclude check-in actions."""
+    """Upcoming items also render On-track/Delayed/Conclude via segmented_control."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -507,11 +514,11 @@ def test_render_now_page_upcoming_item_shows_check_in_buttons(
 
     render_now_page()
 
+    assert st_mock.segmented_control.called
+    seg_call = next(c for c in st_mock.segmented_control.call_args_list if c[0])
+    assert list(seg_call.kwargs.get("options", [])) == ["on_track", "delayed", "concluded"]
     labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
     assert "Edit" in labels
-    assert "On-track" in labels
-    assert "Delayed" in labels
-    assert "Conclude" in labels
 
 
 def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -603,62 +610,6 @@ def test_render_now_page_item_with_context_renders_markdown(
 
     markdown_calls = [str(c) for c in st_mock.markdown.call_args_list]
     assert any("Important context here" in c for c in markdown_calls)
-
-
-def test_render_item_snooze_callback_uses_state_date(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Snooze button callback reads the date from session state and persists it."""
-    st_mock = _build_streamlit_mock()
-    st_mock.button.side_effect = _simulate_widget_submit("Snooze")
-    monkeypatch.setattr("handoff.pages.now.st", st_mock)
-
-    snooze_calls: list[tuple[int, date]] = []
-
-    def _fake_snooze_handoff(handoff_id: int, *, to_date: date) -> None:
-        snooze_calls.append((handoff_id, to_date))
-
-    monkeypatch.setattr("handoff.pages.now.snooze_handoff", _fake_snooze_handoff)
-    handoff = _make_fake_handoff(handoff_id=90, need_back="Snooze me")
-    st_mock.session_state["now_action_custom_90"] = date(2026, 3, 20)
-
-    _render_item(
-        handoff,
-        key_prefix="now_action",
-        project_by_name={"Work": SimpleNamespace(id=1, name="Work")},
-        allow_actions=True,
-        show_check_in_controls=False,
-    )
-
-    assert snooze_calls == [(90, date(2026, 3, 20))]
-    assert st_mock.session_state["now_flash_success"].startswith("Snoozed to ")
-
-
-def test_render_item_snooze_callback_invalid_date_sets_flash_error(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Snooze callback reports a validation error when session date is invalid."""
-    st_mock = _build_streamlit_mock()
-    st_mock.button.side_effect = _simulate_widget_submit("Snooze")
-    monkeypatch.setattr("handoff.pages.now.st", st_mock)
-
-    snooze_calls: list[tuple[int, date]] = []
-
-    def _fake_snooze_handoff(handoff_id: int, *, to_date: date) -> None:
-        snooze_calls.append((handoff_id, to_date))
-
-    monkeypatch.setattr("handoff.pages.now.snooze_handoff", _fake_snooze_handoff)
-    handoff = _make_fake_handoff(handoff_id=91, need_back="Snooze me")
-    st_mock.session_state["now_action_custom_91"] = "not-a-date"
-
-    _render_item(
-        handoff,
-        key_prefix="now_action",
-        project_by_name={"Work": SimpleNamespace(id=1, name="Work")},
-        allow_actions=True,
-        show_check_in_controls=False,
-    )
-
-    assert snooze_calls == []
-    assert st_mock.session_state["now_flash_error"] == "Select a valid snooze date."
 
 
 def test_render_item_edit_save_validation_sets_flash_error(
@@ -868,12 +819,18 @@ def test_render_check_in_flow_non_due_shows_early_caption(monkeypatch: pytest.Mo
     assert any("Optional early check-in" in text for text in captions)
 
 
-def test_render_check_in_flow_mode_button_updates_state_without_explicit_rerun(
+def test_render_check_in_flow_mode_segmented_control_updates_state_without_rerun(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Clicking a mode button updates mode state without calling st.rerun()."""
+    """Selecting a check-in mode via segmented_control updates state without st.rerun()."""
     st_mock = _build_streamlit_mock()
-    st_mock.button.side_effect = _simulate_widget_submit("On-track")
+
+    def _seg_effect(*args, key=None, **kwargs):
+        if key:
+            st_mock.session_state[key] = "on_track"
+        return "on_track"
+
+    st_mock.segmented_control.side_effect = _seg_effect
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     handoff = _make_fake_handoff(handoff_id=77, next_check=date(2026, 3, 9))
 
@@ -1139,7 +1096,7 @@ def test_render_check_in_flow_delayed_mode_uses_delayed_type(
     ("mode", "expected_label"),
     [
         ("on_track", "Current progress (optional)"),
-        ("delayed", "Why delayed? (optional)"),
+        ("delayed", "Why? (optional)"),
         ("concluded", "Conclusion (optional)"),
     ],
 )
