@@ -116,6 +116,11 @@ class TestRenderDashboardPage:
         assert "Missed check-in" in labels
         assert "Open handoffs" in labels
         assert "Reopen rate (90d)" in labels
+        st_mock.metric.assert_any_call("Missed check-in", 2, delta="1 due today")
+        st_mock.caption.assert_any_call(
+            "Risk uses the System Settings deadline-near window. "
+            "Missed check-in means the scheduled check date has passed."
+        )
 
     def test_reliability_and_flow_sections_render(self, monkeypatch) -> None:
         st_mock = self._patch(monkeypatch, trend_empty=False, aging_empty=False, cycle_empty=False)
