@@ -14,6 +14,7 @@ from handoff.services.dashboard_service import (
     get_open_aging_profile,
     get_recent_activity,
 )
+from handoff.services.settings_service import log_application_action
 
 
 def render_dashboard_page() -> None:
@@ -96,20 +97,22 @@ def render_dashboard_page() -> None:
     if export_data.get("csv"):
         col_csv, col_json = st.columns(2)
         with col_csv:
-            st.download_button(
+            if st.download_button(
                 "Download CSV",
                 data=export_data["csv"],
                 file_name="handoff_metrics.csv",
                 mime="text/csv",
                 key="dashboard_export_csv",
-            )
+            ):
+                log_application_action("metrics_export", format="csv")
         with col_json:
-            st.download_button(
+            if st.download_button(
                 "Download JSON",
                 data=export_data["json"],
                 file_name="handoff_metrics.json",
                 mime="application/json",
                 key="dashboard_export_json",
-            )
+            ):
+                log_application_action("metrics_export", format="json")
     else:
         st.caption("No concluded handoffs in the last 12 weeks to export.")

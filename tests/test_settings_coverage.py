@@ -720,6 +720,10 @@ class TestRenderDataImportSection:
             imported["called"] = True
 
         monkeypatch.setattr("handoff.pages.system_settings.import_payload", mock_import)
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.log_application_action",
+            lambda *a, **k: None,
+        )
 
         _render_data_import_section()
 

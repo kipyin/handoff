@@ -38,6 +38,7 @@ from handoff.services.settings_service import (
     get_export_payload,
     get_rulebook_settings,
     import_payload,
+    log_application_action,
     reset_rulebook_settings,
     save_rulebook_settings,
     set_deadline_near_days,
@@ -492,21 +493,23 @@ def _render_data_export_section() -> None:
     payload: dict[str, Any] = get_export_payload()
 
     json_text = json.dumps(payload, indent=2)
-    st.download_button(
+    if st.download_button(
         "Download JSON backup",
         data=json_text,
         file_name="todo_backup.json",
         mime="application/json",
         key="settings_download_json_backup",
-    )
+    ):
+        log_application_action("data_export", format="json")
 
-    st.download_button(
+    if st.download_button(
         "Download CSV (handoffs)",
         data=_handoffs_csv_text(payload),
         file_name="handoff_handoffs.csv",
         mime="text/csv",
         key="settings_download_csv_backup",
-    )
+    ):
+        log_application_action("data_export", format="csv")
 
 
 def _render_send_log_section() -> None:
@@ -586,6 +589,7 @@ def _render_data_import_section() -> None:
         try:
             import_payload(payload.to_dict())
             st.success("Import complete — all data has been replaced.")
+            log_application_action("data_import", source_file=uploaded.name or "upload")
         except Exception as exc:
             st.error(f"Import failed: {exc}")
 
