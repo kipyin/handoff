@@ -115,7 +115,12 @@ class TestRenderDataExportSection:
 
         _render_data_export_section()
 
-        csv_call = st_mock.download_button.call_args_list[1]
+        csv_call = None
+        for call in st_mock.download_button.call_args_list:
+            if call.args and call.args[0] == "Download CSV (handoffs)":
+                csv_call = call
+                break
+        assert csv_call is not None, "CSV download button call not found"
         assert csv_call.args[0] == "Download CSV (handoffs)"
         assert csv_call.kwargs["file_name"] == "handoff_handoffs.csv"
         assert "need_back" in csv_call.kwargs["data"]
