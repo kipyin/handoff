@@ -5,6 +5,40 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from handoff.models import Handoff, Project
+
+
+@dataclass(slots=True)
+class NowSnapshot:
+    """Page-facing contract for the Now page.
+
+    Contains the full payload needed to render the Now page sections in
+    canonical order: Risk, Action required, custom sections, Upcoming,
+    and Concluded. Also includes supporting data for filters and the add form.
+
+    Attributes:
+        risk: Handoffs matching the Risk rule.
+        action: Handoffs matching the Action required rule.
+        custom_sections: Tuples of (section_id, handoffs) for user-defined sections
+            in display order.
+        upcoming: Handoffs in the fallback section (usually "Upcoming").
+        concluded: Concluded handoffs.
+        projects: Available projects for filtering and context.
+        pitchmen: Unique pitchman names for filtering.
+        section_explanations: Map from handoff_id to the rule match reason for
+            rulebook-driven sections (Risk, Action required, custom sections,
+            Upcoming). Concluded handoffs are not included.
+    """
+
+    risk: list[Handoff]
+    action: list[Handoff]
+    custom_sections: list[tuple[str, list[Handoff]]]
+    upcoming: list[Handoff]
+    concluded: list[Handoff]
+    projects: list[Project]
+    pitchmen: list[str]
+    section_explanations: dict[int, str]
+
 
 @dataclass(slots=True, frozen=True)
 class HandoffQuery:

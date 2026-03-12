@@ -11,25 +11,25 @@ from datetime import date
 import streamlit as st
 
 from handoff.dates import add_business_days, format_date_smart, format_risk_reason
+from handoff.instrumentation import time_action
 from handoff.models import CheckIn, CheckInType, Handoff, Project
-from handoff.search_parse import parse_search_query
 from handoff.services import (
     add_check_in,
     conclude_handoff,
     create_handoff,
-    get_deadline_near_days,
+    get_now_snapshot,
     list_pitchmen_with_open_handoffs,
     list_projects,
-    query_action_handoffs,
-    query_concluded_handoffs,
-    query_risk_handoffs,
-    query_upcoming_handoffs,
     reopen_handoff,
-    snooze_handoff,
     update_handoff,
 )
 
+CHECK_IN_MODES = ["on_track", "delayed", "concluded"]
+CHECK_IN_MODE_LABELS = {"on_track": "On-track", "delayed": "Delayed", "concluded": "Conclude"}
+
 _NOW_FLASH_SUCCESS_KEY = "now_flash_success"
+_NOW_FLASH_ERROR_KEY = "now_flash_error"
+_NOW_ADD_EXPANDED_KEY = "now_add_expanded"
 
 
 def _render_filters(
@@ -118,7 +118,204 @@ def _set_flash_success(message: str) -> None:
     st.session_state[_NOW_FLASH_SUCCESS_KEY] = message
 
 
-def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
+def _set_flash_error(message: str) -> None:
+    """Persist one error message for display after the next rerun."""
+    st.session_state[_NOW_FLASH_ERROR_KEY] = message
+
+
+def _set_mode(*, mode_key: str, mode: str) -> None:
+    """Set a local interaction mode in session state."""
+    st.session_state[mode_key] = mode
+
+
+def _clear_session_key(*, state_key: str) -> None:
+    """Remove a session-state key when it exists."""
+    st.session_state.pop(state_key, None)
+
+
+def _expand_add_form() -> None:
+    """Expand the Add handoff form (keyboard shortcut target)."""
+    st.session_state[_NOW_ADD_EXPANDED_KEY] = True
+
+
+def _collapse_add_form() -> None:
+    """Collapse the Add handoff form."""
+    st.session_state.pop(_NOW_ADD_EXPANDED_KEY, None)
+
+
+def _set_editing_handoff(*, handoff_id: int) -> None:
+    """Mark one handoff as currently being edited."""
+    st.session_state["now_editing_handoff_id"] = handoff_id
+
+
+def _save_check_in_submission(
+    *,
+    handoff_id: int,
+    selected_mode: str,
+    mode_key: str,
+    note_key: str,
+    next_check_key: str | None = None,
+) -> None:
+    """Persist a check-in form submission and clear form mode on success."""
+    note_raw = st.session_state.get(note_key, "")
+    note_value = str(note_raw).strip() or None
+
+    if selected_mode == "concluded":
+        with time_action("now_conclude"):
+            conclude_handoff(handoff_id, note=note_value)
+        _set_flash_success("Checked in today as concluded.")
+        st.session_state.pop(mode_key, None)
+        return
+
+    if next_check_key is None:
+        _set_flash_error("Select a valid next check-in date.")
+        return
+    next_check_value = st.session_state.get(next_check_key)
+    if not isinstance(next_check_value, date):
+        _set_flash_error("Select a valid next check-in date.")
+        return
+
+    check_in_type = CheckInType.ON_TRACK if selected_mode == "on_track" else CheckInType.DELAYED
+    with time_action("now_check_in"):
+        add_check_in(
+            handoff_id,
+            check_in_type=check_in_type,
+            note=note_value,
+            next_check_date=next_check_value,
+        )
+    _set_flash_success(
+        f"Checked in today; next check set to {format_date_smart(next_check_value)}."
+    )
+    st.session_state.pop(mode_key, None)
+
+
+def _save_reopen_submission(
+    *,
+    handoff_id: int,
+    mode_key: str,
+    note_key: str,
+    next_check_key: str,
+) -> None:
+    """Persist a reopen submission and clear form mode on success."""
+    note_raw = st.session_state.get(note_key, "")
+    note_value = str(note_raw).strip() or None
+    next_check_value = st.session_state.get(next_check_key)
+    if not isinstance(next_check_value, date):
+        _set_flash_error("Select a valid next check-in date.")
+        return
+    try:
+        with time_action("now_reopen"):
+            reopen_handoff(
+                handoff_id,
+                note=note_value,
+                next_check_date=next_check_value,
+            )
+    except ValueError as exc:
+        _set_flash_error(str(exc))
+        return
+    _set_flash_success(
+        f"Checked in today; next check set to {format_date_smart(next_check_value)}."
+    )
+    st.session_state.pop(mode_key, None)
+
+
+def _save_edit_submission(
+    *,
+    handoff_id: int,
+    project_by_name: dict[str, Project],
+    project_key: str,
+    who_key: str,
+    need_key: str,
+    next_check_key: str,
+    deadline_key: str,
+    context_key: str,
+) -> None:
+    """Persist a handoff edit form submission."""
+    need_back_raw = st.session_state.get(need_key, "")
+    need_back = str(need_back_raw).strip()
+    if not need_back:
+        _set_flash_error("Need back is required.")
+        return
+
+    project_name = st.session_state.get(project_key)
+    if project_name not in project_by_name:
+        _set_flash_error("Select a project.")
+        return
+    project_id = project_by_name[project_name].id
+    if project_id is None:
+        _set_flash_error("Select a valid project.")
+        return
+
+    next_check_value = st.session_state.get(next_check_key)
+    if not isinstance(next_check_value, date):
+        _set_flash_error("Select a valid next check date.")
+        return
+
+    deadline_value = st.session_state.get(deadline_key)
+    context_raw = st.session_state.get(context_key, "")
+    who_raw = st.session_state.get(who_key, "")
+    with time_action("now_edit"):
+        update_handoff(
+            handoff_id,
+            project_id=project_id,
+            need_back=need_back,
+            pitchman=str(who_raw).strip() or None,
+            next_check=next_check_value,
+            deadline=deadline_value if isinstance(deadline_value, date) else None,
+            notes=str(context_raw).strip() or None,
+        )
+    st.session_state.pop("now_editing_handoff_id", None)
+    _set_flash_success("Saved.")
+
+
+def _save_add_submission(
+    *,
+    project_by_name: dict[str, Project],
+    project_key: str,
+    who_key: str,
+    need_key: str,
+    next_check_key: str,
+    deadline_key: str,
+    context_key: str,
+) -> None:
+    """Persist a new handoff submission from the add form."""
+    need_back_raw = st.session_state.get(need_key, "")
+    need_back = str(need_back_raw).strip()
+    if not need_back:
+        _set_flash_error("Need back is required.")
+        return
+
+    project_name = st.session_state.get(project_key)
+    if project_name not in project_by_name:
+        _set_flash_error("Select a project.")
+        return
+    project_id = project_by_name[project_name].id
+    if project_id is None:
+        _set_flash_error("Select a valid project.")
+        return
+
+    next_check_value = st.session_state.get(next_check_key)
+    if not isinstance(next_check_value, date):
+        _set_flash_error("Select a valid next check date.")
+        return
+
+    deadline_value = st.session_state.get(deadline_key)
+    who_raw = st.session_state.get(who_key, "")
+    context_raw = st.session_state.get(context_key, "")
+    with time_action("now_add"):
+        create_handoff(
+            project_id=project_id,
+            need_back=need_back,
+            next_check=next_check_value,
+            deadline=deadline_value if isinstance(deadline_value, date) else None,
+            pitchman=str(who_raw).strip() or None,
+            notes=str(context_raw).strip() or None,
+        )
+    _collapse_add_form()
+    _set_flash_success("Added.")
+
+
+def _render_check_in_flow(handoff: Handoff, *, key_prefix: str, allow_actions: bool = True) -> None:
     """Render on-track/delayed/conclude check-in forms for open handoffs."""
     handoff_id = handoff.id
     if handoff_id is None:
@@ -132,71 +329,80 @@ def _render_check_in_flow(handoff: Handoff, *, key_prefix: str) -> None:
         st.caption(f"Optional early check-in. Planned next check: {planned_label}.")
 
     mode_key = f"{key_prefix}_check_in_mode_{handoff_id}"
+    row_col1, row_col2 = st.columns([3, 1])
+    with row_col1:
+        st.segmented_control(
+            "Check-in",
+            options=CHECK_IN_MODES,
+            default=None,
+            format_func=lambda s: CHECK_IN_MODE_LABELS.get(s, str(s)),
+            key=mode_key,
+            label_visibility="collapsed",
+        )
+    with row_col2:
+        if allow_actions:
+            st.button(
+                "Edit",
+                key=f"{key_prefix}_edit_btn_{handoff_id}",
+                on_click=_set_editing_handoff,
+                kwargs={"handoff_id": handoff_id},
+            )
     selected_mode = st.session_state.get(mode_key)
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("On-track", key=f"{key_prefix}_on_track_btn_{handoff_id}"):
-            st.session_state[mode_key] = "on_track"
-            st.rerun()
-    with c2:
-        if st.button("Delayed", key=f"{key_prefix}_delayed_btn_{handoff_id}"):
-            st.session_state[mode_key] = "delayed"
-            st.rerun()
-    with c3:
-        if st.button("Conclude", key=f"{key_prefix}_conclude_btn_{handoff_id}"):
-            st.session_state[mode_key] = "concluded"
-            st.rerun()
 
     if selected_mode not in {"on_track", "delayed", "concluded"}:
         return
 
     form_key = f"{key_prefix}_check_in_form_{handoff_id}_{selected_mode}"
+    note_key = f"{form_key}_note"
+    next_check_key: str | None = None
     with st.form(key=form_key):
         if selected_mode == "concluded":
-            note = st.text_area(
-                "Conclusion note (optional)",
-                key=f"{form_key}_note",
+            st.text_area(
+                "Conclusion (optional)",
+                key=note_key,
             )
-            save = st.form_submit_button("Save conclude check-in")
+            st.form_submit_button(
+                "Save conclude check-in",
+                on_click=_save_check_in_submission,
+                kwargs={
+                    "handoff_id": handoff_id,
+                    "selected_mode": selected_mode,
+                    "mode_key": mode_key,
+                    "note_key": note_key,
+                },
+            )
         else:
-            note_label = "Note (optional)" if selected_mode == "on_track" else "Reason (optional)"
-            note = st.text_area(note_label, key=f"{form_key}_note")
+            note_label = (
+                "Current progress (optional)" if selected_mode == "on_track" else "Why? (optional)"
+            )
+            st.text_area(note_label, key=note_key)
             default_next_check = (
                 handoff.next_check
                 if handoff.next_check is not None and handoff.next_check > today
                 else add_business_days(today, 1)
             )
-            next_check = st.date_input(
+            next_check_key = f"{form_key}_next_check"
+            st.date_input(
                 "Next check-in",
                 value=default_next_check,
-                key=f"{form_key}_next_check",
+                key=next_check_key,
             )
-            save = st.form_submit_button("Save check-in")
-        cancel = st.form_submit_button("Cancel")
-
-        if save:
-            note_value = note.strip() or None
-            if selected_mode == "concluded":
-                conclude_handoff(handoff_id, note=note_value)
-                _set_flash_success("Checked in today as concluded.")
-            else:
-                check_in_type = (
-                    CheckInType.ON_TRACK if selected_mode == "on_track" else CheckInType.DELAYED
-                )
-                add_check_in(
-                    handoff_id,
-                    check_in_type=check_in_type,
-                    note=note_value,
-                    next_check_date=next_check,
-                )
-                _set_flash_success(
-                    f"Checked in today; next check set to {format_date_smart(next_check)}."
-                )
-            st.session_state.pop(mode_key, None)
-            st.rerun()
-        if cancel:
-            st.session_state.pop(mode_key, None)
-            st.rerun()
+            st.form_submit_button(
+                "Save check-in",
+                on_click=_save_check_in_submission,
+                kwargs={
+                    "handoff_id": handoff_id,
+                    "selected_mode": selected_mode,
+                    "mode_key": mode_key,
+                    "note_key": note_key,
+                    "next_check_key": next_check_key,
+                },
+            )
+        st.form_submit_button(
+            "Cancel",
+            on_click=_clear_session_key,
+            kwargs={"state_key": mode_key},
+        )
 
 
 def _render_reopen_flow(handoff: Handoff, *, key_prefix: str) -> None:
@@ -206,48 +412,46 @@ def _render_reopen_flow(handoff: Handoff, *, key_prefix: str) -> None:
         return
 
     mode_key = f"{key_prefix}_reopen_mode_{handoff_id}"
-    if st.button("Reopen", key=f"{key_prefix}_reopen_btn_{handoff_id}"):
-        st.session_state[mode_key] = "reopen"
-        st.rerun()
+    st.button(
+        "Reopen",
+        key=f"{key_prefix}_reopen_btn_{handoff_id}",
+        on_click=_set_mode,
+        kwargs={"mode_key": mode_key, "mode": "reopen"},
+    )
     if st.session_state.get(mode_key) != "reopen":
         return
 
     today = date.today()
     default_next_check = add_business_days(today, 1)
     form_key = f"{key_prefix}_reopen_form_{handoff_id}"
+    note_key = f"{form_key}_note"
+    next_check_key = f"{form_key}_next_check"
     with st.form(key=form_key):
-        note = st.text_area(
+        st.text_area(
             "Reason (optional)",
             placeholder="reopen: waiting on revised doc",
-            key=f"{form_key}_note",
+            key=note_key,
         )
-        next_check = st.date_input(
+        st.date_input(
             "Next check-in",
             value=default_next_check,
-            key=f"{form_key}_next_check",
+            key=next_check_key,
         )
-        save = st.form_submit_button("Save reopen")
-        cancel = st.form_submit_button("Cancel")
-
-        if save:
-            note_value = note.strip() or None
-            try:
-                reopen_handoff(
-                    handoff_id,
-                    note=note_value,
-                    next_check_date=next_check,
-                )
-            except ValueError as exc:
-                st.error(str(exc))
-            else:
-                _set_flash_success(
-                    f"Checked in today; next check set to {format_date_smart(next_check)}."
-                )
-                st.session_state.pop(mode_key, None)
-                st.rerun()
-        if cancel:
-            st.session_state.pop(mode_key, None)
-            st.rerun()
+        st.form_submit_button(
+            "Save reopen",
+            on_click=_save_reopen_submission,
+            kwargs={
+                "handoff_id": handoff_id,
+                "mode_key": mode_key,
+                "note_key": note_key,
+                "next_check_key": next_check_key,
+            },
+        )
+        st.form_submit_button(
+            "Cancel",
+            on_click=_clear_session_key,
+            kwargs={"state_key": mode_key},
+        )
 
 
 def _render_item(
@@ -259,6 +463,7 @@ def _render_item(
     show_check_in_controls: bool = False,
     allow_actions: bool = True,
     allow_reopen: bool = False,
+    match_explanation: str | None = None,
 ) -> None:
     """Render one handoff item in an expander."""
     handoff_id = handoff.id
@@ -288,46 +493,42 @@ def _render_item(
     core = " · ".join(segments)
     header = risk_prefix + core
 
+    check_in_mode_key = f"{key_prefix}_check_in_mode_{handoff_id}"
+    reopen_mode_key = f"{key_prefix}_reopen_mode_{handoff_id}"
+    has_active_check_in_mode = st.session_state.get(check_in_mode_key) in {
+        "on_track",
+        "delayed",
+        "concluded",
+    }
+    has_active_reopen_mode = st.session_state.get(reopen_mode_key) == "reopen"
     editing = allow_actions and st.session_state.get("now_editing_handoff_id") == handoff_id
-    with st.expander(header, expanded=editing):
+    keep_expanded_for_mode = (
+        allow_actions and show_check_in_controls and has_active_check_in_mode
+    ) or (allow_reopen and has_active_reopen_mode)
+    # Auto-expand for due action items so check-in controls are visible without clicking
+    is_due_action = show_check_in_controls and _is_check_in_due(handoff)
+    with st.expander(header, expanded=editing or keep_expanded_for_mode or is_due_action):
+        if match_explanation:
+            st.caption(match_explanation)
+        if not editing and allow_actions and show_check_in_controls:
+            _render_check_in_flow(handoff, key_prefix=key_prefix, allow_actions=allow_actions)
+        elif not editing and allow_reopen:
+            _render_reopen_flow(handoff, key_prefix=key_prefix)
+
         if editing:
             _render_edit_form(
                 handoff=handoff,
                 project_by_name=project_by_name,
                 key_prefix=f"{key_prefix}_edit_{handoff_id}",
             )
+            return
+
+        if context:
+            st.markdown("**Context:**")
+            st.markdown(context)
         else:
-            if allow_actions and show_check_in_controls:
-                _render_check_in_flow(handoff, key_prefix=key_prefix)
-
-            if allow_actions:
-                today = date.today()
-                with st.popover("Actions"):
-                    r1c1, r1c2 = st.columns(2)
-                    with r1c1:
-                        if st.button("Edit", key=f"{key_prefix}_edit_btn_{handoff_id}"):
-                            st.session_state["now_editing_handoff_id"] = handoff_id
-                            st.rerun()
-                    with r1c2:
-                        custom_date = st.date_input(
-                            "Date",
-                            value=add_business_days(today, 1),
-                            key=f"{key_prefix}_custom_{handoff_id}",
-                            label_visibility="collapsed",
-                        )
-                    with r1c2:
-                        if st.button("Snooze", key=f"{key_prefix}_snooze_btn_{handoff_id}"):
-                            snooze_handoff(handoff_id, to_date=custom_date)
-                            st.rerun()
-            elif allow_reopen:
-                _render_reopen_flow(handoff, key_prefix=key_prefix)
-
-            if context:
-                st.markdown("**Context:**")
-                st.markdown(context)
-            else:
-                st.caption("No context.")
-            _render_check_in_trail(handoff)
+            st.caption("No context.")
+        _render_check_in_trail(handoff)
 
 
 def _render_edit_form(
@@ -346,79 +547,74 @@ def _render_edit_form(
     if handoff_id is None:
         return
     project_names = list(project_by_name)
+    project_key = f"{key_prefix}_project"
+    who_key = f"{key_prefix}_who"
+    need_key = f"{key_prefix}_need"
+    next_key = f"{key_prefix}_next"
+    deadline_key = f"{key_prefix}_deadline"
+    context_key = f"{key_prefix}_context"
     with st.form(key=f"{key_prefix}_form"):
         proj_idx = (
             project_names.index(handoff.project.name)
             if handoff.project and handoff.project.name in project_names
             else 0
         )
-        project_name = st.selectbox(
+        st.selectbox(
             "Project",
             options=project_names,
             index=proj_idx,
-            key=f"{key_prefix}_project",
+            key=project_key,
         )
-        who = st.text_input(
+        st.text_input(
             "Who",
             value=(handoff.pitchman or "").strip(),
             placeholder="Person you're waiting on",
-            key=f"{key_prefix}_who",
+            key=who_key,
         )
-        need_back = st.text_input(
+        st.text_input(
             "Need back",
             value=handoff.need_back or "",
             placeholder="Deliverable you need returned",
-            key=f"{key_prefix}_need",
+            key=need_key,
         )
-        next_check = st.date_input(
+        st.date_input(
             "Next check",
             value=handoff.next_check or date.today(),
-            key=f"{key_prefix}_next",
+            key=next_key,
         )
-        deadline = st.date_input(
+        st.date_input(
             "Deadline (optional)",
             value=handoff.deadline,
-            key=f"{key_prefix}_deadline",
+            key=deadline_key,
         )
-        context = st.text_area(
+        st.text_area(
             "Context (optional)",
             value=(handoff.notes or "").strip(),
             placeholder="Notes, links, markdown…",
-            key=f"{key_prefix}_context",
+            key=context_key,
         )
         col1, col2 = st.columns(2)
         with col1:
-            submitted = st.form_submit_button("Save")
+            st.form_submit_button(
+                "Save",
+                on_click=_save_edit_submission,
+                kwargs={
+                    "handoff_id": handoff_id,
+                    "project_by_name": project_by_name,
+                    "project_key": project_key,
+                    "who_key": who_key,
+                    "need_key": need_key,
+                    "next_check_key": next_key,
+                    "deadline_key": deadline_key,
+                    "context_key": context_key,
+                },
+            )
         with col2:
-            cancelled = st.form_submit_button("Cancel")
-        if submitted:
-            need_back_stripped = (need_back or "").strip()
-            if not need_back_stripped:
-                st.error("Need back is required.")
-            elif project_name not in project_by_name:
-                st.error("Select a project.")
-            else:
-                proj_id = project_by_name[project_name].id
-                if proj_id is None:
-                    st.error("Select a valid project.")
-                else:
-                    update_handoff(
-                        handoff_id,
-                        project_id=proj_id,
-                        need_back=need_back_stripped,
-                        pitchman=who.strip() or None,
-                        next_check=next_check,
-                        deadline=deadline if deadline else None,
-                        notes=context.strip() or None,
-                    )
-                    if "now_editing_handoff_id" in st.session_state:
-                        del st.session_state["now_editing_handoff_id"]
-                    st.success("Saved.")
-                    st.rerun()
-        if cancelled:
-            if "now_editing_handoff_id" in st.session_state:
-                del st.session_state["now_editing_handoff_id"]
-            st.rerun()
+            st.form_submit_button(
+                "Cancel",
+                on_click=_clear_session_key,
+                kwargs={"state_key": "now_editing_handoff_id"},
+            )
 
 
 def _render_add_form(
@@ -433,151 +629,143 @@ def _render_add_form(
         pitchmen: List of pitchman names (unused but kept for UI symmetry).
         key_prefix: Prefix for Streamlit widget keys.
     """
-    with (
-        st.expander("➕ Add handoff", expanded=False),
-        st.form(key=f"{key_prefix}_add_form", clear_on_submit=True),
-    ):
+    with st.form(key=f"{key_prefix}_add_form", clear_on_submit=True):
         project_names = list(project_by_name)
-        project_name = st.selectbox(
-            "Project", options=project_names, key=f"{key_prefix}_add_project"
-        )
-        who = st.text_input(
-            "Who", placeholder="Person you're waiting on", key=f"{key_prefix}_add_who"
-        )
-        need_back = st.text_input(
+        project_key = f"{key_prefix}_add_project"
+        who_key = f"{key_prefix}_add_who"
+        need_key = f"{key_prefix}_add_need"
+        next_key = f"{key_prefix}_add_next"
+        deadline_key = f"{key_prefix}_add_deadline"
+        context_key = f"{key_prefix}_add_context"
+        st.selectbox("Project", options=project_names, key=project_key)
+        st.text_input("Who", placeholder="Person you're waiting on", key=who_key)
+        st.text_input(
             "Need back",
             placeholder="Deliverable you need returned",
-            key=f"{key_prefix}_add_need",
+            key=need_key,
         )
-        next_check = st.date_input(
+        st.date_input(
             "Next check",
             value=date.today(),
-            key=f"{key_prefix}_add_next",
+            key=next_key,
         )
-        deadline = st.date_input(
+        st.date_input(
             "Deadline (optional)",
             value=None,
-            key=f"{key_prefix}_add_deadline",
+            key=deadline_key,
         )
-        context = st.text_area(
+        st.text_area(
             "Context (optional)",
             placeholder="Notes, links, markdown…",
-            key=f"{key_prefix}_add_context",
+            key=context_key,
         )
-        submitted = st.form_submit_button("Add")
-        if submitted:
-            need_back_stripped = (need_back or "").strip()
-            if not need_back_stripped:
-                st.error("Need back is required.")
-            elif project_name not in project_by_name:
-                st.error("Select a project.")
-            else:
-                proj_id = project_by_name[project_name].id
-                if proj_id is None:
-                    st.error("Select a valid project.")
-                else:
-                    create_handoff(
-                        project_id=proj_id,
-                        need_back=need_back_stripped,
-                        next_check=next_check,
-                        deadline=deadline if deadline else None,
-                        pitchman=who.strip() or None,
-                        notes=context.strip() or None,
-                    )
-                    st.success("Added.")
-                    st.rerun()
+        col_submit, col_close = st.columns(2)
+        with col_submit:
+            st.form_submit_button(
+                "Add",
+                on_click=_save_add_submission,
+                kwargs={
+                    "project_by_name": project_by_name,
+                    "project_key": project_key,
+                    "who_key": who_key,
+                    "need_key": need_key,
+                    "next_check_key": next_key,
+                    "deadline_key": deadline_key,
+                    "context_key": context_key,
+                },
+            )
+        with col_close:
+            st.form_submit_button(
+                "Close",
+                on_click=_collapse_add_form,
+            )
 
 
 def render_now_page() -> None:
     """Render the Now page with four sections: Risk | Action | Upcoming | Concluded."""
     st.subheader("Now")
-    st.caption(
-        "Minimize risks by clearing actions on time. "
-        "Use Snooze to follow up later, or Conclude when done."
-    )
+    st.caption("Minimize risks by clearing actions on time.")
     flash_message = st.session_state.pop(_NOW_FLASH_SUCCESS_KEY, None)
     if flash_message:
         st.success(flash_message)
+    flash_error = st.session_state.pop(_NOW_FLASH_ERROR_KEY, None)
+    if flash_error:
+        st.error(flash_error)
 
     include_archived_projects = st.checkbox(
         "Include archived projects",
         value=False,
         key="now_include_archived_projects",
     )
-    projects = list_projects(include_archived=include_archived_projects)
-    if not projects:
-        if include_archived_projects:
-            st.info("No projects yet. Create one on the Projects page.")
-        else:
-            all_projects = list_projects(include_archived=True)
-            if all_projects:
-                st.info(
-                    "No active projects. Turn on 'Include archived projects' to view archived work."
-                )
-            else:
+    with time_action("now_render"):
+        projects = list_projects(include_archived=include_archived_projects)
+        if not projects:
+            if include_archived_projects:
                 st.info("No projects yet. Create one on the Projects page.")
-        return
+            else:
+                all_projects = list_projects(include_archived=True)
+                if all_projects:
+                    st.info(
+                        "No active projects. Turn on 'Include archived projects' "
+                        "to view archived work."
+                    )
+                else:
+                    st.info("No projects yet. Create one on the Projects page.")
+            return
 
-    pitchmen = list_pitchmen_with_open_handoffs(include_archived_projects=include_archived_projects)
-    project_by_name = {p.name: p for p in projects}
-    project_ids, pitchman_names, search_text = _render_filters(
-        project_by_name=project_by_name,
-        pitchmen=pitchmen,
-        key_prefix="now",
-    )
+        pitchmen = list_pitchmen_with_open_handoffs(
+            include_archived_projects=include_archived_projects
+        )
+        project_by_name = {p.name: p for p in projects}
+        project_ids, pitchman_names, search_text = _render_filters(
+            project_by_name=project_by_name,
+            pitchmen=pitchmen,
+            key_prefix="now",
+        )
+        snapshot = get_now_snapshot(
+            include_archived_projects=include_archived_projects,
+            project_ids=project_ids,
+            pitchman_names=pitchman_names,
+            search_text=search_text,
+            projects=projects,
+            pitchmen=pitchmen,
+        )
 
-    parsed = parse_search_query(search_text or "")
-    deadline_near_days = get_deadline_near_days()
-    risk = query_risk_handoffs(
-        project_ids=project_ids,
-        pitchman_names=pitchman_names,
-        search_text=parsed.text_query,
-        deadline_near_days=deadline_near_days,
-        next_check_min=parsed.next_check_min,
-        next_check_max=parsed.next_check_max,
-        deadline_min=parsed.deadline_min,
-        deadline_max=parsed.deadline_max,
-        include_archived_projects=include_archived_projects,
-    )
-
-    action = query_action_handoffs(
-        project_ids=project_ids,
-        pitchman_names=pitchman_names,
-        search_text=parsed.text_query,
-        deadline_near_days=deadline_near_days,
-        next_check_min=parsed.next_check_min,
-        next_check_max=parsed.next_check_max,
-        deadline_min=parsed.deadline_min,
-        deadline_max=parsed.deadline_max,
-        include_archived_projects=include_archived_projects,
-    )
-    upcoming = query_upcoming_handoffs(
-        project_ids=project_ids,
-        pitchman_names=pitchman_names,
-        search_text=parsed.text_query,
-        deadline_near_days=deadline_near_days,
-        next_check_min=parsed.next_check_min,
-        next_check_max=parsed.next_check_max,
-        deadline_min=parsed.deadline_min,
-        deadline_max=parsed.deadline_max,
-        include_archived_projects=include_archived_projects,
-    )
-    concluded = query_concluded_handoffs(
-        project_ids=project_ids,
-        pitchman_names=pitchman_names,
-        search_text=parsed.text_query,
-        include_archived_projects=include_archived_projects,
-    )
-
-    _render_add_form(project_by_name, pitchmen, "now")
+    add_expanded = st.session_state.get(_NOW_ADD_EXPANDED_KEY, False)
+    if add_expanded:
+        st.button(
+            "➕ Add handoff",
+            key="now_add_handoff_collapse",
+            on_click=_collapse_add_form,
+            help="Collapse the add form",
+        )
+        _render_add_form(project_by_name, snapshot.pitchmen, "now")
+    else:
+        try:
+            st.button(
+                "➕ Add handoff (a)",
+                shortcut="a",
+                key="now_add_handoff_trigger",
+                on_click=_expand_add_form,
+                help="Open the add form to create a new handoff",
+            )
+        except TypeError:
+            # Fallback for in-app updater: old embedded Streamlit lacks shortcut param
+            st.button(
+                "➕ Add handoff (a)",
+                key="now_add_handoff_trigger",
+                on_click=_expand_add_form,
+                help="Open the add form to create a new handoff",
+            )
+    st.caption("Shortcuts: **a** Add handoff")
 
     # --- Risk section ---
     st.markdown("---")
     st.markdown("**Risk**")
-    if not risk:
+    if not snapshot.risk:
         st.caption("No at-risk handoffs.")
     else:
-        for handoff in risk:
+        for handoff in snapshot.risk:
             _render_item(
                 handoff,
                 "now_risk",
@@ -585,43 +773,79 @@ def render_now_page() -> None:
                 is_risk=True,
                 show_check_in_controls=True,
                 allow_actions=True,
+                match_explanation=(
+                    snapshot.section_explanations.get(handoff.id, "") or None
+                    if handoff.id is not None
+                    else None
+                ),
             )
 
     # --- Action section ---
     st.markdown("---")
     st.markdown("**Action required**")
-    if not action:
+    if not snapshot.action:
         st.info("Nothing needs attention right now. Add handoffs or check back later.")
     else:
-        for handoff in action:
+        for handoff in snapshot.action:
             _render_item(
                 handoff,
                 "now_action",
                 project_by_name=project_by_name,
                 show_check_in_controls=True,
+                match_explanation=(
+                    snapshot.section_explanations.get(handoff.id, "") or None
+                    if handoff.id is not None
+                    else None
+                ),
             )
+
+    # --- Custom sections ---
+    for section_id, handoffs in snapshot.custom_sections:
+        section_label = section_id.replace("_", " ").title()
+        st.markdown("---")
+        st.markdown(f"**{section_label}**")
+        if not handoffs:
+            st.caption(f"No handoffs in {section_label}.")
+        else:
+            for handoff in handoffs:
+                _render_item(
+                    handoff,
+                    f"now_custom_{section_id}",
+                    project_by_name=project_by_name,
+                    show_check_in_controls=True,
+                    match_explanation=(
+                        snapshot.section_explanations.get(handoff.id, "") or None
+                        if handoff.id is not None
+                        else None
+                    ),
+                )
 
     # --- Upcoming section ---
     st.markdown("---")
     st.markdown("**Upcoming**")
-    if not upcoming:
+    if not snapshot.upcoming:
         st.caption("No upcoming handoffs.")
     else:
-        for handoff in upcoming:
+        for handoff in snapshot.upcoming:
             _render_item(
                 handoff,
                 key_prefix="now_upcoming",
                 project_by_name=project_by_name,
                 show_check_in_controls=True,
+                match_explanation=(
+                    snapshot.section_explanations.get(handoff.id, "") or None
+                    if handoff.id is not None
+                    else None
+                ),
             )
 
     # --- Concluded section ---
     st.markdown("---")
     st.markdown("**Concluded**")
-    if not concluded:
+    if not snapshot.concluded:
         st.caption("No concluded handoffs.")
     else:
-        for handoff in concluded:
+        for handoff in snapshot.concluded:
             _render_item(
                 handoff,
                 key_prefix="now_concluded",

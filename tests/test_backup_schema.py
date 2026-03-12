@@ -206,7 +206,7 @@ class TestBackupPayload:
             BackupPayload.from_dict("not a dict")  # type: ignore[arg-type]
 
     def test_from_dict_rejects_missing_keys(self) -> None:
-        with pytest.raises(KeyError, match="projects.*handoffs"):
+        with pytest.raises(KeyError, match=r"projects.*handoffs"):
             BackupPayload.from_dict({"projects": []})
 
     def test_from_dict_rejects_non_list_values(self) -> None:

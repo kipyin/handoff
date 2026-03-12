@@ -25,6 +25,18 @@ Apply tags in this order. Use the first tag that matches.
   - Ruff/formatting cleanup, pyright fixes
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
 
+## 2026.3.11 [Breaking]
+
+- **Feature**
+  - **Configurable rulebook for Now-page sections:** Open-item sections (Risk, Action required, Upcoming) are now driven by an editable rulebook. Rules are exclusive and first-match-wins by priority. Built-in defaults reproduce the previous behavior at launch.
+  - **Rulebook editor in System Settings:** Under **Open-item rules**, you can edit enabled state, priority, and conditions per rule; add custom sections beyond Risk and Action required; and reset to built-in defaults at any time.
+  - **"Why this matched" explanations:** Each handoff in a rulebook-driven section shows a short explanation of why it landed there (e.g. "Deadline is near and latest check-in is delayed.").
+  - **Now page keyboard shortcut:** Press `a` to expand the Add handoff form. Shortcuts caption shown on the page.
+- **Improvement**
+  - **Returning to defaults:** If you customize rules and want the original behavior back, go to **Settings** → **System Settings** → **Open-item rules** and click **Reset to defaults**. The Now page picks up changes on the next refresh.
+- **Breaking**
+  - **Streamlit 1.52+ required:** Minimum Streamlit version bumped from 1.40 to 1.52 for `st.button(shortcut=...)` support. Full reinstall needed for embedded builds. Users who patch-update in-place get a try/except fallback: the button works without the shortcut if their bundled Streamlit is older.
+
 ## 2026.3.10 [Recommended]
 
 - **Feature**

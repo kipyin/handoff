@@ -1,5 +1,6 @@
 """Tests for data access helpers."""
 
+import dataclasses
 import importlib
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -10,6 +11,7 @@ from sqlmodel import select
 
 import handoff.data as data
 from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.page_models import HandoffQuery
 
 
 def _patch_session_context(monkeypatch, session) -> None:
@@ -443,6 +445,142 @@ def test_query_handoffs_pitchman_name_filter(session, monkeypatch) -> None:
     assert results[0].pitchman == "Alice"
 
 
+def test_query_handoffs_pitchman_names_exact_match_with_whitespace_trimming(
+    session, monkeypatch
+) -> None:
+    """query_handoffs pitchman_names are exact-match filters with trimmed inputs."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    session.add_all(
+        [
+            Handoff(project_id=p.id, need_back="Alice exact", pitchman="Alice"),
+            Handoff(project_id=p.id, need_back="Bob exact", pitchman="Bob"),
+            Handoff(project_id=p.id, need_back="alice lowercase", pitchman="alice"),
+            Handoff(project_id=p.id, need_back="Alicia partial", pitchman="Alicia"),
+        ]
+    )
+    session.commit()
+
+    results = data.query_handoffs(
+        pitchman_names=["  Alice  ", "", "  ", "Bob"],
+        include_concluded=True,
+    )
+    assert {h.need_back for h in results} == {"Alice exact", "Bob exact"}
+
+
+def test_query_handoffs_combines_pitchman_name_and_pitchman_names_filters(
+    session, monkeypatch
+) -> None:
+    """query_handoffs applies substring and exact pitchman filters together."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    session.add_all(
+        [
+            Handoff(project_id=p.id, need_back="Alice exact", pitchman="Alice"),
+            Handoff(project_id=p.id, need_back="Alicia partial", pitchman="Alicia"),
+            Handoff(project_id=p.id, need_back="Bob", pitchman="Bob"),
+        ]
+    )
+    session.commit()
+
+    results = data.query_handoffs(
+        pitchman_name="ali",
+        pitchman_names=["Alice"],
+        include_concluded=True,
+    )
+    assert [h.need_back for h in results] == ["Alice exact"]
+
+
+def test_query_handoffs_uses_handoff_query_pitchman_names(session, monkeypatch) -> None:
+    """query_handoffs(query=...) forwards typed pitchman_names and archive toggles."""
+    _patch_session_context(monkeypatch, session)
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    session.add_all(
+        [
+            Handoff(project_id=active.id, need_back="Active Alice", pitchman="Alice"),
+            Handoff(project_id=archived.id, need_back="Archived Alice", pitchman="Alice"),
+            Handoff(project_id=active.id, need_back="Active Bob", pitchman="Bob"),
+        ]
+    )
+    session.commit()
+
+    active_only = data.query_handoffs(
+        query=HandoffQuery(pitchman_names=("Alice",), include_concluded=True)
+    )
+    assert [h.need_back for h in active_only] == ["Active Alice"]
+
+    with_archived = data.query_handoffs(
+        query=HandoffQuery(
+            pitchman_names=("Alice",),
+            include_concluded=True,
+            include_archived_projects=True,
+        )
+    )
+    assert {h.need_back for h in with_archived} == {"Active Alice", "Archived Alice"}
+
+
+def test_query_handoffs_typed_query_filters_and_archive_toggle(session, monkeypatch) -> None:
+    """HandoffQuery values map to query_handoffs filters, including archive toggle."""
+    _patch_session_context(monkeypatch, session)
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    active_match = Handoff(
+        project_id=active.id,
+        need_back="seed token active",
+        pitchman="Alice",
+        deadline=date(2026, 3, 10),
+    )
+    archived_match = Handoff(
+        project_id=archived.id,
+        need_back="seed token archived",
+        pitchman="Alice",
+        deadline=date(2026, 3, 11),
+    )
+    out_of_range = Handoff(
+        project_id=active.id,
+        need_back="seed token too late",
+        pitchman="Alice",
+        deadline=date(2026, 4, 2),
+    )
+    wrong_pitchman = Handoff(
+        project_id=active.id,
+        need_back="seed token wrong owner",
+        pitchman="Bob",
+        deadline=date(2026, 3, 12),
+    )
+    session.add_all([active_match, archived_match, out_of_range, wrong_pitchman])
+    session.commit()
+
+    base_query = HandoffQuery(
+        search_text="seed token",
+        project_ids=(active.id, archived.id),
+        pitchman_names=("  Alice  ",),
+        deadline_start=date(2026, 3, 1),
+        deadline_end=date(2026, 3, 31),
+        include_concluded=True,
+        include_archived_projects=False,
+    )
+    default_results = data.query_handoffs(query=base_query)
+    assert {h.id for h in default_results} == {active_match.id}
+
+    with_archived = dataclasses.replace(base_query, include_archived_projects=True)
+    archived_results = data.query_handoffs(query=with_archived)
+    assert {h.id for h in archived_results} == {active_match.id, archived_match.id}
+
+
 def test_create_project(session, monkeypatch) -> None:
     """create_project stores and returns a new project."""
     _patch_session_context(monkeypatch, session)
@@ -607,30 +745,6 @@ def test_get_projects_with_handoff_summary(session, monkeypatch) -> None:
     assert s["total"] == 3
     assert s["open"] == 2
     assert s["concluded"] == 1
-
-
-def test_snooze_handoff(session, monkeypatch) -> None:
-    """snooze_handoff updates next_check only, leaves deadline unchanged."""
-    _patch_session_context(monkeypatch, session)
-    p = Project(name="P")
-    session.add(p)
-    session.commit()
-    session.refresh(p)
-
-    h = Handoff(
-        project_id=p.id,
-        need_back="Follow up",
-        next_check=date(2026, 1, 1),
-        deadline=date(2026, 6, 1),
-    )
-    session.add(h)
-    session.commit()
-    session.refresh(h)
-
-    updated = data.snooze_handoff(h.id, to_date=date(2026, 1, 15))
-    assert updated is not None
-    assert updated.next_check == date(2026, 1, 15)
-    assert updated.deadline == date(2026, 6, 1)
 
 
 def test_conclude_handoff(session, monkeypatch) -> None:
@@ -857,6 +971,89 @@ def test_query_now_items(session, monkeypatch) -> None:
     at_risk_names = [r[0].need_back for r in results if r[1]]
     assert "Deadline at risk" in at_risk_names
     assert "Check due" not in at_risk_names
+
+
+def test_query_open_handoffs_for_now_filters_and_orders(session, monkeypatch) -> None:
+    """Open-now query excludes closed rows and orders by next_check/deadline/created_at."""
+    _patch_session_context(monkeypatch, session)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    first = Handoff(
+        project_id=active.id,
+        need_back="First by deadline",
+        pitchman="Alice",
+        next_check=date(2026, 3, 10),
+        deadline=date(2026, 3, 20),
+        created_at=datetime(2026, 3, 1, 9, 0, 0),
+    )
+    second = Handoff(
+        project_id=active.id,
+        need_back="Second by deadline",
+        pitchman="Alice",
+        next_check=date(2026, 3, 10),
+        deadline=date(2026, 3, 21),
+        created_at=datetime(2026, 3, 1, 8, 0, 0),
+    )
+    no_next = Handoff(
+        project_id=active.id,
+        need_back="No next check goes last",
+        pitchman="Alice",
+        next_check=None,
+        deadline=None,
+        created_at=datetime(2026, 3, 1, 7, 0, 0),
+    )
+    closed = Handoff(
+        project_id=active.id,
+        need_back="Closed item",
+        pitchman="Alice",
+        next_check=date(2026, 3, 9),
+        created_at=datetime(2026, 3, 1, 6, 0, 0),
+    )
+    other_pitchman = Handoff(
+        project_id=active.id,
+        need_back="Other pitchman",
+        pitchman="Bob",
+        next_check=date(2026, 3, 9),
+        created_at=datetime(2026, 3, 1, 5, 0, 0),
+    )
+    archived_item = Handoff(
+        project_id=archived.id,
+        need_back="Archived item",
+        pitchman="Alice",
+        next_check=date(2026, 3, 9),
+        created_at=datetime(2026, 3, 1, 4, 0, 0),
+    )
+    session.add_all([first, second, no_next, closed, other_pitchman, archived_item])
+    session.commit()
+    session.refresh(closed)
+
+    session.add(
+        CheckIn(
+            handoff_id=closed.id,
+            check_in_date=date(2026, 3, 9),
+            check_in_type=CheckInType.CONCLUDED,
+        )
+    )
+    session.commit()
+
+    default_results = data.query_open_handoffs_for_now(pitchman_names=["Alice"])
+    default_names = [h.need_back for h in default_results]
+    assert default_names == [
+        "First by deadline",
+        "Second by deadline",
+        "No next check goes last",
+    ]
+
+    all_results = data.query_open_handoffs_for_now(
+        pitchman_names=["Alice"],
+        include_archived_projects=True,
+    )
+    all_names = [h.need_back for h in all_results]
+    assert "Archived item" in all_names
 
 
 def test_query_action_handoffs(session, monkeypatch) -> None:
