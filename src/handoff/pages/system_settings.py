@@ -21,11 +21,14 @@ from loguru import logger
 from handoff.backup_schema import BackupPayload
 from handoff.docs import get_readme_intro
 from handoff.logging import _get_logs_dir
+from handoff.models import CheckInType
 from handoff.rulebook import (
     DeadlineWithinDaysCondition,
     LatestCheckInTypeIsCondition,
     NextCheckDueCondition,
+    RulebookSettings,
     RuleCondition,
+    RuleDefinition,
 )
 from handoff.services.settings_service import (
     DEADLINE_NEAR_DAYS_MAX,
@@ -35,6 +38,7 @@ from handoff.services.settings_service import (
     get_rulebook_settings,
     import_payload,
     reset_rulebook_settings,
+    save_rulebook_settings,
     set_deadline_near_days,
 )
 from handoff.update_ui import render_update_panel
@@ -62,13 +66,49 @@ def _format_condition(condition: RuleCondition) -> str:
     return "Unknown condition"
 
 
-def _render_rulebook_section() -> None:
-    """Render a read-only preview of active rules and a reset-to-defaults button.
+def _clear_rulebook_widget_state() -> None:
+    """Remove rulebook widget keys from session state so form reloads from disk."""
+    to_drop = [k for k in st.session_state if k.startswith("settings_rule_")]
+    for k in to_drop:
+        del st.session_state[k]
 
-    Displays the current rulebook settings, showing each rule's name, priority, enabled
-    status, conditions, and match reason. Also provides a button to reset the rulebook
-    to the built-in defaults.
+
+def _collect_edited_rule(
+    rule: RuleDefinition, rule_idx: int, edited_enabled: bool, edited_priority: int
+) -> RuleDefinition:
+    """Build a RuleDefinition with the same identity but updated enabled, priority, conditions.
+
+    Conditions are collected from the current session state for widgets keyed by
+    rule_idx and cond_idx.
     """
+    new_conditions: list[RuleCondition] = []
+    for cond_idx, cond in enumerate(rule.conditions):
+        key_prefix = f"settings_rule_{rule_idx}_cond_{cond_idx}"
+        if isinstance(cond, DeadlineWithinDaysCondition):
+            days = st.session_state.get(key_prefix + "_days", cond.days)
+            days = max(0, min(DEADLINE_NEAR_DAYS_MAX, int(days)))
+            new_conditions.append(DeadlineWithinDaysCondition(days=days))
+        elif isinstance(cond, LatestCheckInTypeIsCondition):
+            raw = st.session_state.get(key_prefix + "_check_in_type", cond.check_in_type.value)
+            new_conditions.append(LatestCheckInTypeIsCondition(check_in_type=CheckInType(str(raw))))
+        elif isinstance(cond, NextCheckDueCondition):
+            include = st.session_state.get(
+                key_prefix + "_include_missing", cond.include_missing_next_check
+            )
+            new_conditions.append(NextCheckDueCondition(include_missing_next_check=bool(include)))
+    return RuleDefinition(
+        rule_id=rule.rule_id,
+        name=rule.name,
+        section_id=rule.section_id,
+        priority=edited_priority,
+        enabled=edited_enabled,
+        match_reason=rule.match_reason,
+        conditions=tuple(new_conditions),
+    )
+
+
+def _render_rulebook_section() -> None:
+    """Render editable rulebook form and reset-to-defaults."""
     st.markdown("### Open-item rules")
     settings = get_rulebook_settings()
     section_labels = sorted({rule.section_id.replace("_", " ").title() for rule in settings.rules})
@@ -79,22 +119,102 @@ def _render_rulebook_section() -> None:
         f"First matching enabled rule wins. Unmatched items fall back to {fallback_label}."
     )
 
-    for _, rule in sorted(
+    ordered_rules = sorted(
         enumerate(settings.rules),
         key=lambda item: (item[1].priority, item[0]),
-    ):
-        status = "enabled" if rule.enabled else "disabled"
-        conditions_str = "; ".join(_format_condition(c) for c in rule.conditions)
-        st.markdown(f"**{rule.name}** (priority {rule.priority}, {status})")
-        st.caption(f"Section: {rule.section_id.replace('_', ' ').title()} · {conditions_str}")
-        if rule.match_reason:
-            st.caption(f"Match reason: {rule.match_reason}")
+    )
+    edited_rules: list[tuple[int, bool, int]] = []
 
-    if st.button("Reset to defaults", key="settings_rulebook_reset"):
-        reset_rulebook_settings()
-        st.success(
-            "Rulebook reset to built-in defaults. The Now page will use this from the next refresh."
-        )
+    for rule_idx, rule in ordered_rules:
+        with st.expander(
+            f"**{rule.name}** — {rule.section_id.replace('_', ' ').title()}", expanded=False
+        ):
+            enabled = st.checkbox(
+                "Enabled",
+                value=rule.enabled,
+                key=f"settings_rule_{rule_idx}_enabled",
+            )
+            priority = st.number_input(
+                "Priority (lower = checked first)",
+                min_value=0,
+                max_value=999,
+                value=rule.priority,
+                step=1,
+                key=f"settings_rule_{rule_idx}_priority",
+            )
+            st.caption("Conditions (all must match):")
+            for cond_idx, cond in enumerate(rule.conditions):
+                key_prefix = f"settings_rule_{rule_idx}_cond_{cond_idx}"
+                if isinstance(cond, DeadlineWithinDaysCondition):
+                    st.number_input(
+                        "Deadline within days",
+                        min_value=0,
+                        max_value=DEADLINE_NEAR_DAYS_MAX,
+                        value=cond.days,
+                        step=1,
+                        key=key_prefix + "_days",
+                    )
+                elif isinstance(cond, LatestCheckInTypeIsCondition):
+                    options = [
+                        CheckInType.ON_TRACK.value,
+                        CheckInType.DELAYED.value,
+                    ]
+                    try:
+                        index = options.index(cond.check_in_type.value)
+                    except ValueError:
+                        index = 0
+                        st.warning(
+                            "A saved rule uses an unsupported check-in type. "
+                            "Falling back to a default value.",
+                            icon="⚠️",
+                        )
+                    st.selectbox(
+                        "Latest check-in type",
+                        options=options,
+                        index=index,
+                        key=key_prefix + "_check_in_type",
+                    )
+                elif isinstance(cond, NextCheckDueCondition):
+                    st.checkbox(
+                        "Include items with missing next check date",
+                        value=cond.include_missing_next_check,
+                        key=key_prefix + "_include_missing",
+                    )
+        edited_rules.append((rule_idx, enabled, priority))
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Save changes", key="settings_rulebook_save"):
+            try:
+                edited_by_idx = {
+                    rule_idx: (enabled, priority) for rule_idx, enabled, priority in edited_rules
+                }
+                new_rules_list: list[RuleDefinition] = []
+                for rule_idx, rule in enumerate(settings.rules):
+                    enabled, priority = edited_by_idx[rule_idx]
+                    new_rule = _collect_edited_rule(rule, rule_idx, enabled, priority)
+                    new_rules_list.append(new_rule)
+                new_settings = RulebookSettings(
+                    version=settings.version,
+                    rules=tuple(new_rules_list),
+                    first_match_wins=settings.first_match_wins,
+                    open_items_fallback_section=settings.open_items_fallback_section,
+                    concluded_section=settings.concluded_section,
+                )
+                save_rulebook_settings(new_settings)
+                st.success("Rulebook saved. The Now page will use this from the next refresh.")
+            except (ValueError, KeyError, TypeError) as exc:
+                st.error(f"Invalid configuration: {exc}")
+
+    with col2:
+        if st.button("Reset to defaults", key="settings_rulebook_reset"):
+            reset_rulebook_settings()
+            _clear_rulebook_widget_state()
+            st.success(
+                "Rulebook reset to built-in defaults. "
+                "The Now page will use this from the next refresh."
+            )
+            st.rerun()
 
 
 def _render_now_settings_section() -> None:

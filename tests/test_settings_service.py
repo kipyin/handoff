@@ -10,6 +10,7 @@ from sqlmodel import select
 
 from handoff.models import CheckInType, Handoff, Project
 from handoff.rulebook import (
+    DEFAULT_ACTION_RULE_ID,
     DEFAULT_RISK_RULE_ID,
     BuiltInSection,
     DeadlineWithinDaysCondition,
@@ -17,6 +18,7 @@ from handoff.rulebook import (
     RulebookSettings,
     RuleDefinition,
     build_default_rulebook_settings,
+    evaluate_open_handoff,
 )
 from handoff.services import settings_service
 
@@ -340,3 +342,46 @@ def test_reset_rulebook_settings_uses_deadline_near_days(
 
     loaded = settings_service.get_rulebook_settings()
     assert _default_risk_deadline_days(loaded) == 7
+
+
+def test_saved_user_edited_rulebook_evaluates_correctly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """User-edited rulebook persists and produces correct evaluation."""
+    from datetime import date
+
+    _patch_settings_path(monkeypatch, tmp_path)
+    defaults = build_default_rulebook_settings(deadline_near_days=1)
+    risk_rule, action_rule = defaults.rules
+    disabled_risk = RuleDefinition(
+        rule_id=risk_rule.rule_id,
+        name=risk_rule.name,
+        section_id=risk_rule.section_id,
+        priority=risk_rule.priority,
+        enabled=False,
+        match_reason=risk_rule.match_reason,
+        conditions=risk_rule.conditions,
+    )
+    edited = RulebookSettings(
+        version=defaults.version,
+        rules=(disabled_risk, action_rule),
+        first_match_wins=defaults.first_match_wins,
+        open_items_fallback_section=defaults.open_items_fallback_section,
+        concluded_section=defaults.concluded_section,
+    )
+    settings_service.save_rulebook_settings(edited)
+
+    loaded = settings_service.get_rulebook_settings()
+    assert loaded.rules[0].enabled is False
+
+    handoff = Handoff(
+        project_id=1,
+        need_back="Next check due",
+        next_check=date(2026, 3, 9),
+        deadline=date(2026, 3, 20),
+    )
+
+    result = evaluate_open_handoff(handoff, settings=loaded, today=date(2026, 3, 9))
+
+    assert result.section_id == BuiltInSection.ACTION_REQUIRED.value
+    assert result.matched_rule_id == DEFAULT_ACTION_RULE_ID
