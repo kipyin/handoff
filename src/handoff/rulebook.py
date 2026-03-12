@@ -418,11 +418,11 @@ DEFAULT_RULEBOOK_SETTINGS = build_default_rulebook_settings()
 
 
 __all__ = [
-    "BuiltInSection",
     "DEFAULT_ACTION_RULE_ID",
     "DEFAULT_RISK_RULE_ID",
     "DEFAULT_RULEBOOK_SETTINGS",
     "DEFAULT_RULEBOOK_VERSION",
+    "BuiltInSection",
     "DeadlineWithinDaysCondition",
     "LatestCheckInTypeIsCondition",
     "NextCheckDueCondition",

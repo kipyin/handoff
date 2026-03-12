@@ -183,7 +183,7 @@ def _install_deps_into_embedded() -> None:
         str(site_packages),
         "--link-mode=copy",
         *reqs,
-    ]  # noqa: E501
+    ]
     subprocess.run(cmd, check=True)
 
 
@@ -287,7 +287,7 @@ def _obfuscate_app_code_with_pyarmor(*, dry_run: bool = False) -> None:
     print("Obfuscating application code with PyArmor...")
     try:
         _run_pyarmor_gen(pyarmor_cmd, cwd=SRC_PLAIN_DIR)
-    except subprocess.CalledProcessError as exc:  # noqa: TRY002
+    except subprocess.CalledProcessError as exc:
         if _is_pyarmor_out_of_license(exc):
             raise RuntimeError(
                 "PyArmor reported 'out of license'. All source modules must stay under "
@@ -479,7 +479,7 @@ def _make_tar_gz(name: str, version: str) -> Path:
                 rel_path = path.relative_to(APP_BUILD_DIR)
                 arcname = str(Path(tar_root) / rel_path)
                 info = tf.gettarinfo(str(path), arcname=arcname)
-                if path.name == "handoff.sh" or path.suffix == "" and "bin" in path.parts:
+                if path.name == "handoff.sh" or (path.suffix == "" and "bin" in path.parts):
                     info.mode = 0o755
                 with open(path, "rb") as fobj:
                     tf.addfile(info, fobj)

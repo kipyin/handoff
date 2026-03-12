@@ -61,9 +61,9 @@ def render_system_settings_page() -> None:
 
 
 __all__ = [
-    "setup",
-    "render_projects_page",
-    "render_dashboard_page",
     "render_about_page",
+    "render_dashboard_page",
+    "render_projects_page",
     "render_system_settings_page",
+    "setup",
 ]

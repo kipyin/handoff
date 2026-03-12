@@ -82,8 +82,9 @@ def _apply_handoff_filters(
     stmt,
     *,
     project_ids: list[int] | None,
-    pitchman_names: list[str] | None,
-    search_text: str | None,
+    pitchman_name: str | None = None,
+    pitchman_names: list[str] | None = None,
+    search_text: str | None = None,
     next_check_min: date | None = None,
     next_check_max: date | None = None,
     deadline_min: date | None = None,
@@ -92,6 +93,9 @@ def _apply_handoff_filters(
     """Apply reusable handoff filters used across section queries."""
     if project_ids:
         stmt = stmt.where(Handoff.project_id.in_(project_ids))
+    pitchman_stripped = (pitchman_name or "").strip()
+    if pitchman_stripped:
+        stmt = stmt.where(Handoff.pitchman.ilike(f"%{pitchman_stripped}%"))
     if pitchman_names:
         canonical = [n.strip() for n in pitchman_names if n.strip()]
         if canonical:
@@ -206,21 +210,15 @@ def query_handoffs(
         if not include_concluded:
             stmt = stmt.where(_latest_check_in_is_open_predicate())
 
-        if project_ids:
-            stmt = stmt.where(Handoff.project_id.in_(project_ids))
-
-        pitchman_stripped = (pitchman_name or "").strip()
-        if pitchman_stripped:
-            stmt = stmt.where(Handoff.pitchman.ilike(f"%{pitchman_stripped}%"))
-        if pitchman_names:
-            canonical = [n.strip() for n in pitchman_names if n.strip()]
-            if canonical:
-                stmt = stmt.where(Handoff.pitchman.in_(canonical))
-
-        if start is not None:
-            stmt = stmt.where(Handoff.deadline.isnot(None)).where(Handoff.deadline >= start)
-        if end is not None:
-            stmt = stmt.where(Handoff.deadline.isnot(None)).where(Handoff.deadline <= end)
+        stmt = _apply_handoff_filters(
+            stmt,
+            project_ids=project_ids,
+            pitchman_name=pitchman_name,
+            pitchman_names=pitchman_names,
+            search_text=search_text,
+            deadline_min=start,
+            deadline_max=end,
+        )
 
         if concluded_start is not None or concluded_end is not None:
             stmt = stmt.where(close_date_expr.isnot(None))
@@ -229,22 +227,11 @@ def query_handoffs(
             if concluded_end is not None:
                 stmt = stmt.where(close_date_expr <= concluded_end)
 
-        normalized_search = (search_text or "").strip()
-        if normalized_search:
-            like_expr = f"%{normalized_search}%"
-            stmt = stmt.where(
-                or_(
-                    Handoff.need_back.ilike(like_expr),
-                    Handoff.notes.ilike(like_expr),
-                    Handoff.pitchman.ilike(like_expr),
-                    Handoff.project.has(Project.name.ilike(like_expr)),
-                    exists(_check_in_note_subquery(like_expr)),
-                )
-            )
-
         stmt = stmt.order_by(Handoff.deadline.asc().nulls_last(), Handoff.created_at.asc())
         handoffs = list(session.exec(stmt).unique().all())
 
+        pitchman_stripped = (pitchman_name or "").strip()
+        normalized_search = (search_text or "").strip()
         filters_applied = any(
             [
                 project_ids,

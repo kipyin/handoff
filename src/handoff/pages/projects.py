@@ -312,7 +312,7 @@ def render_projects_page() -> None:
         col1, col2, _ = st.columns([1, 1, 4])
         with col1:
             if st.button("Confirm and delete", key="projects_confirm_delete_btn", type="primary"):
-                success, errors, deleted, updated = _apply_project_changes(edited_df, projects)
+                _success, errors, deleted, _updated = _apply_project_changes(edited_df, projects)
                 if errors:
                     for msg in errors:
                         st.error(msg)

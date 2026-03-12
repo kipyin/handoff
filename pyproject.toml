@@ -34,7 +34,16 @@ target-version = "py313"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF", "N"]
+# N812: import alias (e.g. __version__ as APP_VERSION) is conventional
+# RUF001: emoji in UI strings (e.g. ➕ Add handoff) is intentional
+# RUF002: en dash in docstrings (e.g. Mon–Sun) is typographically fine
+ignore = [
+  "N812",
+  "RUF001",
+  "RUF002",
+]
+
 
 [tool.ruff.format]
 quote-style = "double"
