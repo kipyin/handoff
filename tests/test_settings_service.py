@@ -308,6 +308,35 @@ def test_get_rulebook_settings_missing_rulebook_uses_deadline_near_days(
     assert _default_risk_deadline_days(loaded) == 6
 
 
+def test_save_rulebook_settings_preserves_deadline_near_days_when_no_risk_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When rulebook has no Risk rule, deadline_near_days is left unchanged."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    settings_service.set_deadline_near_days(5)
+
+    custom = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="custom_risk",
+                name="Custom Risk",
+                section_id=BuiltInSection.RISK.value,
+                priority=5,
+                match_reason="Custom rule.",
+                conditions=(
+                    DeadlineWithinDaysCondition(days=2),
+                    LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),
+                ),
+            ),
+            build_default_rulebook_settings().rules[1],
+        ),
+    )
+    settings_service.save_rulebook_settings(custom)
+
+    assert settings_service.get_deadline_near_days() == 5
+
+
 def test_get_rulebook_settings_valid_returns_persisted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -341,17 +370,17 @@ def test_get_rulebook_settings_valid_returns_persisted(
 def test_save_rulebook_settings_persists_and_preserves_other_keys(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """save_rulebook_settings persists the rulebook and does not overwrite deadline_near_days."""
+    """save_rulebook_settings persists the rulebook; Risk rule edits update deadline_near_days."""
     _patch_settings_path(monkeypatch, tmp_path)
     settings_service.set_deadline_near_days(5)
 
     custom = build_default_rulebook_settings(deadline_near_days=3)
     settings_service.save_rulebook_settings(custom)
 
-    assert settings_service.get_deadline_near_days() == 5
+    assert settings_service.get_deadline_near_days() == 3
     loaded = settings_service.get_rulebook_settings()
     assert loaded.version == custom.version
-    assert _default_risk_deadline_days(loaded) == 5
+    assert _default_risk_deadline_days(loaded) == 3
     assert len(loaded.rules) == len(build_default_rulebook_settings().rules)
 
     raw = (tmp_path / "handoff_settings.json").read_text(encoding="utf-8")
@@ -362,13 +391,14 @@ def test_save_rulebook_settings_persists_and_preserves_other_keys(
 def test_save_rulebook_settings_syncs_risk_deadline_in_persisted_payload(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Saving rulebook should persist Risk deadline synced to deadline_near_days."""
+    """Saving rulebook with Risk rule updates deadline_near_days; both persist."""
     _patch_settings_path(monkeypatch, tmp_path)
     settings_service.set_deadline_near_days(6)
 
     stale = build_default_rulebook_settings(deadline_near_days=1)
     settings_service.save_rulebook_settings(stale)
 
+    assert settings_service.get_deadline_near_days() == 1
     payload = json.loads((tmp_path / "handoff_settings.json").read_text(encoding="utf-8"))
     rules_payload = payload["rulebook"]["rules"]
     risk_rule_payload = next(
@@ -379,7 +409,7 @@ def test_save_rulebook_settings_syncs_risk_deadline_in_persisted_payload(
         for condition in risk_rule_payload["conditions"]
         if condition["condition_type"] == "deadline_within_days"
     )
-    assert deadline_condition_payload["days"] == 6
+    assert deadline_condition_payload["days"] == 1
 
 
 def test_reset_rulebook_settings_saves_defaults(
@@ -420,7 +450,26 @@ def test_reset_rulebook_settings_uses_deadline_near_days(
     _patch_settings_path(monkeypatch, tmp_path)
     settings_service.set_deadline_near_days(7)
 
-    custom = build_default_rulebook_settings(deadline_near_days=1)
+    custom = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="custom_risk",
+                name="Custom Risk",
+                section_id=BuiltInSection.RISK.value,
+                priority=5,
+                match_reason="Custom.",
+                conditions=(
+                    DeadlineWithinDaysCondition(days=1),
+                    LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),
+                ),
+            ),
+            build_default_rulebook_settings().rules[1],
+        ),
+        first_match_wins=True,
+        open_items_fallback_section="upcoming",
+        concluded_section="concluded",
+    )
     settings_service.save_rulebook_settings(custom)
 
     settings_service.reset_rulebook_settings()

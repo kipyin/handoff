@@ -78,19 +78,34 @@ def set_deadline_near_days(value: int) -> None:
     _save_settings(settings)
 
 
-def _sync_risk_rule_deadline(settings: RulebookSettings) -> RulebookSettings:
-    """Synchronize the Risk rule's deadline condition with the global setting.
+def _risk_rule_deadline_days(settings: RulebookSettings) -> int | None:
+    """Extract the Risk rule's deadline-within-days value if present."""
+    for rule in settings.rules:
+        if rule.rule_id != DEFAULT_RISK_RULE_ID:
+            continue
+        for cond in rule.conditions:
+            if isinstance(cond, DeadlineWithinDaysCondition):
+                return cond.days
+        break
+    return None
+
+
+def _sync_risk_rule_deadline(
+    settings: RulebookSettings, deadline_near_days: int
+) -> RulebookSettings:
+    """Synchronize the Risk rule's deadline condition with the given value.
 
     Updates the built-in Risk rule's deadline-within-days condition to match
-    the current `deadline_near_days` setting, preserving all other rules unchanged.
+    deadline_near_days, preserving all other rules unchanged.
 
     Args:
         settings: The rulebook settings to synchronize.
+        deadline_near_days: The value to use for the Risk rule's deadline condition.
 
     Returns:
         A new RulebookSettings with the Risk rule's deadline condition updated.
     """
-    deadline_near = _deadline_near_days_from_dict(_load_settings())
+    deadline_near = deadline_near_days
     new_rules: list[RuleDefinition] = []
     for rule in settings.rules:
         if rule.rule_id != DEFAULT_RISK_RULE_ID:
@@ -135,15 +150,24 @@ def get_rulebook_settings() -> RulebookSettings:
         parsed = RulebookSettings.from_dict(rulebook_payload)
         if not parsed.rules:
             return build_default_rulebook_settings(deadline_near_days=deadline_near)
-        return _sync_risk_rule_deadline(parsed)
+        return _sync_risk_rule_deadline(parsed, deadline_near)
     except (ValueError, KeyError, TypeError):
         return build_default_rulebook_settings(deadline_near_days=deadline_near)
 
 
 def save_rulebook_settings(rulebook_settings: RulebookSettings) -> None:
-    """Persist the global rulebook to settings JSON. Preserves other settings keys."""
-    synced = _sync_risk_rule_deadline(rulebook_settings)
+    """Persist the global rulebook to settings JSON. Preserves other settings keys.
+
+    When the built-in Risk rule has a deadline-within-days condition, its value
+    is used to update the global deadline_near_days setting so user edits persist.
+    """
     data = _load_settings()
+    risk_days = _risk_rule_deadline_days(rulebook_settings)
+    if risk_days is not None:
+        n = max(DEADLINE_NEAR_DAYS_MIN, min(DEADLINE_NEAR_DAYS_MAX, int(risk_days)))
+        data["deadline_near_days"] = n
+    deadline_near = _deadline_near_days_from_dict(data)
+    synced = _sync_risk_rule_deadline(rulebook_settings, deadline_near)
     data[RULEBOOK_SETTINGS_KEY] = synced.to_dict()
     _save_settings(data)
 
