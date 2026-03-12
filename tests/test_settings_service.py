@@ -337,6 +337,35 @@ def test_save_rulebook_settings_preserves_deadline_near_days_when_no_risk_rule(
     assert settings_service.get_deadline_near_days() == 5
 
 
+def test_save_rulebook_settings_preserves_deadline_when_risk_rule_has_no_deadline_condition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Risk rule without deadline condition must not overwrite deadline_near_days."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    settings_service.set_deadline_near_days(5)
+
+    defaults = build_default_rulebook_settings(deadline_near_days=2)
+    risk_without_deadline = RuleDefinition(
+        rule_id=DEFAULT_RISK_RULE_ID,
+        name=defaults.rules[0].name,
+        section_id=defaults.rules[0].section_id,
+        priority=defaults.rules[0].priority,
+        enabled=defaults.rules[0].enabled,
+        match_reason=defaults.rules[0].match_reason,
+        conditions=(LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),),
+    )
+    edited = RulebookSettings(
+        version=defaults.version,
+        rules=(risk_without_deadline, defaults.rules[1]),
+        first_match_wins=defaults.first_match_wins,
+        open_items_fallback_section=defaults.open_items_fallback_section,
+        concluded_section=defaults.concluded_section,
+    )
+    settings_service.save_rulebook_settings(edited)
+
+    assert settings_service.get_deadline_near_days() == 5
+
+
 def test_get_rulebook_settings_valid_returns_persisted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
