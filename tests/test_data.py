@@ -1,5 +1,6 @@
 """Tests for data access helpers."""
 
+import dataclasses
 import importlib
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -511,15 +512,7 @@ def test_query_handoffs_typed_query_filters_and_archive_toggle(session, monkeypa
     default_results = data.query_handoffs(query=base_query)
     assert {h.id for h in default_results} == {active_match.id}
 
-    with_archived = HandoffQuery(
-        search_text=base_query.search_text,
-        project_ids=base_query.project_ids,
-        pitchman_names=base_query.pitchman_names,
-        deadline_start=base_query.deadline_start,
-        deadline_end=base_query.deadline_end,
-        include_concluded=base_query.include_concluded,
-        include_archived_projects=True,
-    )
+    with_archived = dataclasses.replace(base_query, include_archived_projects=True)
     archived_results = data.query_handoffs(query=with_archived)
     assert {h.id for h in archived_results} == {active_match.id, archived_match.id}
 
