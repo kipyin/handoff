@@ -692,10 +692,12 @@ def render_now_page() -> None:
     if flash_error:
         st.error(flash_error)
 
-    include_archived_projects = st.toggle(
-        "Include archived projects",
-        value=False,
-        key="now_include_archived_projects",
+    include_archived_projects = bool(
+        st.toggle(
+            "Include archived projects",
+            value=False,
+            key="now_include_archived_projects",
+        )
     )
     with time_action("now_render"):
         projects = list_projects(include_archived=include_archived_projects)
