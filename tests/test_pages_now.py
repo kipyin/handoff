@@ -170,6 +170,55 @@ def test_render_now_page_archived_only_projects_shows_toggle_hint(
     assert "Include archived projects" in info_msg
 
 
+def test_render_now_page_include_archived_falls_back_to_checkbox(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When st.toggle is unavailable, Now page falls back to checkbox."""
+    st_mock = _build_streamlit_mock()
+    st_mock.toggle = None
+    st_mock.checkbox.return_value = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    list_project_calls: list[bool] = []
+
+    def _list_projects(**kwargs):
+        include_archived = kwargs["include_archived"]
+        list_project_calls.append(include_archived)
+        return []
+
+    monkeypatch.setattr("handoff.pages.now.list_projects", _list_projects)
+
+    render_now_page()
+
+    st_mock.checkbox.assert_called_once_with(
+        "Include archived projects",
+        value=False,
+        key="now_include_archived_projects",
+    )
+    assert list_project_calls == [True]
+
+
+def test_render_now_page_include_archived_toggle_value_is_coerced_to_bool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Now page coerces include-archived widget values to bool."""
+    st_mock = _build_streamlit_mock()
+    st_mock.toggle.return_value = "yes"
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    list_project_calls: list[bool] = []
+
+    def _list_projects(**kwargs):
+        include_archived = kwargs["include_archived"]
+        list_project_calls.append(include_archived)
+        return []
+
+    monkeypatch.setattr("handoff.pages.now.list_projects", _list_projects)
+
+    render_now_page()
+
+    assert len(list_project_calls) == 1
+    assert list_project_calls[0] is True
+
+
 def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     """Now page calls get_now_snapshot with filters from the UI."""
     st_mock = _build_streamlit_mock()
@@ -262,6 +311,44 @@ def test_render_now_page_add_button_fallback_when_shortcut_unsupported(
     # At least one call succeeded (fallback); it must not have shortcut
     fallback_calls = [c for c in add_btn_calls if "shortcut" not in c.kwargs]
     assert len(fallback_calls) >= 1
+
+
+def test_render_now_page_expanded_add_button_fallback_when_shortcut_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expanded add button retries without shortcut if Streamlit rejects it."""
+    st_mock = _build_streamlit_mock()
+    st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
+
+    def button_raising_shortcut(*args, **kwargs):
+        if "shortcut" in kwargs:
+            raise TypeError("got an unexpected keyword argument 'shortcut'")
+        return False
+
+    st_mock.button.side_effect = button_raising_shortcut
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(),
+    )
+    add_form_called: list[bool] = []
+    monkeypatch.setattr(
+        "handoff.pages.now._render_add_form", lambda *args, **kwargs: add_form_called.append(True)
+    )
+
+    render_now_page()
+
+    collapse_calls = [
+        c for c in st_mock.button.call_args_list if c.kwargs.get("key") == "now_add_handoff_collapse"
+    ]
+    assert len(collapse_calls) >= 1
+    assert any("shortcut" not in call.kwargs for call in collapse_calls)
+    assert add_form_called == [True]
 
 
 def test_expand_add_form_sets_session_state(
