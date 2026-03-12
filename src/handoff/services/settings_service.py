@@ -6,8 +6,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
-
 from handoff.data import get_export_payload as _get_export_payload
 from handoff.data import import_payload as _import_payload
 from handoff.rulebook import (
@@ -192,10 +190,6 @@ def import_payload(payload: dict[str, Any]) -> None:
 
 def log_application_action(action: str, **details: Any) -> None:
     """Log an application-level action for audit (export, import, backup, update)."""
-    from handoff.db import get_db_path
+    import handoff.logging as _logging
 
-    db_path = str(get_db_path())
-    parts = [f"action={action}", f"db_path={db_path}"]
-    for k, v in details.items():
-        parts.append(f"{k}={v}")
-    logger.info("application " + " ".join(parts))
+    _logging.log_application_action(action, **details)

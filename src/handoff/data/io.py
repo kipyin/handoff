@@ -68,10 +68,14 @@ def import_payload(data_payload: dict[str, Any]) -> None:
             session.add(check_in)
 
         session.commit()
+        try:
+            db_path_str = str(get_db_path())
+        except Exception:
+            db_path_str = "(unknown)"
         logger.info(
             "data_import action=complete db_path={db_path} project_count={project_count} "
             "handoff_count={handoff_count} check_in_count={check_in_count}",
-            db_path=str(get_db_path()),
+            db_path=db_path_str,
             project_count=len(payload.projects),
             handoff_count=len(payload.handoffs),
             check_in_count=len(payload.check_ins),

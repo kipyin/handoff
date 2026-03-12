@@ -30,6 +30,14 @@ from handoff.rulebook import NextCheckDueCondition, RulebookSettings, RuleDefini
 from handoff.services.settings_service import DEADLINE_NEAR_DAYS_MAX
 
 
+def _mock_rulebook_preview_counts(monkeypatch, counts: dict[str, int] | None = None) -> None:
+    """Mock get_rulebook_section_preview_counts so _render_rulebook_section avoids DB."""
+    monkeypatch.setattr(
+        "handoff.pages.system_settings.get_rulebook_section_preview_counts",
+        lambda s: counts or {},
+    )
+
+
 def _patch_streamlit(monkeypatch, **st_overrides) -> MagicMock:
     st_mock = MagicMock()
     st_mock.file_uploader.return_value = None
@@ -115,7 +123,7 @@ class TestRenderRulebookSection:
         assert updated.conditions[2].include_missing_next_check is True
 
     def test_preview_renders_rules_and_caption(self, monkeypatch) -> None:
-        """Rulebook section displays active rules and caption."""
+        """Rulebook section displays active rules, caption, and preview counts."""
         from handoff.rulebook import build_default_rulebook_settings
 
         st_mock = _patch_streamlit(monkeypatch)
@@ -124,6 +132,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings.get_rulebook_settings",
             build_default_rulebook_settings,
         )
+        _mock_rulebook_preview_counts(monkeypatch, {"risk": 2, "action_required": 1, "upcoming": 3})
 
         _render_rulebook_section()
 
@@ -131,8 +140,10 @@ class TestRenderRulebookSection:
         expander_calls = [str(c) for c in st_mock.expander.call_args_list]
         assert any("Risk" in c for c in expander_calls)
         assert any("Action" in c for c in expander_calls)
+        assert any("· 2" in c for c in expander_calls)
         caption_calls = [str(c) for c in st_mock.caption.call_args_list]
         assert any("Open-item" in c or "First matching" in c for c in caption_calls)
+        assert any("3 item" in c for c in caption_calls)
 
     def test_reset_button_calls_reset_and_shows_success(self, monkeypatch) -> None:
         """When Reset button is clicked, reset_rulebook_settings is called and success shown."""
@@ -155,6 +166,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings.reset_rulebook_settings",
             mock_reset,
         )
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -200,6 +212,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings.save_rulebook_settings",
             mock_save,
         )
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -236,6 +249,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings.get_rulebook_settings",
             build_default_rulebook_settings,
         )
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -268,6 +282,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings.reset_rulebook_settings",
             mock_reset,
         )
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -301,6 +316,7 @@ class TestRenderRulebookSection:
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.button.side_effect = lambda label, key=None: False
         monkeypatch.setattr("handoff.pages.system_settings.get_rulebook_settings", lambda: settings)
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -339,14 +355,15 @@ class TestRenderRulebookSection:
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.button.side_effect = lambda label, key=None: False
         monkeypatch.setattr("handoff.pages.system_settings.get_rulebook_settings", lambda: settings)
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
         expander_calls = [call.args[0] for call in st_mock.expander.call_args_list]
         assert expander_calls[:-1] == [
-            "**First Configured** — Risk",
-            "**Second Configured** — Action Required",
-            "**Lower Priority** — Upcoming",
+            "**First Configured** — Risk · 0",
+            "**Second Configured** — Action Required · 0",
+            "**Lower Priority** — Upcoming · 0",
         ]
         assert expander_calls[-1] == "Add custom section"
 
@@ -384,6 +401,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings.save_rulebook_settings",
             mock_save,
         )
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -420,6 +438,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings.save_rulebook_settings",
             mock_save,
         )
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -472,6 +491,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings.save_rulebook_settings",
             mock_save,
         )
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -502,6 +522,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings._add_custom_section",
             lambda **kwargs: (_ for _ in ()).throw(ValueError("bad config")),
         )
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -556,6 +577,7 @@ class TestRenderRulebookSection:
             "handoff.pages.system_settings.save_rulebook_settings",
             lambda value: saved.append(value),
         )
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 
@@ -588,6 +610,7 @@ class TestRenderRulebookSection:
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.button.side_effect = lambda label, key=None: False
         monkeypatch.setattr("handoff.pages.system_settings.get_rulebook_settings", lambda: settings)
+        _mock_rulebook_preview_counts(monkeypatch)
 
         _render_rulebook_section()
 

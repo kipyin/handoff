@@ -17,17 +17,10 @@ from .paths import get_app_root
 
 
 def _log_app_action(action: str, **details: Any) -> None:
-    """Log an application-level action (backup, update, restore) with db path."""
-    try:
-        from handoff.db import get_db_path
+    """Log an application-level action (backup, update, restore). Delegates to handoff.logging."""
+    import handoff.logging as _logging
 
-        db_path = str(get_db_path())
-    except Exception:
-        db_path = "(unknown)"
-    parts = [f"action={action}", f"db_path={db_path}"]
-    for k, v in details.items():
-        parts.append(f"{k}={v}")
-    logger.info("application " + " ".join(parts))
+    _logging.log_application_action(action, **details)
 
 
 ALLOWED_PREFIXES = ("app.py", "src/", "README.md", "RELEASE_NOTES.md")
