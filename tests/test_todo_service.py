@@ -743,9 +743,15 @@ def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
     assert list_pitchmen_calls == [{"include_archived_projects": True}]
 
 
-def test_service_get_now_snapshot_drops_custom_sections_sorts_and_limits(monkeypatch) -> None:
-    """Snapshot keeps built-ins only and applies canonical section sort/limit rules."""
-    from handoff.rulebook import BuiltInSection, RuleMatchResult
+def test_service_get_now_snapshot_includes_custom_sections_sorts_and_limits(monkeypatch) -> None:
+    """Snapshot includes custom sections and applies canonical section sort/limit rules."""
+    from handoff.rulebook import (
+        BuiltInSection,
+        NextCheckDueCondition,
+        RulebookSettings,
+        RuleDefinition,
+        RuleMatchResult,
+    )
 
     parsed = SimpleNamespace(
         text_query="",
@@ -756,7 +762,20 @@ def test_service_get_now_snapshot_drops_custom_sections_sorts_and_limits(monkeyp
     )
     monkeypatch.setattr("handoff.services.handoff_service.parse_search_query", lambda _: parsed)
 
-    rulebook_settings = object()
+    rulebook_settings = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="custom_section_rule",
+                name="Custom",
+                section_id="custom.section",
+                priority=15,
+                enabled=True,
+                conditions=(NextCheckDueCondition(),),
+            ),
+        ),
+        open_items_fallback_section=BuiltInSection.UPCOMING.value,
+    )
     monkeypatch.setattr(
         "handoff.services.handoff_service.get_rulebook_settings",
         lambda: rulebook_settings,
@@ -852,18 +871,15 @@ def test_service_get_now_snapshot_drops_custom_sections_sorts_and_limits(monkeyp
 
     assert [h.need_back for h in snapshot.risk] == ["risk-earlier", "risk-later"]
     assert [h.need_back for h in snapshot.action] == ["action-earlier", "action-later"]
+    assert len(snapshot.custom_sections) == 1
+    assert snapshot.custom_sections[0][0] == "custom.section"
+    assert [h.need_back for h in snapshot.custom_sections[0][1]] == ["custom-item"]
     upcoming_names = [h.need_back for h in snapshot.upcoming]
     assert len(upcoming_names) == 20
     assert upcoming_names[0] == "upcoming-00"
     assert upcoming_names[-1] == "upcoming-19"
     assert "upcoming-20" not in upcoming_names
     assert "upcoming-21" not in upcoming_names
-    all_visible_names = {
-        *[h.need_back for h in snapshot.risk],
-        *[h.need_back for h in snapshot.action],
-        *[h.need_back for h in snapshot.upcoming],
-    }
-    assert "custom-item" not in all_visible_names
 
 
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:

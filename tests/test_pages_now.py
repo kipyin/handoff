@@ -31,6 +31,7 @@ def _make_fake_snapshot(
     *,
     risk: list | None = None,
     action: list | None = None,
+    custom_sections: list | None = None,
     upcoming: list | None = None,
     concluded: list | None = None,
     projects: list | None = None,
@@ -42,6 +43,7 @@ def _make_fake_snapshot(
     return NowSnapshot(
         risk=risk or [],
         action=action or [],
+        custom_sections=custom_sections or [],
         upcoming=upcoming or [],
         concluded=concluded or [],
         projects=projects or [mock_project],
@@ -687,6 +689,40 @@ def test_render_now_page_section_explanations_rendered_for_open_sections(
     assert any("Deadline is near and latest check-in is delayed" in c for c in caption_calls)
     assert any("Next check date is due today" in c for c in caption_calls)
     assert any("No risk or action rules matched" in c for c in caption_calls)
+
+
+def test_render_now_page_custom_sections_rendered_between_action_and_upcoming(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Custom sections from snapshot are rendered between Action and Upcoming."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    custom_handoff = _make_fake_handoff(
+        handoff_id=20,
+        need_back="Blocked item",
+        next_check=date(2026, 3, 20),
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(
+            risk=[],
+            action=[],
+            custom_sections=[("blocked", [custom_handoff])],
+            upcoming=[],
+            section_explanations={20: "Latest check-in is delayed."},
+        ),
+    )
+
+    render_now_page()
+
+    markdown_calls = [str(c) for c in st_mock.markdown.call_args_list]
+    assert any("Blocked" in c for c in markdown_calls)
+    assert any("Blocked item" in c or "blocked" in c.lower() for c in markdown_calls)
+    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
+    assert any("Latest check-in is delayed" in c for c in caption_calls)
 
 
 def test_render_item_edit_save_validation_sets_flash_error(

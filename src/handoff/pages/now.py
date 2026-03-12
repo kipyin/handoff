@@ -799,6 +799,27 @@ def render_now_page() -> None:
                 ),
             )
 
+    # --- Custom sections ---
+    for section_id, handoffs in snapshot.custom_sections:
+        section_label = section_id.replace("_", " ").title()
+        st.markdown("---")
+        st.markdown(f"**{section_label}**")
+        if not handoffs:
+            st.caption(f"No handoffs in {section_label}.")
+        else:
+            for handoff in handoffs:
+                _render_item(
+                    handoff,
+                    f"now_custom_{section_id}",
+                    project_by_name=project_by_name,
+                    show_check_in_controls=True,
+                    match_explanation=(
+                        snapshot.section_explanations.get(handoff.id, "") or None
+                        if handoff.id is not None
+                        else None
+                    ),
+                )
+
     # --- Upcoming section ---
     st.markdown("---")
     st.markdown("**Upcoming**")

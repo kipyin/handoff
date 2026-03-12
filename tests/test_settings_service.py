@@ -385,3 +385,45 @@ def test_saved_user_edited_rulebook_evaluates_correctly(
 
     assert result.section_id == BuiltInSection.ACTION_REQUIRED.value
     assert result.matched_rule_id == DEFAULT_ACTION_RULE_ID
+
+
+def test_custom_section_rule_matches_and_persists(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Custom section rules match handoffs and persist across load/save."""
+    from handoff.rulebook import (
+        LatestCheckInTypeIsCondition,
+        get_open_section_display_order,
+        is_built_in_rule,
+    )
+
+    _patch_settings_path(monkeypatch, tmp_path)
+
+    custom_rule = RuleDefinition(
+        rule_id="custom_blocked",
+        name="Blocked",
+        section_id="blocked",
+        priority=15,
+        enabled=True,
+        match_reason="Latest check-in is delayed.",
+        conditions=(LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),),
+    )
+    defaults = build_default_rulebook_settings(deadline_near_days=1)
+    settings_with_custom = RulebookSettings(
+        version=defaults.version,
+        rules=(*defaults.rules, custom_rule),
+        first_match_wins=defaults.first_match_wins,
+        open_items_fallback_section=defaults.open_items_fallback_section,
+        concluded_section=defaults.concluded_section,
+    )
+    settings_service.save_rulebook_settings(settings_with_custom)
+
+    loaded = settings_service.get_rulebook_settings()
+    assert len(loaded.rules) == 3
+    assert not is_built_in_rule(loaded.rules[2])
+    assert loaded.rules[2].section_id == "blocked"
+
+    section_order = get_open_section_display_order(loaded)
+    assert "blocked" in section_order
+    assert section_order.index("risk") < section_order.index("blocked")
+    assert section_order.index("blocked") < section_order.index("action_required")

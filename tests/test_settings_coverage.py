@@ -25,6 +25,7 @@ def _patch_streamlit(monkeypatch, **st_overrides) -> MagicMock:
     st_mock.file_uploader.return_value = None
     st_mock.checkbox.return_value = False
     st_mock.button.return_value = False
+    st_mock.form_submit_button.return_value = False
     st_mock.download_button.return_value = None
     st_mock.session_state = {}
     st_mock.columns.return_value = [MagicMock(), MagicMock()]
@@ -293,11 +294,93 @@ class TestRenderRulebookSection:
         _render_rulebook_section()
 
         expander_calls = [call.args[0] for call in st_mock.expander.call_args_list]
-        assert expander_calls == [
+        assert expander_calls[:-1] == [
             "**First Configured** — Risk",
             "**Second Configured** — Action Required",
             "**Lower Priority** — Upcoming",
         ]
+        assert expander_calls[-1] == "Add custom section"
+
+    def test_remove_custom_section_persists_and_reruns(self, monkeypatch) -> None:
+        """Remove button for custom rule persists changes and reruns."""
+        from handoff.rulebook import build_default_rulebook_settings
+
+        defaults = build_default_rulebook_settings()
+        custom_rule = RuleDefinition(
+            rule_id="custom_blocked",
+            name="Blocked",
+            section_id="blocked",
+            priority=15,
+            conditions=(NextCheckDueCondition(),),
+        )
+        settings = RulebookSettings(
+            version=defaults.version,
+            rules=(*defaults.rules, custom_rule),
+            first_match_wins=defaults.first_match_wins,
+            open_items_fallback_section=defaults.open_items_fallback_section,
+            concluded_section=defaults.concluded_section,
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "settings_rule_2_remove"
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_rulebook_settings",
+            lambda: settings,
+        )
+        save_called = []
+
+        def mock_save(s) -> None:
+            save_called.append(s)
+
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.save_rulebook_settings",
+            mock_save,
+        )
+
+        _render_rulebook_section()
+
+        assert len(save_called) == 1
+        assert len(save_called[0].rules) == 2
+        assert not any(r.rule_id == "custom_blocked" for r in save_called[0].rules)
+        st_mock.rerun.assert_called()
+
+    def test_add_section_form_submit_persists_custom_rule(self, monkeypatch) -> None:
+        """Add section form submit creates and persists a custom rule."""
+        from handoff.rulebook import build_default_rulebook_settings
+
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.form_submit_button.side_effect = lambda label: label == "Add section"
+        text_input_values = ["Blocked", ""]
+
+        def _text_input(*a, **kw):
+            return text_input_values.pop(0) if text_input_values else ""
+
+        st_mock.text_input.side_effect = _text_input
+        st_mock.selectbox.side_effect = lambda *a, **kw: "latest_check_in_type_is"
+        st_mock.number_input.side_effect = lambda *a, **kw: 15
+        st_mock.checkbox.side_effect = lambda *a, **kw: False
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_rulebook_settings",
+            build_default_rulebook_settings,
+        )
+        save_called = []
+
+        def mock_save(s) -> None:
+            save_called.append(s)
+
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.save_rulebook_settings",
+            mock_save,
+        )
+
+        _render_rulebook_section()
+
+        assert len(save_called) == 1
+        rules = save_called[0].rules
+        assert len(rules) == 3
+        custom = rules[2]
+        assert custom.section_id == "blocked"
+        assert custom.name == "Blocked"
+        assert custom.priority == 15
 
 
 class TestRenderAboutSection:
