@@ -45,6 +45,30 @@ from handoff.services.settings_service import (
 from handoff.update_ui import render_update_panel
 from handoff.version import __version__ as APP_VERSION
 
+CSV_HANDOFF_COLUMNS = [
+    "id",
+    "project_id",
+    "need_back",
+    "pitchman",
+    "next_check",
+    "deadline",
+    "notes",
+    "created_at",
+]
+
+
+def _handoffs_csv_text(payload: dict[str, Any]) -> str:
+    """Return a CSV export for the current handoff payload shape."""
+    handoffs = payload.get("handoffs", [])
+    if not handoffs:
+        return ",".join(CSV_HANDOFF_COLUMNS) + "\n"
+
+    frame = pd.DataFrame(handoffs)
+    for column in CSV_HANDOFF_COLUMNS:
+        if column not in frame.columns:
+            frame[column] = None
+    return frame[CSV_HANDOFF_COLUMNS].to_csv(index=False)
+
 
 def _format_condition(condition: RuleCondition) -> str:
     """Return a human-readable description of a rule condition.
@@ -149,10 +173,21 @@ def _add_custom_section(
 def _collect_edited_rule(
     rule: RuleDefinition, rule_idx: int, edited_enabled: bool, edited_priority: int
 ) -> RuleDefinition:
-    """Build a RuleDefinition with the same identity but updated enabled, priority, conditions.
+    """Build a RuleDefinition with updated enabled, priority, and conditions from form state.
 
-    Conditions are collected from the current session state for widgets keyed by
-    rule_idx and cond_idx.
+    Reads the current session state for condition widgets identified by rule_idx
+    and condition index, then constructs a new RuleDefinition with the provided
+    enabled and priority values while preserving rule identity and match_reason.
+
+    Args:
+        rule: The original rule definition to update.
+        rule_idx: Index of the rule in the sorted rules list (for session key lookup).
+        edited_enabled: Whether the rule is enabled in the form.
+        edited_priority: Priority value from the form.
+
+    Returns:
+        A new RuleDefinition with updated enabled, priority, and conditions,
+        preserving the original rule_id, name, section_id, and match_reason.
     """
     new_conditions: list[RuleCondition] = []
     for cond_idx, cond in enumerate(rule.conditions):
@@ -181,7 +216,12 @@ def _collect_edited_rule(
 
 
 def _render_rulebook_section() -> None:
-    """Render editable rulebook form and reset-to-defaults."""
+    """Render an editable rulebook UI with save, reset, and conditions per rule.
+
+    Displays all rules in expandable sections sorted by priority, allowing users
+    to toggle enabled status, adjust priority, and edit condition parameters.
+    Provides Save and Reset buttons to persist or revert changes.
+    """
     flash = st.session_state.pop("settings_rulebook_flash", None)
     if flash:
         st.success(flash)
@@ -411,7 +451,7 @@ def _render_now_settings_section() -> None:
 
 
 def _render_data_export_section() -> None:
-    """Render JSON and CSV export controls for projects and todos."""
+    """Render JSON and CSV export controls for projects and handoffs."""
     st.markdown("### Data export")
     st.caption(
         "Download a snapshot of your data. Exports are read-only and do not modify the "
@@ -429,16 +469,10 @@ def _render_data_export_section() -> None:
         key="settings_download_json_backup",
     )
 
-    todos = payload.get("todos", [])
-    csv_text = (
-        pd.DataFrame(todos).to_csv(index=False)
-        if todos
-        else "id,project_id,name,status,deadline,helper,notes,created_at\n"
-    )
     st.download_button(
-        "Download CSV (todos)",
-        data=csv_text,
-        file_name="todo_todos.csv",
+        "Download CSV (handoffs)",
+        data=_handoffs_csv_text(payload),
+        file_name="handoff_handoffs.csv",
         mime="text/csv",
         key="settings_download_csv_backup",
     )
