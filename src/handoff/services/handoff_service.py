@@ -24,6 +24,7 @@ from handoff.models import CheckIn, CheckInType, Handoff, Project
 from handoff.page_models import HandoffQuery, NowSnapshot
 from handoff.rulebook import (
     BuiltInSection,
+    RulebookSettings,
     evaluate_open_handoff,
     get_open_section_display_order,
 )
@@ -56,6 +57,41 @@ def _sort_action_or_upcoming_handoffs(handoffs: list[Handoff]) -> list[Handoff]:
             h.created_at or datetime.max,
         ),
     )
+
+
+def get_rulebook_section_preview_counts(
+    settings: RulebookSettings | None = None,
+    *,
+    include_archived_projects: bool = False,
+) -> dict[str, int]:
+    """Return per-section counts for open handoffs under the given rulebook.
+
+    Uses the same evaluation semantics as the Now page: enabled rules only,
+    first-match-wins, fallback to Upcoming. Counts reflect the current
+    persisted handoffs evaluated against the rulebook.
+
+    Args:
+        settings: Rulebook to evaluate. Defaults to get_rulebook_settings().
+        include_archived_projects: When True, include handoffs from archived
+            projects. Defaults to False to match Now page behaviour.
+
+    Returns:
+        Mapping of section_id to count of open handoffs that would land there.
+    """
+    rulebook = settings or get_rulebook_settings()
+    open_handoffs = _query_open_handoffs_for_now(
+        project_ids=None,
+        pitchman_names=None,
+        search_text=None,
+        include_archived_projects=include_archived_projects,
+    )
+    today = date.today()
+    buckets: dict[str, int] = {}
+    for handoff in open_handoffs:
+        match_result = evaluate_open_handoff(handoff, settings=rulebook, today=today)
+        sid = match_result.section_id
+        buckets[sid] = buckets.get(sid, 0) + 1
+    return buckets
 
 
 def get_now_snapshot(
