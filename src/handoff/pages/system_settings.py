@@ -78,9 +78,15 @@ def _clear_rulebook_widget_state() -> None:
         del st.session_state[k]
 
 
+RESERVED_SECTION_ID = "upcoming"
+
+
 def _slugify_section_id(name: str) -> str:
     """Derive a section_id from a display name (lowercase, underscores for spaces)."""
-    return name.strip().lower().replace(" ", "_").replace("-", "_") or "custom_section"
+    slug = name.strip().lower().replace(" ", "_").replace("-", "_") or "custom_section"
+    if slug == RESERVED_SECTION_ID:
+        return f"custom_{slug}"
+    return slug
 
 
 def _next_unique_custom_rule_id(settings: RulebookSettings, section_id: str) -> str:
@@ -93,6 +99,51 @@ def _next_unique_custom_rule_id(settings: RulebookSettings, section_id: str) -> 
     while f"{base}_{idx}" in existing:
         idx += 1
     return f"{base}_{idx}"
+
+
+def _add_custom_section(
+    *,
+    settings: RulebookSettings,
+    name: str,
+    section_id: str,
+    add_condition_type: str,
+    add_condition_days: int,
+    add_condition_include_missing: bool,
+    add_priority: int,
+    add_match_reason: str,
+) -> None:
+    """Create and persist a new custom section rule. Sets flash and reruns on success."""
+    rule_id = _next_unique_custom_rule_id(settings, section_id)
+    if add_condition_type == "next_check_due":
+        conditions = (
+            NextCheckDueCondition(include_missing_next_check=add_condition_include_missing),
+        )
+    elif add_condition_type == "deadline_within_days":
+        conditions = (DeadlineWithinDaysCondition(days=add_condition_days),)
+    else:
+        conditions = (LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),)
+    new_rule = RuleDefinition(
+        rule_id=rule_id,
+        name=name,
+        section_id=section_id,
+        priority=add_priority,
+        enabled=True,
+        match_reason=add_match_reason,
+        conditions=conditions,
+    )
+    new_settings = RulebookSettings(
+        version=settings.version,
+        rules=(*settings.rules, new_rule),
+        first_match_wins=settings.first_match_wins,
+        open_items_fallback_section=settings.open_items_fallback_section,
+        concluded_section=settings.concluded_section,
+    )
+    save_rulebook_settings(new_settings)
+    _clear_rulebook_widget_state()
+    st.session_state["settings_rulebook_flash"] = (
+        "Custom section added. Refresh the Now page to see it."
+    )
+    st.rerun()
 
 
 def _collect_edited_rule(
@@ -131,6 +182,9 @@ def _collect_edited_rule(
 
 def _render_rulebook_section() -> None:
     """Render editable rulebook form and reset-to-defaults."""
+    flash = st.session_state.pop("settings_rulebook_flash", None)
+    if flash:
+        st.success(flash)
     st.markdown("### Open-item rules")
     settings = get_rulebook_settings()
     section_labels = sorted({rule.section_id.replace("_", " ").title() for rule in settings.rules})
@@ -252,6 +306,7 @@ def _render_rulebook_section() -> None:
             min_value=0,
             max_value=DEADLINE_NEAR_DAYS_MAX,
             value=7,
+            step=1,
             key="settings_add_condition_days",
         )
         add_condition_include_missing = st.checkbox(
@@ -264,6 +319,7 @@ def _render_rulebook_section() -> None:
             min_value=0,
             max_value=999,
             value=25,
+            step=1,
             key="settings_add_priority",
         )
         add_match_reason = st.text_input(
@@ -277,40 +333,26 @@ def _render_rulebook_section() -> None:
                 st.error("Section name is required.")
             else:
                 section_id = _slugify_section_id(name)
-                rule_id = _next_unique_custom_rule_id(settings, section_id)
-                if add_condition_type == "next_check_due":
-                    conditions = (
-                        NextCheckDueCondition(
-                            include_missing_next_check=add_condition_include_missing
-                        ),
+                existing_ids = {r.section_id for r in settings.rules}
+                if section_id in existing_ids:
+                    st.error(
+                        "A section with that name already exists. "
+                        "Use a different name or remove the existing section first."
                     )
-                elif add_condition_type == "deadline_within_days":
-                    conditions = (DeadlineWithinDaysCondition(days=add_condition_days),)
                 else:
-                    conditions = (LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),)
-                new_rule = RuleDefinition(
-                    rule_id=rule_id,
-                    name=name,
-                    section_id=section_id,
-                    priority=add_priority,
-                    enabled=True,
-                    match_reason=(add_match_reason or "").strip(),
-                    conditions=conditions,
-                )
-                new_settings = RulebookSettings(
-                    version=settings.version,
-                    rules=(*settings.rules, new_rule),
-                    first_match_wins=settings.first_match_wins,
-                    open_items_fallback_section=settings.open_items_fallback_section,
-                    concluded_section=settings.concluded_section,
-                )
-                try:
-                    save_rulebook_settings(new_settings)
-                    _clear_rulebook_widget_state()
-                    st.success("Custom section added. Refresh the Now page to see it.")
-                    st.rerun()
-                except ValueError as exc:
-                    st.error(f"Invalid configuration: {exc}")
+                    try:
+                        _add_custom_section(
+                            settings=settings,
+                            name=name,
+                            section_id=section_id,
+                            add_condition_type=add_condition_type,
+                            add_condition_days=int(add_condition_days),
+                            add_condition_include_missing=add_condition_include_missing,
+                            add_priority=int(add_priority),
+                            add_match_reason=(add_match_reason or "").strip(),
+                        )
+                    except ValueError as exc:
+                        st.error(f"Invalid configuration: {exc}")
 
     col1, col2 = st.columns(2)
     with col1:

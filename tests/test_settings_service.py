@@ -427,3 +427,23 @@ def test_custom_section_rule_matches_and_persists(
     assert "blocked" in section_order
     assert section_order.index("risk") < section_order.index("blocked")
     assert section_order.index("blocked") < section_order.index("action_required")
+
+
+def test_risk_rule_syncs_with_deadline_near_days_after_custom_section(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Changing deadline_near_days updates Risk rule when loading, even after custom sections."""
+    from handoff.rulebook import DEFAULT_RISK_RULE_ID, DeadlineWithinDaysCondition
+
+    _patch_settings_path(monkeypatch, tmp_path)
+
+    defaults = build_default_rulebook_settings(deadline_near_days=1)
+    settings_service.save_rulebook_settings(defaults)
+
+    settings_service.set_deadline_near_days(7)
+    loaded = settings_service.get_rulebook_settings()
+    risk_rule = next(r for r in loaded.rules if r.rule_id == DEFAULT_RISK_RULE_ID)
+    deadline_cond = next(
+        c for c in risk_rule.conditions if isinstance(c, DeadlineWithinDaysCondition)
+    )
+    assert deadline_cond.days == 7

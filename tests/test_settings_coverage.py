@@ -382,6 +382,54 @@ class TestRenderRulebookSection:
         assert custom.name == "Blocked"
         assert custom.priority == 15
 
+    def test_slugify_reserves_upcoming(self, monkeypatch) -> None:
+        """Section name 'Upcoming' slugs to custom_upcoming to avoid collision."""
+        from handoff.pages.system_settings import _slugify_section_id
+
+        assert _slugify_section_id("Upcoming") == "custom_upcoming"
+        assert _slugify_section_id("upcoming") == "custom_upcoming"
+
+    def test_add_section_duplicate_name_shows_error(self, monkeypatch) -> None:
+        """Adding a section with an existing section_id shows error and does not save."""
+        settings = RulebookSettings(
+            version=1,
+            rules=(
+                RuleDefinition(
+                    rule_id="custom_blocked",
+                    name="Blocked",
+                    section_id="blocked",
+                    priority=15,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+            ),
+            open_items_fallback_section="upcoming",
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.form_submit_button.side_effect = lambda label: label == "Add section"
+        st_mock.text_input.side_effect = lambda *a, **kw: "Blocked"
+        st_mock.selectbox.side_effect = lambda *a, **kw: "next_check_due"
+        st_mock.number_input.side_effect = lambda *a, **kw: 25
+        st_mock.checkbox.side_effect = lambda *a, **kw: False
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_rulebook_settings",
+            lambda: settings,
+        )
+        save_called = []
+
+        def mock_save(s) -> None:
+            save_called.append(s)
+
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.save_rulebook_settings",
+            mock_save,
+        )
+
+        _render_rulebook_section()
+
+        assert len(save_called) == 0
+        st_mock.error.assert_called_once()
+        assert "already exists" in st_mock.error.call_args[0][0].lower()
+
 
 class TestRenderAboutSection:
     def test_renders_version_and_environment(self, monkeypatch) -> None:

@@ -115,8 +115,7 @@ def get_now_snapshot(
         if sid == fallback_section:
             continue
         handoffs = buckets.get(sid, [])
-        if handoffs:
-            custom_sections.append((sid, _sort_action_or_upcoming_handoffs(handoffs)))
+        custom_sections.append((sid, _sort_action_or_upcoming_handoffs(handoffs)))
     upcoming = _sort_action_or_upcoming_handoffs(buckets.get(fallback_section, []))[
         :UPCOMING_SECTION_LIMIT
     ]

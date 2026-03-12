@@ -725,6 +725,31 @@ def test_render_now_page_custom_sections_rendered_between_action_and_upcoming(
     assert any("Latest check-in is delayed" in c for c in caption_calls)
 
 
+def test_render_now_page_empty_custom_section_shows_no_handoffs_caption(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Empty custom sections render with 'No handoffs in X' caption."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(
+            risk=[],
+            action=[],
+            custom_sections=[("waiting_on_input", [])],
+            upcoming=[],
+        ),
+    )
+
+    render_now_page()
+
+    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
+    assert any("No handoffs" in c and "Waiting On Input" in c for c in caption_calls)
+
+
 def test_render_item_edit_save_validation_sets_flash_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
