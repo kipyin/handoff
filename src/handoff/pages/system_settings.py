@@ -121,7 +121,7 @@ def _collect_edited_rule(
 def _render_rulebook_section() -> None:
     """Render an editable rulebook UI with save, reset, and conditions per rule.
 
-    Displays all rules in expandable sections grouped by priority, allowing users
+    Displays all rules in expandable sections sorted by priority, allowing users
     to toggle enabled status, adjust priority, and edit condition parameters.
     Provides Save and Reset buttons to persist or revert changes.
     """
