@@ -1078,7 +1078,12 @@ def test_service_get_now_snapshot_includes_custom_sections_sorts_and_limits(monk
 
 def test_service_get_now_snapshot_custom_fallback_routes_items_to_upcoming(monkeypatch) -> None:
     """Non-upcoming fallback ids still surface fallback items via snapshot.upcoming."""
-    from handoff.rulebook import NextCheckDueCondition, RulebookSettings, RuleDefinition, RuleMatchResult
+    from handoff.rulebook import (
+        NextCheckDueCondition,
+        RulebookSettings,
+        RuleDefinition,
+        RuleMatchResult,
+    )
 
     parsed = SimpleNamespace(
         text_query="",
