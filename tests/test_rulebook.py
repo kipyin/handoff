@@ -20,6 +20,8 @@ from handoff.rulebook import (
     RuleMatchResult,
     build_default_rulebook_settings,
     evaluate_open_handoff,
+    get_open_section_display_order,
+    is_built_in_rule,
     rule_condition_from_dict,
     rule_condition_to_dict,
 )
@@ -412,6 +414,75 @@ def test_rule_evaluation_missing_next_check_toggle_and_default_explanation() -> 
         matched_rule_id="needs_schedule",
         is_fallback=False,
     )
+
+
+def test_open_section_display_order_ignores_disabled_and_dedupes_fallback() -> None:
+    """Section order should ignore disabled rules, dedupe section ids, and handle fallback once."""
+    defaults = build_default_rulebook_settings(deadline_near_days=1)
+    risk_rule, action_rule = defaults.rules
+    settings = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="disabled_first",
+                name="Disabled first",
+                section_id="disabled_only",
+                priority=5,
+                enabled=False,
+                conditions=(NextCheckDueCondition(),),
+            ),
+            action_rule,
+            RuleDefinition(
+                rule_id="custom_blocked",
+                name="Blocked",
+                section_id="blocked",
+                priority=15,
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="custom_blocked_duplicate",
+                name="Blocked duplicate",
+                section_id="blocked",
+                priority=25,
+                conditions=(NextCheckDueCondition(),),
+            ),
+            risk_rule,
+        ),
+        open_items_fallback_section="blocked",
+    )
+
+    assert get_open_section_display_order(settings) == ["risk", "blocked", "action_required"]
+
+    with_unseen_fallback = RulebookSettings(
+        version=settings.version,
+        rules=settings.rules,
+        first_match_wins=settings.first_match_wins,
+        open_items_fallback_section=BuiltInSection.UPCOMING.value,
+        concluded_section=settings.concluded_section,
+    )
+    assert get_open_section_display_order(with_unseen_fallback) == [
+        "risk",
+        "blocked",
+        "action_required",
+        "upcoming",
+    ]
+
+
+def test_is_built_in_rule_detects_risk_and_action_only() -> None:
+    """Built-in detection should allow guarding built-in sections from custom actions."""
+    defaults = build_default_rulebook_settings(deadline_near_days=1)
+    risk_rule, action_rule = defaults.rules
+    custom_rule = RuleDefinition(
+        rule_id="custom_waiting",
+        name="Waiting",
+        section_id="waiting",
+        priority=30,
+        conditions=(NextCheckDueCondition(),),
+    )
+
+    assert is_built_in_rule(risk_rule) is True
+    assert is_built_in_rule(action_rule) is True
+    assert is_built_in_rule(custom_rule) is False
 
 
 def test_default_rules_mirror_current_section_semantics(session, monkeypatch) -> None:
