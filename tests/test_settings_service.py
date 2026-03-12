@@ -239,7 +239,7 @@ def test_get_rulebook_settings_invalid_rulebook_payload_returns_defaults(
 def test_get_rulebook_settings_malformed_rule_returns_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When a rule is malformed (missing rule_id, invalid condition), return defaults."""
+    """Malformed rule returns full default rulebook (intended recovery in get_rulebook_settings)."""
     _patch_settings_path(monkeypatch, tmp_path)
 
     # Rule missing required rule_id
@@ -255,7 +255,7 @@ def test_get_rulebook_settings_malformed_rule_returns_defaults(
 def test_get_rulebook_settings_invalid_condition_type_returns_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When a rule has unknown condition_type, from_dict raises and we return defaults."""
+    """Unknown condition_type raises; get_rulebook_settings returns full default rulebook."""
     _patch_settings_path(monkeypatch, tmp_path)
 
     rule_with_unknown_condition = {
@@ -277,7 +277,7 @@ def test_get_rulebook_settings_invalid_condition_type_returns_defaults(
 def test_get_rulebook_settings_condition_not_dict_returns_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When a rule condition is not a dict, from_dict raises and we return defaults."""
+    """Condition not a dict raises; get_rulebook_settings returns full default rulebook."""
     _patch_settings_path(monkeypatch, tmp_path)
 
     rule_with_bad_condition = {

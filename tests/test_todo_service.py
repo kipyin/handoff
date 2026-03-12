@@ -685,7 +685,11 @@ def test_service_get_now_snapshot_rulebook_parity_with_legacy_queries(session, m
 def test_service_get_now_snapshot_rulebook_parity_multiple_deadline_near_days(
     session, monkeypatch, deadline_near_days: int
 ) -> None:
-    """Default rulebook parity holds for different deadline_near_days values."""
+    """Default rulebook parity holds for different deadline_near_days values.
+
+    Values 1, 2, 5 cover low/mid within the valid 1–14 range (DEADLINE_NEAR_DAYS_*).
+    monkeypatch and session fixture are function-scoped; patches restore after test.
+    """
     _patch_session_context(monkeypatch, session)
 
     class FixedDate(date):
@@ -795,7 +799,10 @@ def test_service_get_now_snapshot_all_rules_disabled_falls_back_to_upcoming(
     session,
     monkeypatch,
 ) -> None:
-    """When all open-item rules are disabled, all open handoffs fall back to Upcoming."""
+    """When all open-item rules are disabled, all open handoffs fall back to Upcoming.
+
+    Uses RulebookSettings.open_items_fallback_section (default: upcoming).
+    """
     _patch_session_context(monkeypatch, session)
 
     class FixedDate(date):
@@ -805,6 +812,7 @@ def test_service_get_now_snapshot_all_rules_disabled_falls_back_to_upcoming(
 
     _patch_date(monkeypatch, FixedDate)
     from handoff.rulebook import (
+        BuiltInSection,
         RulebookSettings,
         RuleDefinition,
         build_default_rulebook_settings,
@@ -830,6 +838,7 @@ def test_service_get_now_snapshot_all_rules_disabled_falls_back_to_upcoming(
         open_items_fallback_section=defaults.open_items_fallback_section,
         concluded_section=defaults.concluded_section,
     )
+    assert settings.open_items_fallback_section == BuiltInSection.UPCOMING.value
 
     monkeypatch.setattr(
         "handoff.services.handoff_service.get_rulebook_settings",
