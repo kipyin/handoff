@@ -44,6 +44,30 @@ from handoff.services.settings_service import (
 from handoff.update_ui import render_update_panel
 from handoff.version import __version__ as APP_VERSION
 
+CSV_HANDOFF_COLUMNS = [
+    "id",
+    "project_id",
+    "need_back",
+    "pitchman",
+    "next_check",
+    "deadline",
+    "notes",
+    "created_at",
+]
+
+
+def _handoffs_csv_text(payload: dict[str, Any]) -> str:
+    """Return a CSV export for the current handoff payload shape."""
+    handoffs = payload.get("handoffs", [])
+    if not handoffs:
+        return ",".join(CSV_HANDOFF_COLUMNS) + "\n"
+
+    frame = pd.DataFrame(handoffs)
+    for column in CSV_HANDOFF_COLUMNS:
+        if column not in frame.columns:
+            frame[column] = None
+    return frame[CSV_HANDOFF_COLUMNS].to_csv(index=False)
+
 
 def _format_condition(condition: RuleCondition) -> str:
     """Return a human-readable description of a rule condition.
@@ -239,7 +263,7 @@ def _render_now_settings_section() -> None:
 
 
 def _render_data_export_section() -> None:
-    """Render JSON and CSV export controls for projects and todos."""
+    """Render JSON and CSV export controls for projects and handoffs."""
     st.markdown("### Data export")
     st.caption(
         "Download a snapshot of your data. Exports are read-only and do not modify the "
@@ -257,16 +281,10 @@ def _render_data_export_section() -> None:
         key="settings_download_json_backup",
     )
 
-    todos = payload.get("todos", [])
-    csv_text = (
-        pd.DataFrame(todos).to_csv(index=False)
-        if todos
-        else "id,project_id,name,status,deadline,helper,notes,created_at\n"
-    )
     st.download_button(
-        "Download CSV (todos)",
-        data=csv_text,
-        file_name="todo_todos.csv",
+        "Download CSV (handoffs)",
+        data=_handoffs_csv_text(payload),
+        file_name="handoff_handoffs.csv",
         mime="text/csv",
         key="settings_download_csv_backup",
     )
