@@ -91,6 +91,7 @@ def _build_streamlit_mock() -> MagicMock:
     st_mock.text_input.return_value = ""
     st_mock.text_area.return_value = ""
     st_mock.checkbox.return_value = False
+    st_mock.toggle.return_value = False
     st_mock.button.return_value = False
     st_mock.form_submit_button.return_value = False
     st_mock.date_input.return_value = date(2026, 3, 10)
@@ -384,7 +385,7 @@ def test_render_now_page_include_archived_projects_passed_to_snapshot(
 ) -> None:
     """Now page passes the include-archived toggle to get_now_snapshot."""
     st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = True
+    st_mock.toggle.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
@@ -411,7 +412,7 @@ def test_render_now_page_include_archived_passed_to_list_pitchmen(
 ) -> None:
     """Now page forwards include-archived toggle to list_pitchmen_with_open_handoffs."""
     st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = True
+    st_mock.toggle.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
@@ -1777,7 +1778,7 @@ def test_render_now_page_no_projects_with_include_archived_true_shows_create_inf
 ) -> None:
     """When include_archived=True and truly no projects, shows create info."""
     st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = True
+    st_mock.toggle.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kw: [])
 

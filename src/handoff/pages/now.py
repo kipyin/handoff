@@ -692,8 +692,9 @@ def render_now_page() -> None:
     if flash_error:
         st.error(flash_error)
 
+    toggle_widget = getattr(st, "toggle", None) or st.checkbox
     include_archived_projects = bool(
-        st.toggle(
+        toggle_widget(
             "Include archived projects",
             value=False,
             key="now_include_archived_projects",
@@ -735,13 +736,21 @@ def render_now_page() -> None:
 
     add_expanded = st.session_state.get(_NOW_ADD_EXPANDED_KEY, False)
     if add_expanded:
-        st.button(
-            "➕ Add handoff",
-            shortcut="a",
-            key="now_add_handoff_collapse",
-            on_click=_collapse_add_form,
-            help="Collapse the add form",
-        )
+        try:
+            st.button(
+                "➕ Add handoff",
+                shortcut="a",
+                key="now_add_handoff_collapse",
+                on_click=_collapse_add_form,
+                help="Collapse the add form",
+            )
+        except TypeError:
+            st.button(
+                "➕ Add handoff",
+                key="now_add_handoff_collapse",
+                on_click=_collapse_add_form,
+                help="Collapse the add form",
+            )
         _render_add_form(project_by_name, snapshot.pitchmen, "now")
     else:
         try:

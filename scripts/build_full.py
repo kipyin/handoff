@@ -267,11 +267,7 @@ def _obfuscate_app_code_with_pyarmor(*, dry_run: bool = False) -> None:
 
     if dry_run:
         print("Dry run: copying plain source to src/ (skipping PyArmor)...")
-        shutil.copytree(
-            SRC_PLAIN_DIR / "handoff",
-            obf_root / "handoff",
-            dirs_exist_ok=True,
-        )
+        shutil.copytree(SRC_PLAIN_DIR / "handoff", obf_root / "handoff")
         return
 
     pyarmor_exe = shutil.which("pyarmor")
