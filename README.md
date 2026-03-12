@@ -77,9 +77,11 @@ To keep the app simple and robust, some things are intentionally out of scope:
    - **Action required**: next check due/overdue
    - **Upcoming**: open and not in Risk/Action
    - **Concluded**: latest check-in is concluded
-   You can add/edit handoffs, check in early or when due, conclude, and reopen
-   from Concluded (append-only history). Filters: Project, Who, Search, and
-   "Include archived projects".
+   Section rules are configurable via **System Settings** → **Open-item rules**.
+   You can edit built-in rules, add custom sections, or **Reset to defaults** to
+   restore the original behavior. You can add/edit handoffs, check in early or
+   when due, conclude, and reopen from Concluded (append-only history). Filters:
+   Project, Who, Search, and "Include archived projects".
 4. **Dashboard** - PM-operational metrics focused on execution reliability:
    at-risk now, action overdue, open aging profile, on-time close trend, cycle
    time by project (p50/p90), and reopen rate.
@@ -90,9 +92,11 @@ To keep the app simple and robust, some things are intentionally out of scope:
 
 By default, the SQLite database is stored in your per-user data directory so app
 updates do not overwrite your data (for example on Windows:
-`%APPDATA%\handoff\todo.db`, retained for backward compatibility). You can
-override the location by setting the `HANDOFF_DB_PATH` environment variable
-before starting the app.
+`%APPDATA%\handoff\todo.db`, retained for backward compatibility). The rulebook
+and other local settings (e.g. deadline-at-risk days) live in
+`handoff_settings.json` next to the database. You can override the database
+location by setting the `HANDOFF_DB_PATH` environment variable before starting
+the app.
 
 > **Migrating from `TODO_APP_DB_PATH`:** The legacy `TODO_APP_DB_PATH`
 > environment variable is no longer recognised. If you were using it to point
