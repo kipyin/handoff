@@ -743,7 +743,7 @@ def render_now_page() -> None:
     else:
         try:
             st.button(
-                "➕ Add handoff (a)",
+                "➕ Add handoff",
                 shortcut="a",
                 key="now_add_handoff_trigger",
                 on_click=_expand_add_form,
@@ -752,18 +752,17 @@ def render_now_page() -> None:
         except TypeError:
             # Fallback for in-app updater: old embedded Streamlit lacks shortcut param
             st.button(
-                "➕ Add handoff (a)",
+                "➕ Add handoff",
                 key="now_add_handoff_trigger",
                 on_click=_expand_add_form,
                 help="Open the add form to create a new handoff",
             )
-    st.caption("Shortcuts: **a** Add handoff")
 
     # --- Risk section ---
     st.markdown("---")
     st.markdown("**Risk**")
     if not snapshot.risk:
-        st.caption("No at-risk handoffs.")
+        st.info("No at-risk handoffs.")
     else:
         for handoff in snapshot.risk:
             _render_item(
@@ -805,7 +804,7 @@ def render_now_page() -> None:
         st.markdown("---")
         st.markdown(f"**{section_label}**")
         if not handoffs:
-            st.caption(f"No handoffs in {section_label}.")
+            st.info(f"No handoffs in {section_label}.")
         else:
             for handoff in handoffs:
                 _render_item(
@@ -824,7 +823,7 @@ def render_now_page() -> None:
     st.markdown("---")
     st.markdown("**Upcoming**")
     if not snapshot.upcoming:
-        st.caption("No upcoming handoffs.")
+        st.info("No upcoming handoffs.")
     else:
         for handoff in snapshot.upcoming:
             _render_item(
@@ -843,7 +842,7 @@ def render_now_page() -> None:
     st.markdown("---")
     st.markdown("**Concluded**")
     if not snapshot.concluded:
-        st.caption("No concluded handoffs.")
+        st.info("No concluded handoffs.")
     else:
         for handoff in snapshot.concluded:
             _render_item(
