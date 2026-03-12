@@ -180,6 +180,75 @@ def test_now_page_shows_action_items_when_data_exists(app_test_db: Path) -> None
     assert len(at.get("expander")) >= 1
 
 
+def test_now_page_default_rulebook_sections_match_legacy(app_test_db: Path) -> None:
+    """Default rulebook produces correct section membership on the Now page (parity integration)."""
+    today = date.today()
+    db.init_db()
+    project = data.create_project("Parity Test")
+    assert project.id is not None
+
+    # Risk: due + near deadline + delayed check-in
+    risk_h = data.create_handoff(
+        project_id=project.id,
+        need_back="Risk item",
+        next_check=date(2000, 1, 1),
+        deadline=add_business_days(today, 1),
+        pitchman="R",
+    )
+    data.create_check_in(
+        handoff_id=risk_h.id,
+        check_in_type=data.CheckInType.DELAYED,
+        check_in_date=today,
+    )
+
+    # Action: due, not risk (deadline far, no delayed)
+    data.create_handoff(
+        project_id=project.id,
+        need_back="Action item",
+        next_check=date(2000, 1, 1),
+        deadline=add_business_days(today, 30),
+        pitchman="A",
+    )
+
+    # Upcoming: future next_check
+    data.create_handoff(
+        project_id=project.id,
+        need_back="Upcoming item",
+        next_check=add_business_days(today, 10),
+        pitchman="U",
+    )
+
+    # Concluded
+    concluded_h = data.create_handoff(
+        project_id=project.id,
+        need_back="Concluded item",
+        next_check=date(2000, 1, 1),
+        pitchman="C",
+    )
+    data.conclude_handoff(concluded_h.id, note="Done")
+
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.exception) == 0
+
+    markdown_texts = [getattr(m, "value", str(m)) for m in at.get("markdown")]
+    expander_labels = [getattr(e, "label", str(e)) for e in at.get("expander")]
+
+    # Section headers appear
+    assert any("Risk" in (mt or "") for mt in markdown_texts)
+    assert any("Action" in (mt or "") for mt in markdown_texts)
+    assert any("Upcoming" in (mt or "") for mt in markdown_texts)
+    assert any("Concluded" in (mt or "") for mt in markdown_texts)
+
+    # All four items appear as expanders (default rulebook sectioning)
+    assert len(expander_labels) >= 4
+    all_labels = " ".join(expander_labels)
+    assert "Risk item" in all_labels
+    assert "Action item" in all_labels
+    assert "Upcoming item" in all_labels
+    assert "Concluded item" in all_labels
+
+
 def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     """Conclude flow on a due action item adds a concluded check-in.
 

@@ -681,6 +681,191 @@ def test_service_get_now_snapshot_rulebook_parity_with_legacy_queries(session, m
     assert snapshot_upcoming_ids == legacy_upcoming
 
 
+@pytest.mark.parametrize("deadline_near_days", [1, 2, 5])
+def test_service_get_now_snapshot_rulebook_parity_multiple_deadline_near_days(
+    session, monkeypatch, deadline_near_days: int
+) -> None:
+    """Default rulebook parity holds for different deadline_near_days values."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    _patch_date(monkeypatch, FixedDate)
+    from handoff.rulebook import build_default_rulebook_settings
+
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: build_default_rulebook_settings(deadline_near_days=deadline_near_days),
+    )
+
+    p = Project(name="Work")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    # deadline_near: days=1 -> 2026-03-10 near; days=2 -> 2026-03-11 near
+    deadline_near = date(2026, 3, 8 + deadline_near_days)
+    risk_h = data.create_handoff(
+        project_id=p.id,
+        need_back="At risk",
+        next_check=date(2026, 3, 9),
+        deadline=deadline_near,
+    )
+    data.create_check_in(
+        handoff_id=risk_h.id,
+        check_in_type=CheckInType.DELAYED,
+        check_in_date=date(2026, 3, 9),
+    )
+    data.create_handoff(
+        project_id=p.id,
+        need_back="Due now",
+        next_check=date(2026, 3, 9),
+        deadline=date(2026, 4, 1),
+    )
+    data.create_handoff(
+        project_id=p.id,
+        need_back="Later",
+        next_check=date(2026, 4, 1),
+    )
+
+    snapshot = get_now_snapshot()
+    legacy_risk = {h.id for h in query_risk_handoffs(deadline_near_days=deadline_near_days)}
+    legacy_action = {h.id for h in query_action_handoffs(deadline_near_days=deadline_near_days)}
+    legacy_upcoming = {h.id for h in query_upcoming_handoffs(deadline_near_days=deadline_near_days)}
+
+    assert {h.id for h in snapshot.risk} == legacy_risk
+    assert {h.id for h in snapshot.action} == legacy_action
+    assert {h.id for h in snapshot.upcoming} == legacy_upcoming
+
+
+def test_service_get_now_snapshot_rulebook_parity_empty_open_handoffs(
+    session,
+    monkeypatch,
+) -> None:
+    """Default rulebook and legacy queries both return empty open sections when no open handoffs."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    _patch_date(monkeypatch, FixedDate)
+    from handoff.rulebook import build_default_rulebook_settings
+
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: build_default_rulebook_settings(deadline_near_days=1),
+    )
+
+    p = Project(name="Work")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    concluded_h = data.create_handoff(
+        project_id=p.id,
+        need_back="Closed",
+        next_check=date(2026, 3, 9),
+    )
+    data.create_check_in(
+        handoff_id=concluded_h.id,
+        check_in_type=CheckInType.CONCLUDED,
+        check_in_date=date(2026, 3, 9),
+    )
+
+    snapshot = get_now_snapshot()
+    legacy_risk = list(query_risk_handoffs(deadline_near_days=1))
+    legacy_action = list(query_action_handoffs(deadline_near_days=1))
+    legacy_upcoming = list(query_upcoming_handoffs(deadline_near_days=1))
+
+    assert snapshot.risk == []
+    assert snapshot.action == []
+    assert snapshot.upcoming == []
+    assert legacy_risk == []
+    assert legacy_action == []
+    assert legacy_upcoming == []
+    assert len(snapshot.concluded) == 1
+
+
+def test_service_get_now_snapshot_all_rules_disabled_falls_back_to_upcoming(
+    session,
+    monkeypatch,
+) -> None:
+    """When all open-item rules are disabled, all open handoffs fall back to Upcoming."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    _patch_date(monkeypatch, FixedDate)
+    from handoff.rulebook import (
+        RulebookSettings,
+        RuleDefinition,
+        build_default_rulebook_settings,
+    )
+
+    defaults = build_default_rulebook_settings(deadline_near_days=1)
+    disabled_rules = tuple(
+        RuleDefinition(
+            rule_id=r.rule_id,
+            name=r.name,
+            section_id=r.section_id,
+            priority=r.priority,
+            enabled=False,
+            match_reason=r.match_reason,
+            conditions=r.conditions,
+        )
+        for r in defaults.rules
+    )
+    settings = RulebookSettings(
+        version=defaults.version,
+        rules=disabled_rules,
+        first_match_wins=defaults.first_match_wins,
+        open_items_fallback_section=defaults.open_items_fallback_section,
+        concluded_section=defaults.concluded_section,
+    )
+
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: settings,
+    )
+
+    p = Project(name="Work")
+    session.add(p)
+    session.commit()
+    session.refresh(p)
+
+    data.create_handoff(
+        project_id=p.id,
+        need_back="Due now",
+        next_check=date(2026, 3, 9),
+    )
+    risk_h = data.create_handoff(
+        project_id=p.id,
+        need_back="At risk",
+        next_check=date(2026, 3, 9),
+        deadline=date(2026, 3, 10),
+    )
+    data.create_check_in(
+        handoff_id=risk_h.id,
+        check_in_type=CheckInType.DELAYED,
+        check_in_date=date(2026, 3, 9),
+    )
+
+    snapshot = get_now_snapshot()
+
+    assert snapshot.risk == []
+    assert snapshot.action == []
+    assert len(snapshot.upcoming) == 2
+    assert {h.need_back for h in snapshot.upcoming} == {"Due now", "At risk"}
+
+
 def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
     """Snapshot query fan-out uses parsed search/date filters for open and concluded sections."""
     parsed = SimpleNamespace(
