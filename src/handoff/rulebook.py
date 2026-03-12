@@ -279,6 +279,29 @@ def _ordered_enabled_rules(settings: RulebookSettings) -> tuple[RuleDefinition, 
     )
 
 
+def is_built_in_rule(rule: RuleDefinition) -> bool:
+    """Return True if the rule is a built-in (Risk or Action required)."""
+    return rule.rule_id in (DEFAULT_RISK_RULE_ID, DEFAULT_ACTION_RULE_ID)
+
+
+def get_open_section_display_order(settings: RulebookSettings) -> list[str]:
+    """Return section_ids in display order: Risk, Action, custom sections, fallback.
+
+    Section order follows rule priority; the fallback section is last if not
+    already present.
+    """
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for rule in _ordered_enabled_rules(settings):
+        if rule.section_id not in seen:
+            seen.add(rule.section_id)
+            ordered.append(rule.section_id)
+    fallback = settings.open_items_fallback_section
+    if fallback not in seen:
+        ordered.append(fallback)
+    return ordered
+
+
 def _matches_condition(condition: RuleCondition, handoff: Handoff, *, today: date) -> bool:
     """Return True when the handoff satisfies the given condition."""
     if isinstance(condition, DeadlineWithinDaysCondition):
@@ -406,6 +429,8 @@ __all__ = [
     "RulebookSettings",
     "build_default_rulebook_settings",
     "evaluate_open_handoff",
+    "get_open_section_display_order",
+    "is_built_in_rule",
     "rule_condition_from_dict",
     "rule_condition_to_dict",
 ]

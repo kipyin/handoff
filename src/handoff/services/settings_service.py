@@ -8,7 +8,13 @@ from typing import Any
 
 from handoff.data import get_export_payload as _get_export_payload
 from handoff.data import import_payload as _import_payload
-from handoff.rulebook import RulebookSettings, build_default_rulebook_settings
+from handoff.rulebook import (
+    DEFAULT_RISK_RULE_ID,
+    DeadlineWithinDaysCondition,
+    RulebookSettings,
+    RuleDefinition,
+    build_default_rulebook_settings,
+)
 
 DEFAULT_DEADLINE_NEAR_DAYS = 1
 DEADLINE_NEAR_DAYS_MIN = 1
@@ -72,6 +78,40 @@ def set_deadline_near_days(value: int) -> None:
     _save_settings(settings)
 
 
+def _sync_risk_rule_deadline(settings: RulebookSettings) -> RulebookSettings:
+    """Update the built-in Risk rule's deadline-within-days to match the current setting."""
+    deadline_near = _deadline_near_days_from_dict(_load_settings())
+    new_rules: list[RuleDefinition] = []
+    for rule in settings.rules:
+        if rule.rule_id != DEFAULT_RISK_RULE_ID:
+            new_rules.append(rule)
+            continue
+        new_conditions: list = []
+        for cond in rule.conditions:
+            if isinstance(cond, DeadlineWithinDaysCondition):
+                new_conditions.append(DeadlineWithinDaysCondition(days=deadline_near))
+            else:
+                new_conditions.append(cond)
+        new_rules.append(
+            RuleDefinition(
+                rule_id=rule.rule_id,
+                name=rule.name,
+                section_id=rule.section_id,
+                priority=rule.priority,
+                enabled=rule.enabled,
+                match_reason=rule.match_reason,
+                conditions=tuple(new_conditions),
+            )
+        )
+    return RulebookSettings(
+        version=settings.version,
+        rules=tuple(new_rules),
+        first_match_wins=settings.first_match_wins,
+        open_items_fallback_section=settings.open_items_fallback_section,
+        concluded_section=settings.concluded_section,
+    )
+
+
 def get_rulebook_settings() -> RulebookSettings:
     """Return global rulebook settings from disk. Fall back to defaults if invalid/missing."""
     settings = _load_settings()
@@ -85,15 +125,16 @@ def get_rulebook_settings() -> RulebookSettings:
         parsed = RulebookSettings.from_dict(rulebook_payload)
         if not parsed.rules:
             return build_default_rulebook_settings(deadline_near_days=deadline_near)
-        return parsed
+        return _sync_risk_rule_deadline(parsed)
     except (ValueError, KeyError, TypeError):
         return build_default_rulebook_settings(deadline_near_days=deadline_near)
 
 
 def save_rulebook_settings(rulebook_settings: RulebookSettings) -> None:
     """Persist the global rulebook to settings JSON. Preserves other settings keys."""
+    synced = _sync_risk_rule_deadline(rulebook_settings)
     data = _load_settings()
-    data[RULEBOOK_SETTINGS_KEY] = rulebook_settings.to_dict()
+    data[RULEBOOK_SETTINGS_KEY] = synced.to_dict()
     _save_settings(data)
 
 

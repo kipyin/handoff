@@ -13,16 +13,20 @@ class NowSnapshot:
     """Page-facing contract for the Now page.
 
     Contains the full payload needed to render Risk, Action required,
-    Upcoming, and Concluded sections in the canonical order, plus
-    supporting data for filters and add form.
+    custom sections, Upcoming, and Concluded in the canonical order,
+    plus supporting data for filters and add form.
+
+    custom_sections is a list of (section_id, handoffs) in display order;
+    section_id is used for the header label.
 
     section_explanations maps handoff_id to a short "why this matched"
     explanation for rulebook-driven sections (Risk, Action required,
-    Upcoming). Concluded handoffs are not included.
+    custom sections, Upcoming). Concluded handoffs are not included.
     """
 
     risk: list[Handoff]
     action: list[Handoff]
+    custom_sections: list[tuple[str, list[Handoff]]]
     upcoming: list[Handoff]
     concluded: list[Handoff]
     projects: list[Project]

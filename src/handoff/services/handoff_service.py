@@ -22,7 +22,11 @@ from handoff.data import reopen_handoff as _reopen_handoff
 from handoff.data import update_handoff as _update_handoff
 from handoff.models import CheckIn, CheckInType, Handoff, Project
 from handoff.page_models import HandoffQuery, NowSnapshot
-from handoff.rulebook import BuiltInSection, evaluate_open_handoff
+from handoff.rulebook import (
+    BuiltInSection,
+    evaluate_open_handoff,
+    get_open_section_display_order,
+)
 from handoff.search_parse import parse_search_query
 from handoff.services.project_service import list_projects
 from handoff.services.settings_service import get_rulebook_settings
@@ -85,9 +89,7 @@ def get_now_snapshot(
     rulebook = get_rulebook_settings()
     today = date.today()
 
-    risk: list[Handoff] = []
-    action: list[Handoff] = []
-    upcoming: list[Handoff] = []
+    buckets: dict[str, list[Handoff]] = {}
     section_explanations: dict[int, str] = {}
 
     for handoff in open_handoffs:
@@ -95,17 +97,28 @@ def get_now_snapshot(
         h_id = handoff.id
         if h_id is not None:
             section_explanations[h_id] = match_result.explanation
-        if match_result.section_id == BuiltInSection.RISK.value:
-            risk.append(handoff)
-        elif match_result.section_id == BuiltInSection.ACTION_REQUIRED.value:
-            action.append(handoff)
-        elif match_result.section_id == BuiltInSection.UPCOMING.value:
-            upcoming.append(handoff)
-        # Custom section ids from user config are dropped for now; v1 only renders built-ins.
+        sid = match_result.section_id
+        if sid not in buckets:
+            buckets[sid] = []
+        buckets[sid].append(handoff)
 
-    risk = _sort_risk_handoffs(risk)
-    action = _sort_action_or_upcoming_handoffs(action)
-    upcoming = _sort_action_or_upcoming_handoffs(upcoming)[:UPCOMING_SECTION_LIMIT]
+    section_order = get_open_section_display_order(rulebook)
+    fallback_section = rulebook.open_items_fallback_section
+    risk = _sort_risk_handoffs(buckets.get(BuiltInSection.RISK.value, []))
+    action = _sort_action_or_upcoming_handoffs(
+        buckets.get(BuiltInSection.ACTION_REQUIRED.value, [])
+    )
+    custom_sections: list[tuple[str, list[Handoff]]] = []
+    for sid in section_order:
+        if sid in (BuiltInSection.RISK.value, BuiltInSection.ACTION_REQUIRED.value):
+            continue
+        if sid == fallback_section:
+            continue
+        handoffs = buckets.get(sid, [])
+        custom_sections.append((sid, _sort_action_or_upcoming_handoffs(handoffs)))
+    upcoming = _sort_action_or_upcoming_handoffs(buckets.get(fallback_section, []))[
+        :UPCOMING_SECTION_LIMIT
+    ]
 
     concluded_common = {
         "project_ids": project_ids,
@@ -124,6 +137,7 @@ def get_now_snapshot(
     return NowSnapshot(
         risk=risk,
         action=action,
+        custom_sections=custom_sections,
         upcoming=upcoming,
         concluded=concluded,
         projects=projects,

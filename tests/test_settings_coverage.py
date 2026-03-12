@@ -28,6 +28,7 @@ def _patch_streamlit(monkeypatch, **st_overrides) -> MagicMock:
     st_mock.file_uploader.return_value = None
     st_mock.checkbox.return_value = False
     st_mock.button.return_value = False
+    st_mock.form_submit_button.return_value = False
     st_mock.download_button.return_value = None
     st_mock.session_state = {}
     st_mock.columns.return_value = [MagicMock(), MagicMock()]
@@ -335,11 +336,141 @@ class TestRenderRulebookSection:
         _render_rulebook_section()
 
         expander_calls = [call.args[0] for call in st_mock.expander.call_args_list]
-        assert expander_calls == [
+        assert expander_calls[:-1] == [
             "**First Configured** — Risk",
             "**Second Configured** — Action Required",
             "**Lower Priority** — Upcoming",
         ]
+        assert expander_calls[-1] == "Add custom section"
+
+    def test_remove_custom_section_persists_and_reruns(self, monkeypatch) -> None:
+        """Remove button for custom rule persists changes and reruns."""
+        from handoff.rulebook import build_default_rulebook_settings
+
+        defaults = build_default_rulebook_settings()
+        custom_rule = RuleDefinition(
+            rule_id="custom_blocked",
+            name="Blocked",
+            section_id="blocked",
+            priority=15,
+            conditions=(NextCheckDueCondition(),),
+        )
+        settings = RulebookSettings(
+            version=defaults.version,
+            rules=(*defaults.rules, custom_rule),
+            first_match_wins=defaults.first_match_wins,
+            open_items_fallback_section=defaults.open_items_fallback_section,
+            concluded_section=defaults.concluded_section,
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "settings_rule_2_remove"
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_rulebook_settings",
+            lambda: settings,
+        )
+        save_called = []
+
+        def mock_save(s) -> None:
+            save_called.append(s)
+
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.save_rulebook_settings",
+            mock_save,
+        )
+
+        _render_rulebook_section()
+
+        assert len(save_called) == 1
+        assert len(save_called[0].rules) == 2
+        assert not any(r.rule_id == "custom_blocked" for r in save_called[0].rules)
+        st_mock.rerun.assert_called()
+
+    def test_add_section_form_submit_persists_custom_rule(self, monkeypatch) -> None:
+        """Add section form submit creates and persists a custom rule."""
+        from handoff.rulebook import build_default_rulebook_settings
+
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.form_submit_button.side_effect = lambda label: label == "Add section"
+        text_input_values = ["Blocked", ""]
+
+        def _text_input(*a, **kw):
+            return text_input_values.pop(0) if text_input_values else ""
+
+        st_mock.text_input.side_effect = _text_input
+        st_mock.selectbox.side_effect = lambda *a, **kw: "latest_check_in_type_is"
+        st_mock.number_input.side_effect = lambda *a, **kw: 15
+        st_mock.checkbox.side_effect = lambda *a, **kw: False
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_rulebook_settings",
+            build_default_rulebook_settings,
+        )
+        save_called = []
+
+        def mock_save(s) -> None:
+            save_called.append(s)
+
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.save_rulebook_settings",
+            mock_save,
+        )
+
+        _render_rulebook_section()
+
+        assert len(save_called) == 1
+        rules = save_called[0].rules
+        assert len(rules) == 3
+        custom = rules[2]
+        assert custom.section_id == "blocked"
+        assert custom.name == "Blocked"
+        assert custom.priority == 15
+
+    def test_slugify_reserves_upcoming(self, monkeypatch) -> None:
+        """Section name 'Upcoming' slugs to custom_upcoming to avoid collision."""
+        from handoff.pages.system_settings import _slugify_section_id
+
+        assert _slugify_section_id("Upcoming") == "custom_upcoming"
+        assert _slugify_section_id("upcoming") == "custom_upcoming"
+
+    def test_add_section_duplicate_name_shows_error(self, monkeypatch) -> None:
+        """Adding a section with an existing section_id shows error and does not save."""
+        settings = RulebookSettings(
+            version=1,
+            rules=(
+                RuleDefinition(
+                    rule_id="custom_blocked",
+                    name="Blocked",
+                    section_id="blocked",
+                    priority=15,
+                    conditions=(NextCheckDueCondition(),),
+                ),
+            ),
+            open_items_fallback_section="upcoming",
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.form_submit_button.side_effect = lambda label: label == "Add section"
+        st_mock.text_input.side_effect = lambda *a, **kw: "Blocked"
+        st_mock.selectbox.side_effect = lambda *a, **kw: "next_check_due"
+        st_mock.number_input.side_effect = lambda *a, **kw: 25
+        st_mock.checkbox.side_effect = lambda *a, **kw: False
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_rulebook_settings",
+            lambda: settings,
+        )
+        save_called = []
+
+        def mock_save(s) -> None:
+            save_called.append(s)
+
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.save_rulebook_settings",
+            mock_save,
+        )
+
+        _render_rulebook_section()
+
+        assert len(save_called) == 0
+        st_mock.error.assert_called_once()
+        assert "already exists" in st_mock.error.call_args[0][0].lower()
 
     def test_save_uses_original_rule_indices_when_preview_is_reordered(self, monkeypatch) -> None:
         """Save maps form values by rule index, not by expander display order."""
@@ -427,7 +558,16 @@ class TestRenderRulebookSection:
         st_mock.warning.assert_called_once()
         warning_text = st_mock.warning.call_args[0][0]
         assert "unsupported check-in type" in warning_text.lower()
-        assert st_mock.selectbox.call_args.kwargs["index"] == 0
+        check_in_selectbox = next(
+            (
+                c
+                for c in st_mock.selectbox.call_args_list
+                if c.args and "check-in type" in str(c.args[0])
+            ),
+            None,
+        )
+        assert check_in_selectbox is not None
+        assert check_in_selectbox.kwargs.get("index") == 0
 
 
 class TestRenderAboutSection:
