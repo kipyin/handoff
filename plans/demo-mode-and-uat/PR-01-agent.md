@@ -10,7 +10,7 @@ Read the full plan for scope, seed data design, and file list.
 
 1. Add `get_demo_db_path()` that returns the default demo DB path (e.g. next to production DB, with a distinct filename like `handoff-demo.db`).
 2. Add `scripts/seed_demo.py` with `seed_demo_db(db_path, *, force=False, reference_date=None)`.
-3. Seed via `handoff.data` only. Create 2–3 projects, 8–10 handoffs covering Risk, Action, Upcoming, Concluded, and edge cases.
+3. Seed via `handoff.data` only. Create 2–3 projects, 8–10 handoffs covering Risk, Action, Upcoming, Concluded, and edge cases. For Risk, ensure at least one handoff has a delayed latest check-in (not just an overdue/near deadline), since the built-in Risk rule requires deadline near and latest check-in == delayed.
 4. Use `reference_date` when provided; otherwise `date.today()`. Use `handoff.dates.add_business_days` for relative dates.
 5. Add `tests/test_seed_demo.py` asserting project and handoff counts after seeding.
 

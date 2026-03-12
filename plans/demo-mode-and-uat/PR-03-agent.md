@@ -13,7 +13,7 @@ Read the full plan. Depends on **PR 1** (seed script and demo path).
    - Resolve path: `--db-path` if given, else `get_demo_db_path()`.
    - If DB is empty (no projects), call `seed_demo_db(..., force=False)`.
    - Run the app with `HANDOFF_DB_PATH` set to that path (in the subprocess env).
-3. Without `--demo`, behavior unchanged.
+3. Without `--demo`, behavior unchanged, including the existing Typer extra-args passthrough (keep forwarding unknown/remaining args to `python -m handoff` so workflows that pass Streamlit flags continue to work).
 4. Add a CLI test that `run --demo --db-path /tmp/x.db` seeds (if needed) and that the subprocess receives the correct `HANDOFF_DB_PATH`.
 
 ## Escalate when

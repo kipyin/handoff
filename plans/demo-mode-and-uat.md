@@ -34,7 +34,7 @@ Production DB is never touched when using demo mode.
 - Add `get_demo_db_path()` in `handoff.db` (or equivalent) returning default demo DB path (e.g. `user_data_dir("handoff", "handoff") / "handoff-demo.db"`).
 - Add `scripts/seed_demo.py` with `seed_demo_db(db_path, *, force: bool = False, reference_date: date | None = None)`.
 - Seed uses only `handoff.data` APIs (`create_project`, `create_handoff`, `create_check_in`).
-- Data: 2–3 projects (one archived), 8–10 handoffs covering Risk, Action required, Upcoming, Concluded, and edge cases (no pitchman, long text, markdown notes).
+- Data: 2–3 projects (one archived), 8–10 handoffs covering Risk, Action required, Upcoming, Concluded, and edge cases (no pitchman, long text, markdown notes). For Risk, the built-in rule requires deadline near and latest check-in == delayed, so Risk handoffs must include a delayed check-in in their trail.
 - When `reference_date` is provided, all dates derive from it; otherwise use `date.today()`.
 
 **Files**
@@ -78,7 +78,7 @@ Production DB is never touched when using demo mode.
   - Resolve path: `--db-path` if given, else `get_demo_db_path()`.
   - If DB is empty (no projects), call `seed_demo_db(..., force=False)`.
   - Run app with `HANDOFF_DB_PATH` set to that path.
-- Without `--demo`, behavior unchanged.
+- Without `--demo`, behavior unchanged, including the existing Typer extra-args passthrough (keep forwarding unknown/remaining args to `python -m handoff` so workflows that pass Streamlit flags continue to work).
 
 **Files**
 
@@ -99,7 +99,7 @@ Production DB is never touched when using demo mode.
 - Ensure `seed_demo_db` accepts `reference_date` and uses it consistently.
 - Add `seeded_uat_db` fixture (in `tests/conftest.py` or `tests/test_uat_seeded.py`):
   - Temp DB path, monkeypatch `HANDOFF_DB_PATH`.
-  - Monkeypatch `date.today` (and any date helpers used by app/seed) to a fixed date.
+  - Monkeypatch the `date` symbols in modules that call `date.today()` (e.g. `handoff.data.handoffs.date`, `handoff.data.queries.date`, and any relevant service/page modules) so they use a fixed reference date.
   - Call `seed_demo_db(..., reference_date=fixed_date)`.
   - Reuse `_reload_db_for_test` pattern from `test_app_integration.py`.
 - Add one smoke test using the fixture (e.g. Now page renders without error).
@@ -128,7 +128,7 @@ Production DB is never touched when using demo mode.
 2. Conclude: Conclude a specific handoff via UI, verify it moves to Concluded.
 3. Reopen: Reopen a concluded handoff, verify it leaves Concluded.
 4. Add handoff: Add via form, verify persistence and placement.
-5. Archived toggle: Toggle "Include archived", verify archived items appear.
+5. Archived toggle: Toggle "Include archived projects", verify archived items appear.
 6. Dashboard: Renders without error with seeded data.
 
 **Files**
@@ -171,8 +171,8 @@ Production DB is never touched when using demo mode.
 
 | need_back | pitchman | deadline | next_check | Check-in trail | Bucket |
 |-----------|----------|----------|------------|----------------|--------|
-| Overdue deliverable | Alice | yesterday | yesterday | none | Risk |
-| Due today | Alice | today | today | none | Risk |
+| Overdue deliverable | Alice | yesterday | yesterday | delayed | Risk |
+| Due today | Alice | today | today | delayed | Risk |
 | Action required item | Bob | tomorrow | today | on_track | Action required |
 | Upcoming task | Carol | next week | next week | none | Upcoming |
 | Concluded task | Bob | last week | — | on_track → concluded | Concluded |
