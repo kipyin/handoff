@@ -351,6 +351,7 @@ def test_save_rulebook_settings_persists_and_preserves_other_keys(
     assert settings_service.get_deadline_near_days() == 5
     loaded = settings_service.get_rulebook_settings()
     assert loaded.version == custom.version
+    assert _default_risk_deadline_days(loaded) == 5
     assert len(loaded.rules) == len(build_default_rulebook_settings().rules)
 
     raw = (tmp_path / "handoff_settings.json").read_text(encoding="utf-8")

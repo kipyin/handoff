@@ -5,6 +5,8 @@ Covers: _render_send_log_section, _render_about_section, import happy path.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,7 +14,9 @@ from unittest.mock import MagicMock
 
 from handoff.models import CheckInType
 from handoff.pages.system_settings import (
+    CSV_HANDOFF_COLUMNS,
     _collect_edited_rule,
+    _handoffs_csv_text,
     _render_about_section,
     _render_data_export_section,
     _render_data_import_section,
@@ -588,6 +592,26 @@ class TestRenderAboutSection:
 
 
 class TestRenderDataExportSection:
+    def test_handoffs_csv_text_empty_payload_returns_handoff_header(self) -> None:
+        """Empty handoff exports still include the canonical handoff CSV header."""
+        csv_text = _handoffs_csv_text({"handoffs": []})
+        rows = list(csv.reader(io.StringIO(csv_text)))
+        assert len(rows) == 1
+        assert rows[0] == CSV_HANDOFF_COLUMNS
+
+    def test_handoffs_csv_text_missing_columns_keeps_canonical_shape(self) -> None:
+        """Sparse handoff rows are normalized so downstream CSV import stays stable."""
+        csv_text = _handoffs_csv_text({"handoffs": [{"id": 7, "need_back": "Launch checklist"}]})
+        reader = csv.DictReader(io.StringIO(csv_text))
+        rows = list(reader)
+        assert list(reader.fieldnames) == CSV_HANDOFF_COLUMNS
+        assert len(rows) == 1
+        row = rows[0]
+        assert row["id"] == "7"
+        assert row["need_back"] == "Launch checklist"
+        assert row["project_id"] == ""
+        assert row["pitchman"] == ""
+
     def test_renders_download_buttons(self, monkeypatch) -> None:
         """Export section creates JSON and CSV download buttons."""
         st_mock = _patch_streamlit(monkeypatch)

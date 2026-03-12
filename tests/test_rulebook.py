@@ -90,6 +90,70 @@ def test_default_rulebook_contract_and_fallback_semantics() -> None:
     assert action_rule.conditions[0].include_missing_next_check is False
 
 
+def test_get_open_section_display_order_skips_disabled_and_dedupes_sections() -> None:
+    """Display order includes enabled sections once and appends fallback when absent."""
+    settings = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="disabled_action",
+                name="Disabled action",
+                section_id=BuiltInSection.ACTION_REQUIRED.value,
+                priority=5,
+                enabled=False,
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="blocked_primary",
+                name="Blocked primary",
+                section_id="blocked",
+                priority=10,
+                enabled=True,
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="blocked_duplicate",
+                name="Blocked duplicate",
+                section_id="blocked",
+                priority=20,
+                enabled=True,
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="risk_enabled",
+                name="Risk enabled",
+                section_id=BuiltInSection.RISK.value,
+                priority=30,
+                enabled=True,
+                conditions=(NextCheckDueCondition(),),
+            ),
+        ),
+        open_items_fallback_section="manual_triage",
+    )
+
+    assert get_open_section_display_order(settings) == ["blocked", "risk", "manual_triage"]
+
+
+def test_get_open_section_display_order_does_not_duplicate_fallback_section() -> None:
+    """Fallback section is not appended again when already represented by a rule."""
+    settings = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="manual_triage_rule",
+                name="Manual triage",
+                section_id="manual_triage",
+                priority=10,
+                enabled=True,
+                conditions=(NextCheckDueCondition(),),
+            ),
+        ),
+        open_items_fallback_section="manual_triage",
+    )
+
+    assert get_open_section_display_order(settings) == ["manual_triage"]
+
+
 def test_rulebook_validation_and_roundtrip() -> None:
     """Rulebook contracts validate duplicate ids and support dict roundtrips."""
     settings = build_default_rulebook_settings(deadline_near_days=1)

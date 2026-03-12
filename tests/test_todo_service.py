@@ -1076,6 +1076,83 @@ def test_service_get_now_snapshot_includes_custom_sections_sorts_and_limits(monk
     assert "upcoming-21" not in upcoming_names
 
 
+def test_service_get_now_snapshot_custom_fallback_routes_items_to_upcoming(monkeypatch) -> None:
+    """Non-upcoming fallback ids still surface fallback items via snapshot.upcoming."""
+    from handoff.rulebook import (
+        NextCheckDueCondition,
+        RulebookSettings,
+        RuleDefinition,
+        RuleMatchResult,
+    )
+
+    parsed = SimpleNamespace(
+        text_query="",
+        next_check_min=None,
+        next_check_max=None,
+        deadline_min=None,
+        deadline_max=None,
+    )
+    monkeypatch.setattr("handoff.services.handoff_service.parse_search_query", lambda _: parsed)
+
+    rulebook_settings = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="custom_blocked",
+                name="Blocked",
+                section_id="blocked",
+                priority=10,
+                enabled=True,
+                conditions=(NextCheckDueCondition(),),
+            ),
+        ),
+        open_items_fallback_section="manual_triage",
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: rulebook_settings,
+    )
+
+    fallback_handoff = Handoff(
+        id=101,
+        project_id=1,
+        need_back="Needs manual triage",
+        next_check=date(2026, 3, 15),
+        created_at=datetime(2026, 3, 1, 9, 0, 0),
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service._query_open_handoffs_for_now",
+        lambda **kwargs: [fallback_handoff],
+    )
+    monkeypatch.setattr(
+        "handoff.services.handoff_service._query_concluded_handoffs",
+        lambda **kwargs: [],
+    )
+    monkeypatch.setattr("handoff.services.handoff_service.list_projects", lambda **kwargs: [])
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.list_pitchmen_with_open_handoffs",
+        lambda **kwargs: [],
+    )
+
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.evaluate_open_handoff",
+        lambda *_args, **_kwargs: RuleMatchResult(
+            section_id="manual_triage",
+            explanation="No custom rules matched.",
+            matched_rule_id=None,
+            is_fallback=True,
+        ),
+    )
+
+    snapshot = get_now_snapshot()
+
+    assert snapshot.risk == []
+    assert snapshot.action == []
+    assert snapshot.custom_sections == [("blocked", [])]
+    assert [handoff.need_back for handoff in snapshot.upcoming] == ["Needs manual triage"]
+    assert snapshot.section_explanations == {101: "No custom rules matched."}
+
+
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:
     """query_upcoming_handoffs returns non-action, non-risk open handoffs.
 
