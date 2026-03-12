@@ -12,16 +12,22 @@ from handoff.models import Handoff, Project
 class NowSnapshot:
     """Page-facing contract for the Now page.
 
-    Contains the full payload needed to render Risk, Action required,
-    custom sections, Upcoming, and Concluded in the canonical order,
-    plus supporting data for filters and add form.
+    Contains the full payload needed to render the Now page sections in
+    canonical order: Risk, Action required, custom sections, Upcoming,
+    and Concluded. Also includes supporting data for filters and the add form.
 
-    custom_sections is a list of (section_id, handoffs) in display order;
-    section_id is used for the header label.
-
-    section_explanations maps handoff_id to a short "why this matched"
-    explanation for rulebook-driven sections (Risk, Action required,
-    custom sections, Upcoming). Concluded handoffs are not included.
+    Attributes:
+        risk: Handoffs matching the Risk rule.
+        action: Handoffs matching the Action required rule.
+        custom_sections: Tuples of (section_id, handoffs) for user-defined sections
+            in display order.
+        upcoming: Handoffs in the fallback section (usually "Upcoming").
+        concluded: Concluded handoffs.
+        projects: Available projects for filtering and context.
+        pitchmen: Unique pitchman names for filtering.
+        section_explanations: Map from handoff_id to the rule match reason for
+            rulebook-driven sections (Risk, Action required, custom sections,
+            Upcoming). Concluded handoffs are not included.
     """
 
     risk: list[Handoff]

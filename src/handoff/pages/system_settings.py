@@ -106,7 +106,17 @@ RESERVED_SECTION_ID = "upcoming"
 
 
 def _slugify_section_id(name: str) -> str:
-    """Derive a section_id from a display name (lowercase, underscores for spaces)."""
+    """Derive a URL-safe section_id from a display name.
+
+    Converts to lowercase, replaces spaces and hyphens with underscores,
+    and reserves the "upcoming" name by prefixing it with "custom_".
+
+    Args:
+        name: The display name to convert.
+
+    Returns:
+        A URL-safe section_id (lowercase, underscores), or "custom_section" if empty.
+    """
     slug = name.strip().lower().replace(" ", "_").replace("-", "_") or "custom_section"
     if slug == RESERVED_SECTION_ID:
         return f"custom_{slug}"
@@ -114,7 +124,18 @@ def _slugify_section_id(name: str) -> str:
 
 
 def _next_unique_custom_rule_id(settings: RulebookSettings, section_id: str) -> str:
-    """Return a unique rule_id for a new custom rule with the given section_id."""
+    """Generate a unique rule_id for a new custom section rule.
+
+    Uses the pattern `custom_{section_id}` or `custom_{section_id}_{n}` if
+    that ID already exists in the rulebook.
+
+    Args:
+        settings: The current rulebook settings.
+        section_id: The target section_id for the new rule.
+
+    Returns:
+        A unique rule_id that is not yet in the rulebook.
+    """
     base = f"custom_{section_id}"
     existing = {r.rule_id for r in settings.rules}
     if base not in existing:
@@ -136,7 +157,23 @@ def _add_custom_section(
     add_priority: int,
     add_match_reason: str,
 ) -> None:
-    """Create and persist a new custom section rule. Sets flash and reruns on success."""
+    """Create and persist a new custom section rule, then reload the form.
+
+    Constructs a new rule with the specified condition and saves it to the
+    rulebook. Sets a success flash message and triggers a Streamlit rerun.
+
+    Args:
+        settings: Current rulebook settings.
+        name: Display name for the custom section.
+        section_id: URL-safe section identifier.
+        add_condition_type: Type of condition ("next_check_due",
+            "deadline_within_days", or "latest_check_in_type_is").
+        add_condition_days: Days parameter for deadline condition.
+        add_condition_include_missing: Whether to include items with missing
+            next check.
+        add_priority: Rule priority (lower = checked first).
+        add_match_reason: Optional explanation shown when items match this rule.
+    """
     rule_id = _next_unique_custom_rule_id(settings, section_id)
     if add_condition_type == "next_check_due":
         conditions = (

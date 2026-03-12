@@ -79,7 +79,17 @@ def set_deadline_near_days(value: int) -> None:
 
 
 def _sync_risk_rule_deadline(settings: RulebookSettings) -> RulebookSettings:
-    """Update the built-in Risk rule's deadline-within-days to match the current setting."""
+    """Synchronize the Risk rule's deadline condition with the global setting.
+
+    Updates the built-in Risk rule's deadline-within-days condition to match
+    the current `deadline_near_days` setting, preserving all other rules unchanged.
+
+    Args:
+        settings: The rulebook settings to synchronize.
+
+    Returns:
+        A new RulebookSettings with the Risk rule's deadline condition updated.
+    """
     deadline_near = _deadline_near_days_from_dict(_load_settings())
     new_rules: list[RuleDefinition] = []
     for rule in settings.rules:
