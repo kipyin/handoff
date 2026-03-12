@@ -365,8 +365,8 @@ class TestRenderRulebookSection:
             ),
         )
         st_mock = _patch_streamlit(monkeypatch)
-        st_mock.button.side_effect = (
-            lambda label, key=None: key == "settings_rulebook_save" if key else False
+        st_mock.button.side_effect = lambda label, key=None: (
+            key == "settings_rulebook_save" if key else False
         )
         session_state = {
             "settings_rule_0_enabled": False,
@@ -414,9 +414,7 @@ class TestRenderRulebookSection:
                     name="Concluded Rule",
                     section_id="risk",
                     priority=10,
-                    conditions=(
-                        LatestCheckInTypeIsCondition(check_in_type=CheckInType.CONCLUDED),
-                    ),
+                    conditions=(LatestCheckInTypeIsCondition(check_in_type=CheckInType.CONCLUDED),),
                 ),
             ),
         )
