@@ -735,6 +735,7 @@ def render_now_page() -> None:
     if add_expanded:
         st.button(
             "➕ Add handoff",
+            shortcut="a",
             key="now_add_handoff_collapse",
             on_click=_collapse_add_form,
             help="Collapse the add form",
