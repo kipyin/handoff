@@ -76,10 +76,21 @@ def _clear_rulebook_widget_state() -> None:
 def _collect_edited_rule(
     rule: RuleDefinition, rule_idx: int, edited_enabled: bool, edited_priority: int
 ) -> RuleDefinition:
-    """Build a RuleDefinition with the same identity but updated enabled, priority, conditions.
+    """Build a RuleDefinition with updated enabled, priority, and conditions from form state.
 
-    Conditions are collected from the current session state for widgets keyed by
-    rule_idx and cond_idx.
+    Reads the current session state for condition widgets identified by rule_idx
+    and condition index, then constructs a new RuleDefinition with the provided
+    enabled and priority values while preserving rule identity and match_reason.
+
+    Args:
+        rule: The original rule definition to update.
+        rule_idx: Index of the rule in the sorted rules list (for session key lookup).
+        edited_enabled: Whether the rule is enabled in the form.
+        edited_priority: Priority value from the form.
+
+    Returns:
+        A new RuleDefinition with updated enabled, priority, and conditions,
+        preserving the original rule_id, name, section_id, and match_reason.
     """
     new_conditions: list[RuleCondition] = []
     for cond_idx, cond in enumerate(rule.conditions):
@@ -108,7 +119,12 @@ def _collect_edited_rule(
 
 
 def _render_rulebook_section() -> None:
-    """Render editable rulebook form and reset-to-defaults."""
+    """Render an editable rulebook UI with save, reset, and conditions per rule.
+
+    Displays all rules in expandable sections grouped by priority, allowing users
+    to toggle enabled status, adjust priority, and edit condition parameters.
+    Provides Save and Reset buttons to persist or revert changes.
+    """
     st.markdown("### Open-item rules")
     settings = get_rulebook_settings()
     section_labels = sorted({rule.section_id.replace("_", " ").title() for rule in settings.rules})
