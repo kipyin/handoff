@@ -358,6 +358,29 @@ def test_save_rulebook_settings_persists_and_preserves_other_keys(
     assert "rulebook" in raw
 
 
+def test_save_rulebook_settings_syncs_risk_deadline_in_persisted_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Saving rulebook should persist Risk deadline synced to deadline_near_days."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    settings_service.set_deadline_near_days(6)
+
+    stale = build_default_rulebook_settings(deadline_near_days=1)
+    settings_service.save_rulebook_settings(stale)
+
+    payload = json.loads((tmp_path / "handoff_settings.json").read_text(encoding="utf-8"))
+    rules_payload = payload["rulebook"]["rules"]
+    risk_rule_payload = next(
+        rule for rule in rules_payload if rule["rule_id"] == DEFAULT_RISK_RULE_ID
+    )
+    deadline_condition_payload = next(
+        condition
+        for condition in risk_rule_payload["conditions"]
+        if condition["condition_type"] == "deadline_within_days"
+    )
+    assert deadline_condition_payload["days"] == 6
+
+
 def test_reset_rulebook_settings_saves_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
