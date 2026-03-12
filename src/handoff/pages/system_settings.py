@@ -34,14 +34,11 @@ from handoff.rulebook import (
 from handoff.services.handoff_service import get_rulebook_section_preview_counts
 from handoff.services.settings_service import (
     DEADLINE_NEAR_DAYS_MAX,
-    DEADLINE_NEAR_DAYS_MIN,
-    get_deadline_near_days,
     get_export_payload,
     get_rulebook_settings,
     import_payload,
     reset_rulebook_settings,
     save_rulebook_settings,
-    set_deadline_near_days,
 )
 from handoff.update_ui import render_update_panel
 from handoff.version import __version__ as APP_VERSION
@@ -469,27 +466,6 @@ def _render_rulebook_section() -> None:
             st.rerun()
 
 
-def _render_now_settings_section() -> None:
-    """Render Now page / risk-window setting (deadline at risk days)."""
-    st.markdown("### Now page")
-    st.caption(
-        "Control how many days before a deadline an item is shown as at risk on the Now page. "
-        "Default is 1 (items overdue, due today, or due tomorrow)."
-    )
-    current = get_deadline_near_days()
-    new_value = st.number_input(
-        "Deadline at risk (days)",
-        min_value=DEADLINE_NEAR_DAYS_MIN,
-        max_value=DEADLINE_NEAR_DAYS_MAX,
-        value=current,
-        step=1,
-        key="settings_deadline_near_days",
-    )
-    if new_value != current:
-        set_deadline_near_days(new_value)
-        st.success("Saved. The Now page will use this from the next refresh.")
-
-
 def _render_data_export_section() -> None:
     """Render JSON and CSV export controls for projects and handoffs."""
     st.markdown("### Data export")
@@ -628,9 +604,6 @@ def render_system_settings_page() -> None:
 
     # App updates and code backups (panel from handoff.updater).
     render_update_panel(APP_VERSION)
-
-    st.divider()
-    _render_now_settings_section()
 
     st.divider()
     _render_rulebook_section()
