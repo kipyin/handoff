@@ -445,24 +445,88 @@ def test_query_handoffs_pitchman_name_filter(session, monkeypatch) -> None:
     assert results[0].pitchman == "Alice"
 
 
-def test_query_handoffs_combines_pitchman_name_and_pitchman_names(session, monkeypatch) -> None:
+def test_query_handoffs_pitchman_names_exact_match_with_whitespace_trimming(
+    session, monkeypatch
+) -> None:
+    """query_handoffs pitchman_names are exact-match filters with trimmed inputs."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+
+    session.add_all(
+        [
+            Handoff(project_id=p.id, need_back="Alice exact", pitchman="Alice"),
+            Handoff(project_id=p.id, need_back="Bob exact", pitchman="Bob"),
+            Handoff(project_id=p.id, need_back="alice lowercase", pitchman="alice"),
+            Handoff(project_id=p.id, need_back="Alicia partial", pitchman="Alicia"),
+        ]
+    )
+    session.commit()
+
+    results = data.query_handoffs(
+        pitchman_names=["  Alice  ", "", "  ", "Bob"],
+        include_concluded=True,
+    )
+    assert {h.need_back for h in results} == {"Alice exact", "Bob exact"}
+
+
+def test_query_handoffs_combines_pitchman_name_and_pitchman_names_filters(
+    session, monkeypatch
+) -> None:
     """query_handoffs applies substring and exact pitchman filters together."""
     _patch_session_context(monkeypatch, session)
     p = Project(name="P")
     session.add(p)
     session.commit()
-    session.add(Handoff(project_id=p.id, need_back="Exact", pitchman="Alice"))
-    session.add(Handoff(project_id=p.id, need_back="Substring only", pitchman="Alicia"))
-    session.add(Handoff(project_id=p.id, need_back="No match", pitchman="Bob"))
+
+    session.add_all(
+        [
+            Handoff(project_id=p.id, need_back="Alice exact", pitchman="Alice"),
+            Handoff(project_id=p.id, need_back="Alicia partial", pitchman="Alicia"),
+            Handoff(project_id=p.id, need_back="Bob", pitchman="Bob"),
+        ]
+    )
     session.commit()
 
     results = data.query_handoffs(
         pitchman_name="ali",
-        pitchman_names=["  Alice  ", ""],
+        pitchman_names=["Alice"],
         include_concluded=True,
     )
-    assert len(results) == 1
-    assert results[0].need_back == "Exact"
+    assert [h.need_back for h in results] == ["Alice exact"]
+
+
+def test_query_handoffs_uses_handoff_query_pitchman_names(session, monkeypatch) -> None:
+    """query_handoffs(query=...) forwards typed pitchman_names and archive toggles."""
+    _patch_session_context(monkeypatch, session)
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    session.add_all(
+        [
+            Handoff(project_id=active.id, need_back="Active Alice", pitchman="Alice"),
+            Handoff(project_id=archived.id, need_back="Archived Alice", pitchman="Alice"),
+            Handoff(project_id=active.id, need_back="Active Bob", pitchman="Bob"),
+        ]
+    )
+    session.commit()
+
+    active_only = data.query_handoffs(
+        query=HandoffQuery(pitchman_names=("Alice",), include_concluded=True)
+    )
+    assert [h.need_back for h in active_only] == ["Active Alice"]
+
+    with_archived = data.query_handoffs(
+        query=HandoffQuery(
+            pitchman_names=("Alice",),
+            include_concluded=True,
+            include_archived_projects=True,
+        )
+    )
+    assert {h.need_back for h in with_archived} == {"Active Alice", "Archived Alice"}
 
 
 def test_query_handoffs_typed_query_filters_and_archive_toggle(session, monkeypatch) -> None:
