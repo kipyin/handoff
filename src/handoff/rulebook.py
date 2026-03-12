@@ -280,15 +280,19 @@ def _ordered_enabled_rules(settings: RulebookSettings) -> tuple[RuleDefinition, 
 
 
 def is_built_in_rule(rule: RuleDefinition) -> bool:
-    """Return True if the rule is a built-in (Risk or Action required)."""
+    """Check if a rule is a built-in system rule.
+
+    Built-in rules are the default Risk and Action required rules, treated as
+    system-defined and not removable via the standard UI.
+    """
     return rule.rule_id in (DEFAULT_RISK_RULE_ID, DEFAULT_ACTION_RULE_ID)
 
 
 def get_open_section_display_order(settings: RulebookSettings) -> list[str]:
-    """Return section_ids in display order: Risk, Action, custom sections, fallback.
+    """Return section_ids in display order following rule priority.
 
-    Section order follows rule priority; the fallback section is last if not
-    already present.
+    Each section_id appears at most once at the position of its highest-priority
+    enabled rule. The fallback section is appended last if not already present.
     """
     seen: set[str] = set()
     ordered: list[str] = []
