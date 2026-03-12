@@ -113,7 +113,7 @@ class TestRenderDashboardPage:
         render_dashboard_page()
         labels = [call[0][0] for call in st_mock.metric.call_args_list]
         assert "At risk now" in labels
-        assert "Action overdue" in labels
+        assert "Missed check-in" in labels
         assert "Open handoffs" in labels
         assert "Reopen rate (90d)" in labels
 

@@ -28,7 +28,7 @@ def render_dashboard_page() -> None:
         st.metric("At risk now", metrics.at_risk_now)
     with col2:
         st.metric(
-            "Action overdue",
+            "Missed check-in",
             metrics.action_overdue,
             delta=f"{metrics.action_due_today} due today",
         )
@@ -42,7 +42,8 @@ def render_dashboard_page() -> None:
         )
 
     st.caption(
-        "Risk uses the System Settings deadline-near window. Overdue means next check before today."
+        "Risk uses the System Settings deadline-near window. "
+        "Missed check-in means the scheduled check date has passed."
     )
 
     st.markdown("---")
