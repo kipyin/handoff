@@ -90,7 +90,13 @@ def _apply_handoff_filters(
     deadline_min: date | None = None,
     deadline_max: date | None = None,
 ):
-    """Apply reusable handoff filters used across section queries."""
+    """Apply reusable handoff filters to a query statement.
+
+    Modifies and returns the statement with WHERE clauses for project, pitchman,
+    deadline, and next check filters. Pitchman can be filtered by substring
+    search (`pitchman_name`) or exact match from a list (`pitchman_names`).
+    Search text searches across need_back, notes, pitchman, project name, and
+    check-in notes."""
     if project_ids:
         stmt = stmt.where(Handoff.project_id.in_(project_ids))
     pitchman_stripped = (pitchman_name or "").strip()
