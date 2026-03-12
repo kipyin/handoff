@@ -58,8 +58,8 @@ class TestRenderDashboardPage:
 
         default_metrics = DashboardMetrics(
             at_risk_now=0,
-            action_overdue=0,
-            action_due_today=0,
+            missed_check_in=0,
+            check_in_due_today=0,
             open_handoffs=0,
             reopen_rate="—",
             reopen_rate_detail="No closes in window",
@@ -103,8 +103,8 @@ class TestRenderDashboardPage:
     def test_pm_cards_render(self, monkeypatch) -> None:
         metrics = DashboardMetrics(
             at_risk_now=3,
-            action_overdue=2,
-            action_due_today=1,
+            missed_check_in=2,
+            check_in_due_today=1,
             open_handoffs=8,
             reopen_rate="25%",
             reopen_rate_detail="1 of 4 closes reopened",

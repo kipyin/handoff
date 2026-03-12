@@ -29,8 +29,8 @@ def render_dashboard_page() -> None:
     with col2:
         st.metric(
             "Missed check-in",
-            metrics.action_overdue,
-            delta=f"{metrics.action_due_today} due today",
+            metrics.missed_check_in,
+            delta=f"{metrics.check_in_due_today} due today",
         )
     with col3:
         st.metric("Open handoffs", metrics.open_handoffs)
