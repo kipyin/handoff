@@ -91,6 +91,7 @@ def _build_streamlit_mock() -> MagicMock:
     st_mock.text_input.return_value = ""
     st_mock.text_area.return_value = ""
     st_mock.checkbox.return_value = False
+    st_mock.toggle.return_value = False
     st_mock.button.return_value = False
     st_mock.form_submit_button.return_value = False
     st_mock.date_input.return_value = date(2026, 3, 10)
@@ -199,28 +200,6 @@ def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch)
     assert "search_text" in snapshot_calls[0]
     assert snapshot_calls[0]["projects"] is prefetched_projects
     assert snapshot_calls[0]["pitchmen"] is prefetched_pitchmen
-
-
-def test_render_now_page_shows_shortcuts_caption(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Now page shows discoverable shortcuts caption."""
-    st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.pages.now.st", st_mock)
-    mock_project = SimpleNamespace(id=1, name="Work")
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
-    monkeypatch.setattr(
-        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
-    )
-    monkeypatch.setattr(
-        "handoff.pages.now.get_now_snapshot",
-        lambda **kwargs: _make_fake_snapshot(),
-    )
-
-    render_now_page()
-
-    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
-    assert any("Shortcuts" in c and "Add handoff" in c for c in caption_calls)
 
 
 def test_render_now_page_add_button_has_shortcut_when_collapsed(
@@ -406,7 +385,7 @@ def test_render_now_page_include_archived_projects_passed_to_snapshot(
 ) -> None:
     """Now page passes the include-archived toggle to get_now_snapshot."""
     st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = True
+    st_mock.toggle.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
@@ -433,7 +412,7 @@ def test_render_now_page_include_archived_passed_to_list_pitchmen(
 ) -> None:
     """Now page forwards include-archived toggle to list_pitchmen_with_open_handoffs."""
     st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = True
+    st_mock.toggle.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
@@ -728,7 +707,7 @@ def test_render_now_page_custom_sections_rendered_between_action_and_upcoming(
 def test_render_now_page_empty_custom_section_shows_no_handoffs_caption(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Empty custom sections render with 'No handoffs in X' caption."""
+    """Empty custom sections render with 'No handoffs in X' info message."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -746,8 +725,8 @@ def test_render_now_page_empty_custom_section_shows_no_handoffs_caption(
 
     render_now_page()
 
-    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
-    assert any("No handoffs" in c and "Waiting On Input" in c for c in caption_calls)
+    info_calls = [str(c) for c in st_mock.info.call_args_list]
+    assert any("No handoffs" in c and "Waiting On Input" in c for c in info_calls)
 
 
 def test_render_item_edit_save_validation_sets_flash_error(
@@ -1799,7 +1778,7 @@ def test_render_now_page_no_projects_with_include_archived_true_shows_create_inf
 ) -> None:
     """When include_archived=True and truly no projects, shows create info."""
     st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = True
+    st_mock.toggle.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kw: [])
 

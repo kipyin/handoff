@@ -452,8 +452,8 @@ def test_now_page_archived_toggle_allows_reopen_under_latest_lifecycle(app_test_
     assert len(at.exception) == 0
     assert not [b for b in at.button if getattr(b, "label", None) == "Reopen"]
 
-    assert len(at.checkbox) >= 1
-    at.checkbox[0].check().run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.toggle) >= 1
+    at.toggle[0].set_value(True).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
