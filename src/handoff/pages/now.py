@@ -692,7 +692,7 @@ def render_now_page() -> None:
     if flash_error:
         st.error(flash_error)
 
-    include_archived_projects = st.checkbox(
+    include_archived_projects = st.toggle(
         "Include archived projects",
         value=False,
         key="now_include_archived_projects",
