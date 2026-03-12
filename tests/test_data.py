@@ -1,5 +1,6 @@
 """Tests for data access helpers."""
 
+import dataclasses
 import importlib
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -526,6 +527,58 @@ def test_query_handoffs_uses_handoff_query_pitchman_names(session, monkeypatch) 
         )
     )
     assert {h.need_back for h in with_archived} == {"Active Alice", "Archived Alice"}
+
+
+def test_query_handoffs_typed_query_filters_and_archive_toggle(session, monkeypatch) -> None:
+    """HandoffQuery values map to query_handoffs filters, including archive toggle."""
+    _patch_session_context(monkeypatch, session)
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    active_match = Handoff(
+        project_id=active.id,
+        need_back="seed token active",
+        pitchman="Alice",
+        deadline=date(2026, 3, 10),
+    )
+    archived_match = Handoff(
+        project_id=archived.id,
+        need_back="seed token archived",
+        pitchman="Alice",
+        deadline=date(2026, 3, 11),
+    )
+    out_of_range = Handoff(
+        project_id=active.id,
+        need_back="seed token too late",
+        pitchman="Alice",
+        deadline=date(2026, 4, 2),
+    )
+    wrong_pitchman = Handoff(
+        project_id=active.id,
+        need_back="seed token wrong owner",
+        pitchman="Bob",
+        deadline=date(2026, 3, 12),
+    )
+    session.add_all([active_match, archived_match, out_of_range, wrong_pitchman])
+    session.commit()
+
+    base_query = HandoffQuery(
+        search_text="seed token",
+        project_ids=(active.id, archived.id),
+        pitchman_names=("  Alice  ",),
+        deadline_start=date(2026, 3, 1),
+        deadline_end=date(2026, 3, 31),
+        include_concluded=True,
+        include_archived_projects=False,
+    )
+    default_results = data.query_handoffs(query=base_query)
+    assert {h.id for h in default_results} == {active_match.id}
+
+    with_archived = dataclasses.replace(base_query, include_archived_projects=True)
+    archived_results = data.query_handoffs(query=with_archived)
+    assert {h.id for h in archived_results} == {active_match.id, archived_match.id}
 
 
 def test_create_project(session, monkeypatch) -> None:
