@@ -292,8 +292,8 @@ def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch)
 
     metrics = get_dashboard_metrics(today)
     assert metrics.at_risk_now == 2
-    assert metrics.action_overdue == 1
-    assert metrics.action_due_today == 1
+    assert metrics.missed_check_in == 1
+    assert metrics.check_in_due_today == 1
     assert metrics.open_handoffs == 3
     assert metrics.reopen_rate == "25%"
     assert metrics.reopen_rate_detail == "1 of 4 closes reopened"

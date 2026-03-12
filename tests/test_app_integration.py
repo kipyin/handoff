@@ -569,7 +569,7 @@ def test_dashboard_page_pm_metrics_smoke_with_seed_data(app_test_db: Path) -> No
 
     metric_labels = [getattr(metric, "label", None) for metric in at.metric]
     assert "At risk now" in metric_labels
-    assert "Action overdue" in metric_labels
+    assert "Missed check-in" in metric_labels
     assert "Open handoffs" in metric_labels
     assert "Reopen rate (90d)" in metric_labels
 
