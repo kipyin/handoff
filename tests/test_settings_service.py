@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -230,6 +231,66 @@ def test_get_rulebook_settings_invalid_rulebook_payload_returns_defaults(
 
     (tmp_path / "handoff_settings.json").write_text(
         '{"rulebook": {"version": 1, "rules": []}}', encoding="utf-8"
+    )
+    settings = settings_service.get_rulebook_settings()
+    assert settings == build_default_rulebook_settings()
+
+
+def test_get_rulebook_settings_malformed_rule_returns_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Malformed rule returns full default rulebook (intended recovery in get_rulebook_settings)."""
+    _patch_settings_path(monkeypatch, tmp_path)
+
+    # Rule missing required rule_id
+    malformed = {"version": 1, "rules": [{"name": "Bad", "section_id": "risk", "conditions": []}]}
+    (tmp_path / "handoff_settings.json").write_text(
+        json.dumps({"rulebook": malformed}),
+        encoding="utf-8",
+    )
+    settings = settings_service.get_rulebook_settings()
+    assert settings == build_default_rulebook_settings()
+
+
+def test_get_rulebook_settings_invalid_condition_type_returns_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Unknown condition_type raises; get_rulebook_settings returns full default rulebook."""
+    _patch_settings_path(monkeypatch, tmp_path)
+
+    rule_with_unknown_condition = {
+        "rule_id": "bad_rule",
+        "name": "Bad",
+        "section_id": "risk",
+        "priority": 10,
+        "conditions": [{"condition_type": "unknown_condition_type"}],
+    }
+    payload = {"version": 1, "rules": [rule_with_unknown_condition]}
+    (tmp_path / "handoff_settings.json").write_text(
+        json.dumps({"rulebook": payload}),
+        encoding="utf-8",
+    )
+    settings = settings_service.get_rulebook_settings()
+    assert settings == build_default_rulebook_settings()
+
+
+def test_get_rulebook_settings_condition_not_dict_returns_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Condition not a dict raises; get_rulebook_settings returns full default rulebook."""
+    _patch_settings_path(monkeypatch, tmp_path)
+
+    rule_with_bad_condition = {
+        "rule_id": "bad_rule",
+        "name": "Bad",
+        "section_id": "risk",
+        "priority": 10,
+        "conditions": ["not a dict"],
+    }
+    payload = {"version": 1, "rules": [rule_with_bad_condition]}
+    (tmp_path / "handoff_settings.json").write_text(
+        json.dumps({"rulebook": payload}),
+        encoding="utf-8",
     )
     settings = settings_service.get_rulebook_settings()
     assert settings == build_default_rulebook_settings()
