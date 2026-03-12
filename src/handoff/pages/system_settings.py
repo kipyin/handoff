@@ -106,16 +106,10 @@ RESERVED_SECTION_ID = "upcoming"
 
 
 def _slugify_section_id(name: str) -> str:
-    """Derive a URL-safe section_id from a display name.
+    """Derive a section_id from a display name.
 
-    Converts to lowercase, replaces spaces and hyphens with underscores,
-    and reserves the "upcoming" name by prefixing it with "custom_".
-
-    Args:
-        name: The display name to convert.
-
-    Returns:
-        A URL-safe section_id (lowercase, underscores), or "custom_section" if empty.
+    Lowercases, replaces spaces and hyphens with underscores. Reserves
+    "upcoming" by prefixing with "custom_". Returns "custom_section" if empty.
     """
     slug = name.strip().lower().replace(" ", "_").replace("-", "_") or "custom_section"
     if slug == RESERVED_SECTION_ID:
@@ -165,9 +159,9 @@ def _add_custom_section(
     Args:
         settings: Current rulebook settings.
         name: Display name for the custom section.
-        section_id: URL-safe section identifier.
-        add_condition_type: Type of condition ("next_check_due",
-            "deadline_within_days", or "latest_check_in_type_is").
+        section_id: Section identifier.
+        add_condition_type: "next_check_due" or "deadline_within_days";
+            any other value is treated as delayed check-in.
         add_condition_days: Days parameter for deadline condition.
         add_condition_include_missing: Whether to include items with missing
             next check.
