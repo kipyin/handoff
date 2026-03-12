@@ -10,6 +10,7 @@ from sqlmodel import select
 
 import handoff.data as data
 from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.page_models import HandoffQuery
 
 
 def _patch_session_context(monkeypatch, session) -> None:
@@ -441,6 +442,86 @@ def test_query_handoffs_pitchman_name_filter(session, monkeypatch) -> None:
     results = data.query_handoffs(pitchman_name="lic", include_concluded=True)
     assert len(results) == 1
     assert results[0].pitchman == "Alice"
+
+
+def test_query_handoffs_combines_pitchman_name_and_pitchman_names(session, monkeypatch) -> None:
+    """query_handoffs applies substring and exact pitchman filters together."""
+    _patch_session_context(monkeypatch, session)
+    p = Project(name="P")
+    session.add(p)
+    session.commit()
+    session.add(Handoff(project_id=p.id, need_back="Exact", pitchman="Alice"))
+    session.add(Handoff(project_id=p.id, need_back="Substring only", pitchman="Alicia"))
+    session.add(Handoff(project_id=p.id, need_back="No match", pitchman="Bob"))
+    session.commit()
+
+    results = data.query_handoffs(
+        pitchman_name="ali",
+        pitchman_names=["  Alice  ", ""],
+        include_concluded=True,
+    )
+    assert len(results) == 1
+    assert results[0].need_back == "Exact"
+
+
+def test_query_handoffs_typed_query_filters_and_archive_toggle(session, monkeypatch) -> None:
+    """HandoffQuery values map to query_handoffs filters, including archive toggle."""
+    _patch_session_context(monkeypatch, session)
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    active_match = Handoff(
+        project_id=active.id,
+        need_back="seed token active",
+        pitchman="Alice",
+        deadline=date(2026, 3, 10),
+    )
+    archived_match = Handoff(
+        project_id=archived.id,
+        need_back="seed token archived",
+        pitchman="Alice",
+        deadline=date(2026, 3, 11),
+    )
+    out_of_range = Handoff(
+        project_id=active.id,
+        need_back="seed token too late",
+        pitchman="Alice",
+        deadline=date(2026, 4, 2),
+    )
+    wrong_pitchman = Handoff(
+        project_id=active.id,
+        need_back="seed token wrong owner",
+        pitchman="Bob",
+        deadline=date(2026, 3, 12),
+    )
+    session.add_all([active_match, archived_match, out_of_range, wrong_pitchman])
+    session.commit()
+
+    base_query = HandoffQuery(
+        search_text="seed token",
+        project_ids=(active.id, archived.id),
+        pitchman_names=("  Alice  ",),
+        deadline_start=date(2026, 3, 1),
+        deadline_end=date(2026, 3, 31),
+        include_concluded=True,
+        include_archived_projects=False,
+    )
+    default_results = data.query_handoffs(query=base_query)
+    assert {h.id for h in default_results} == {active_match.id}
+
+    with_archived = HandoffQuery(
+        search_text=base_query.search_text,
+        project_ids=base_query.project_ids,
+        pitchman_names=base_query.pitchman_names,
+        deadline_start=base_query.deadline_start,
+        deadline_end=base_query.deadline_end,
+        include_concluded=base_query.include_concluded,
+        include_archived_projects=True,
+    )
+    archived_results = data.query_handoffs(query=with_archived)
+    assert {h.id for h in archived_results} == {active_match.id, archived_match.id}
 
 
 def test_create_project(session, monkeypatch) -> None:
