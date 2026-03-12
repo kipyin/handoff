@@ -90,6 +90,37 @@ class TestRenderDataExportSection:
 
         assert st_mock.download_button.call_count == 2
 
+    def test_csv_download_uses_handoff_rows(self, monkeypatch) -> None:
+        """CSV export should include current handoff rows instead of legacy todos."""
+        st_mock = _patch_streamlit(monkeypatch)
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_export_payload",
+            lambda: {
+                "projects": [],
+                "handoffs": [
+                    {
+                        "id": 7,
+                        "project_id": 3,
+                        "need_back": "Launch checklist",
+                        "pitchman": "Alex",
+                        "next_check": "2026-03-12",
+                        "deadline": "2026-03-14",
+                        "notes": "Ship after QA",
+                        "created_at": "2026-03-10T09:00:00",
+                    }
+                ],
+                "check_ins": [],
+            },
+        )
+
+        _render_data_export_section()
+
+        csv_call = st_mock.download_button.call_args_list[1]
+        assert csv_call.args[0] == "Download CSV (handoffs)"
+        assert csv_call.kwargs["file_name"] == "handoff_handoffs.csv"
+        assert "need_back" in csv_call.kwargs["data"]
+        assert "Launch checklist" in csv_call.kwargs["data"]
+
 
 class TestRenderDataImportSection:
     def test_valid_import_with_confirm_and_apply(self, monkeypatch) -> None:
