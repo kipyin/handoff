@@ -31,6 +31,7 @@ from handoff.rulebook import (
     RuleDefinition,
     is_built_in_rule,
 )
+from handoff.services.handoff_service import get_rulebook_section_preview_counts
 from handoff.services.settings_service import (
     DEADLINE_NEAR_DAYS_MAX,
     DEADLINE_NEAR_DAYS_MIN,
@@ -251,19 +252,24 @@ def _render_rulebook_section() -> None:
 
     Displays all rules in expandable sections sorted by priority, allowing users
     to toggle enabled status, adjust priority, and edit condition parameters.
-    Provides Save and Reset buttons to persist or revert changes.
+    Shows preview counts for each section. Provides Save and Reset buttons to
+    persist or revert changes.
     """
     flash = st.session_state.pop("settings_rulebook_flash", None)
     if flash:
         st.success(flash)
     st.markdown("### Open-item rules")
     settings = get_rulebook_settings()
+    preview_counts = get_rulebook_section_preview_counts(settings)
     section_labels = sorted({rule.section_id.replace("_", " ").title() for rule in settings.rules})
     sections_str = ", ".join(section_labels) if section_labels else "configured Now-page sections"
     fallback_label = settings.open_items_fallback_section.replace("_", " ").title()
+    fallback_count = preview_counts.get(settings.open_items_fallback_section, 0)
+    fallback_note = f" ({fallback_count} item{'s' if fallback_count != 1 else ''})"
     st.caption(
         f"Rules that group open handoffs into Now-page sections ({sections_str}). "
-        f"First matching enabled rule wins. Unmatched items fall back to {fallback_label}."
+        f"First matching enabled rule wins. Unmatched items fall back to "
+        f"{fallback_label}{fallback_note}."
     )
 
     ordered_rules = sorted(
@@ -273,8 +279,11 @@ def _render_rulebook_section() -> None:
     edited_rules: list[tuple[int, bool, int]] = []
 
     for rule_idx, rule in ordered_rules:
+        count = preview_counts.get(rule.section_id, 0)
+        count_suffix = f" · {count}"
         with st.expander(
-            f"**{rule.name}** — {rule.section_id.replace('_', ' ').title()}", expanded=False
+            f"**{rule.name}** — {rule.section_id.replace('_', ' ').title()}{count_suffix}",
+            expanded=False,
         ):
             enabled = st.checkbox(
                 "Enabled",
