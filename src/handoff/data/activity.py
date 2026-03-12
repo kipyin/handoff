@@ -41,7 +41,7 @@ def log_activity(
                 },
             )
             session.commit()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("Activity log insert failed: {}", exc)
 
 

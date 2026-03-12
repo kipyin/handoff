@@ -13,6 +13,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "cpitd>=0.2.0",
     "ruff>=0.8.0",
     "pytest>=8.0.0",
     "typer>=0.12.3",
@@ -34,10 +35,21 @@ target-version = "py313"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF", "N"]
+ignore = [
+  "PLR2004",
+  "N812",
+  "RUF001",
+  "RUF002",
+]
+
 
 [tool.ruff.format]
 quote-style = "double"
+
+[tool.cpitd]
+format = "human"
+ignore = ["tests/**", "scripts/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

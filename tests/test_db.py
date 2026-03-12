@@ -390,7 +390,7 @@ def test_init_db_raises_when_engine_creation_fails(
 ) -> None:
     """When engine creation fails lazily, DatabaseInitializationError is raised."""
     monkeypatch.setenv("HANDOFF_DB_PATH", str(tmp_path / "todo.db"))
-    import handoff.db as db  # noqa: F401
+    import handoff.db as db
 
     db.dispose_db()
     with patch("handoff.db.create_engine", side_effect=Exception("Engine failed")):

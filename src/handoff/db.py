@@ -81,7 +81,7 @@ def get_engine() -> Engine:
     database_url = get_database_url()
     try:
         _ENGINE = create_engine(database_url, echo=False)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Failed to create database engine for {}", database_url)
         msg = (
             "Could not initialise the database engine. "
@@ -112,7 +112,7 @@ def init_db() -> None:
         from handoff.migrations import run_pending_migrations
 
         run_pending_migrations(engine)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.exception("Database initialization failed: {}", exc)
         msg = "Database initialisation failed. See the log file for details."
         raise DatabaseInitializationError(msg) from exc

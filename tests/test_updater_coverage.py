@@ -117,7 +117,7 @@ class TestExtractZipToDir:
 
         monkeypatch.setattr("pathlib.Path.open", fail_open)
         with zipfile.ZipFile(BytesIO(data)) as zf:
-            extracted, failed = _extract_zip_to_dir(zf, ["app.py"], tmp_path)
+            _extracted, failed = _extract_zip_to_dir(zf, ["app.py"], tmp_path)
         assert "app.py" in failed
 
 

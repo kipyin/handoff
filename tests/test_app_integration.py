@@ -35,7 +35,7 @@ def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     db.dispose_db()  # close any existing engine before reload
     importlib.reload(db)
-    import handoff.ui as ui  # noqa: F401
+    import handoff.ui as ui
 
     importlib.reload(ui)
 

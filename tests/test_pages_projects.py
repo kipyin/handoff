@@ -80,7 +80,7 @@ def test_get_pending_changes_delete_priority(mock_projects):
             {"__project_id": 1, "name": "New Name", "confirm_delete": True},
         ]
     )
-    valid, errors, changes = _get_pending_changes(df, mock_projects)
+    _valid, _errors, changes = _get_pending_changes(df, mock_projects)
 
     assert len(changes) == 1
     assert changes[0]["type"] == "delete"
@@ -127,7 +127,7 @@ def test_execute_changes_handles_exceptions(monkeypatch):
     monkeypatch.setattr("handoff.pages.projects.rename_project", mock_rename)
 
     changes = [{"type": "rename", "id": 1, "new_name": "Fail"}]
-    deleted, updated, errors = _execute_changes(changes)
+    _deleted, updated, errors = _execute_changes(changes)
 
     assert updated == 0
     assert len(errors) == 1
@@ -177,7 +177,7 @@ def test_get_pending_changes_unarchive(mock_projects):
             },
         ]
     )
-    valid, errors, changes = _get_pending_changes(df, mock_projects)
+    valid, _errors, changes = _get_pending_changes(df, mock_projects)
 
     assert valid is True
     assert len(changes) == 1
@@ -194,7 +194,7 @@ def test_execute_changes_unarchive(monkeypatch):
     monkeypatch.setattr("handoff.pages.projects.unarchive_project", mock_unarchive)
 
     changes = [{"type": "archive", "id": 3, "archive": False}]
-    deleted, updated, errors = _execute_changes(changes)
+    _deleted, updated, _errors = _execute_changes(changes)
 
     assert updated == 1
     assert 3 in calls
@@ -209,7 +209,7 @@ def test_apply_project_changes_orchestration(mock_projects, monkeypatch):
             {"__project_id": 1, "name": "Renamed", "is_archived": False, "confirm_delete": False},
         ]
     )
-    success, errors, deleted, updated = _apply_project_changes(df, mock_projects)
+    success, errors, _deleted, updated = _apply_project_changes(df, mock_projects)
 
     assert success is True
     assert updated == 1
@@ -223,7 +223,7 @@ def test_apply_project_changes_validation_failure(mock_projects):
             {"__project_id": 1, "name": "", "is_archived": False, "confirm_delete": False},
         ]
     )
-    success, errors, deleted, updated = _apply_project_changes(df, mock_projects)
+    success, errors, _deleted, updated = _apply_project_changes(df, mock_projects)
 
     assert success is False
     assert "Project name cannot be empty" in errors[0]
@@ -305,7 +305,7 @@ def test_get_pending_changes_skips_row_with_missing_project_id(mock_projects):
             {"name": "Y", "is_archived": False, "confirm_delete": False},
         ]
     )
-    valid, errors, changes = _get_pending_changes(df, mock_projects)
+    valid, _errors, changes = _get_pending_changes(df, mock_projects)
     assert valid is True
     assert len(changes) == 0
 
@@ -317,7 +317,7 @@ def test_get_pending_changes_skips_unknown_project_id(mock_projects):
             {"__project_id": 999, "name": "Unknown", "is_archived": False, "confirm_delete": False},
         ]
     )
-    valid, errors, changes = _get_pending_changes(df, mock_projects)
+    valid, _errors, changes = _get_pending_changes(df, mock_projects)
     assert valid is True
     assert len(changes) == 0
 
@@ -489,7 +489,7 @@ class TestApplyProjectChangesOrchestration:
         df = pd.DataFrame(
             [{"__project_id": 1, "name": "Changed", "is_archived": False, "confirm_delete": False}]
         )
-        success, errors, deleted, updated = _apply_project_changes(df, mock_projects)
+        success, errors, _deleted, _updated = _apply_project_changes(df, mock_projects)
         assert success is False
         assert len(errors) > 0
 
