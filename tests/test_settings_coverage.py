@@ -12,7 +12,9 @@ from unittest.mock import MagicMock
 
 from handoff.models import CheckInType
 from handoff.pages.system_settings import (
+    CSV_HANDOFF_COLUMNS,
     _collect_edited_rule,
+    _handoffs_csv_text,
     _render_about_section,
     _render_data_export_section,
     _render_data_import_section,
@@ -588,6 +590,25 @@ class TestRenderAboutSection:
 
 
 class TestRenderDataExportSection:
+    def test_handoffs_csv_text_empty_payload_returns_handoff_header(self) -> None:
+        """Empty handoff exports still include the canonical handoff CSV header."""
+        csv_text = _handoffs_csv_text({"handoffs": []})
+        assert csv_text == ",".join(CSV_HANDOFF_COLUMNS) + "\n"
+
+    def test_handoffs_csv_text_missing_columns_keeps_canonical_shape(self) -> None:
+        """Sparse handoff rows are normalized so downstream CSV import stays stable."""
+        csv_text = _handoffs_csv_text({"handoffs": [{"id": 7, "need_back": "Launch checklist"}]})
+        lines = csv_text.strip().splitlines()
+        assert len(lines) == 2
+
+        header = lines[0].split(",")
+        row = lines[1].split(",")
+        assert header == CSV_HANDOFF_COLUMNS
+        assert row[header.index("id")] == "7"
+        assert row[header.index("need_back")] == "Launch checklist"
+        assert row[header.index("project_id")] == ""
+        assert row[header.index("pitchman")] == ""
+
     def test_renders_download_buttons(self, monkeypatch) -> None:
         """Export section creates JSON and CSV download buttons."""
         st_mock = _patch_streamlit(monkeypatch)
