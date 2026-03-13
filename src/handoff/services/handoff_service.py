@@ -126,14 +126,13 @@ def get_now_snapshot(
     today = date.today()
 
     buckets: dict[str, list[Handoff]] = {}
-    section_explanations: dict[int, str] = {}
+    section_explanations: dict[str, str] = {}
 
     for handoff in open_handoffs:
         match_result = evaluate_open_handoff(handoff, settings=rulebook, today=today)
-        h_id = handoff.id
-        if h_id is not None:
-            section_explanations[h_id] = match_result.explanation
         sid = match_result.section_id
+        if sid not in section_explanations:
+            section_explanations[sid] = match_result.explanation
         if sid not in buckets:
             buckets[sid] = []
         buckets[sid].append(handoff)
@@ -175,6 +174,7 @@ def get_now_snapshot(
         action=action,
         custom_sections=custom_sections,
         upcoming=upcoming,
+        upcoming_section_id=fallback_section,
         concluded=concluded,
         projects=projects,
         pitchmen=pitchmen,

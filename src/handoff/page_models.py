@@ -22,22 +22,25 @@ class NowSnapshot:
         custom_sections: Tuples of (section_id, handoffs) for user-defined sections
             in display order.
         upcoming: Handoffs in the fallback section (usually "Upcoming").
+        upcoming_section_id: Section id for the fallback section; used to look up
+            its explanation in section_explanations.
         concluded: Concluded handoffs.
         projects: Available projects for filtering and context.
         pitchmen: Unique pitchman names for filtering.
-        section_explanations: Map from handoff_id to the rule match reason for
+        section_explanations: Map from section_id to the rule match reason for
             rulebook-driven sections (Risk, Action required, custom sections,
-            Upcoming). Concluded handoffs are not included.
+            Upcoming). Concluded section has no entry.
     """
 
     risk: list[Handoff]
     action: list[Handoff]
     custom_sections: list[tuple[str, list[Handoff]]]
     upcoming: list[Handoff]
+    upcoming_section_id: str
     concluded: list[Handoff]
     projects: list[Project]
     pitchmen: list[str]
-    section_explanations: dict[int, str]
+    section_explanations: dict[str, str]
 
 
 @dataclass(slots=True, frozen=True)
