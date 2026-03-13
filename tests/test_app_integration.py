@@ -102,12 +102,12 @@ def test_projects_page_renders_with_app_test(app_test_db: Path) -> None:
 
 
 def test_projects_page_archived_toggle_survives_models_reload(app_test_db: Path) -> None:
-    """Toggling archived projects survives a hot reload of handoff.models."""
+    """Toggling archived projects survives a hot reload of handoff.core.models."""
     import importlib
 
+    import handoff.core.models as models
     import handoff.data as data
     import handoff.db as db
-    import handoff.models as models
 
     db.init_db()
     active = data.create_project("Active")

@@ -10,9 +10,9 @@ from datetime import date
 
 import streamlit as st
 
+from handoff.core.models import CheckIn, CheckInType, Handoff, Project
 from handoff.dates import add_business_days, format_date_smart, format_risk_reason
 from handoff.instrumentation import time_action
-from handoff.models import CheckIn, CheckInType, Handoff, Project
 from handoff.rulebook import BuiltInSection
 from handoff.services import (
     add_check_in,

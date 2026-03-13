@@ -8,7 +8,7 @@ from datetime import date
 import pytest
 
 import handoff.data as data
-from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.core.models import CheckIn, CheckInType, Handoff, Project
 from handoff.rulebook import (
     BuiltInSection,
     DeadlineWithinDaysCondition,

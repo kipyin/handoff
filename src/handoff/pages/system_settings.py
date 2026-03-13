@@ -21,7 +21,7 @@ from loguru import logger
 from handoff.backup_schema import BackupPayload
 from handoff.bootstrap.docs import get_readme_intro
 from handoff.bootstrap.logging import _get_logs_dir
-from handoff.models import CheckInType
+from handoff.core.models import CheckInType
 from handoff.rulebook import (
     DeadlineWithinDaysCondition,
     LatestCheckInTypeIsCondition,

@@ -8,10 +8,10 @@ from datetime import date
 from loguru import logger
 from sqlmodel import select
 
-from handoff import handoff_lifecycle
+from handoff.core import handoff_lifecycle
+from handoff.core.models import CheckIn, CheckInType, Handoff
 from handoff.data.activity import log_activity
 from handoff.db import session_context
-from handoff.models import CheckIn, CheckInType, Handoff
 
 
 class _Unset(enum.Enum):

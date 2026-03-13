@@ -12,7 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from handoff.models import CheckInType
+from handoff.core.models import CheckInType
 from handoff.pages.system_settings import (
     APP_VERSION,
     CSV_HANDOFF_COLUMNS,
