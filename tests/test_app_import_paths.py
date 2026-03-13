@@ -12,7 +12,6 @@ interfaces after PR #166 (project structure restructure PR4). Tests ensure that:
 from __future__ import annotations
 
 import importlib
-import sys
 from pathlib import Path
 
 import pytest
@@ -179,9 +178,10 @@ def test_pages_import_services_not_data_directly(monkeypatch: pytest.MonkeyPatch
 
         # Look for direct imports of handoff.data
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                if node.module and node.module.startswith("handoff.data"):
-                    pytest.fail(
-                        f"{page_file.name} imports directly from {node.module}, "
-                        "should use services instead"
-                    )
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith(
+                "handoff.data"
+            ):
+                pytest.fail(
+                    f"{page_file.name} imports directly from {node.module}, "
+                    "should use services instead"
+                )

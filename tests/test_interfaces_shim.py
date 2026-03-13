@@ -11,7 +11,7 @@ These tests prevent regressions when the Streamlit UI is relocated to handoff/in
 from __future__ import annotations
 
 import importlib
-import sys
+from contextlib import suppress
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -223,11 +223,9 @@ def test_handoff_ui_setup_renders_error_message_with_correct_content(
         patch.object(ui_module, "st", st_mock),
         patch.object(ui_module, "init_db", init_db_mock),
         patch.object(ui_module, "configure_logging"),
+        suppress(DatabaseInitializationError),
     ):
-        try:
-            setup("1.0.0")
-        except DatabaseInitializationError:
-            pass
+        setup("1.0.0")
 
     st_mock.error.assert_called_once()
     error_message = st_mock.error.call_args[0][0]
@@ -259,7 +257,8 @@ def test_import_from_handoff_interfaces_pages_submodules() -> None:
 def test_app_py_imports_from_new_paths() -> None:
     """Verify app.py uses the new import paths (not the old ones)."""
     app_py_path = "/workspace/app.py"
-    content = open(app_py_path).read()
+    with open(app_py_path) as f:
+        content = f.read()
 
     # Should import from new paths
     assert "from handoff.interfaces.streamlit.pages.now import" in content
