@@ -21,10 +21,8 @@ def setup(app_version: str) -> None:
     """Initialise global layout and database.
 
     This function should be called once per Streamlit page before rendering any
-    concrete content.
-
-    Args:
-        app_version: Application version string for display.
+    concrete content. It configures logging, sets the page layout, and initializes
+    the database. If database initialization fails, the app stops with an error.
 
     """
     configure_logging()
