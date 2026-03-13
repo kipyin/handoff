@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def test_app_py_can_import_render_now_page() -> None:
     """app.py can import render_now_page from handoff.interfaces.streamlit.pages.now."""
@@ -47,16 +49,10 @@ def test_app_py_can_import_ui_entrypoints() -> None:
 
 
 def test_app_py_load_without_error() -> None:
-    """app.py itself can be executed without import errors."""
-    workspace = Path("/workspace")
-    app_py = workspace / "app.py"
+    """app.py can be imported without import errors at module level."""
+    import app  # noqa: F401
 
-    # Compile and execute app.py to verify no import errors at module level
-    with open(app_py) as f:
-        code = f.read()
-
-    # Ensure it parses without syntax errors
-    compile(code, str(app_py), "exec")
+    # If we get here, all top-level imports in app.py succeeded
 
 
 def test_no_circular_imports_from_app_imports() -> None:
@@ -88,7 +84,7 @@ def test_integration_entry_functions_use_compatibility_shim() -> None:
 
 def test_all_page_files_exist_in_new_location() -> None:
     """All page files exist in handoff/interfaces/streamlit/pages/."""
-    pages_dir = Path("/workspace/src/handoff/interfaces/streamlit/pages")
+    pages_dir = REPO_ROOT / "src/handoff/interfaces/streamlit/pages"
     required_pages = [
         "__init__.py",
         "about.py",
@@ -105,7 +101,7 @@ def test_all_page_files_exist_in_new_location() -> None:
 
 def test_old_pages_directory_no_longer_contains_pages() -> None:
     """The old src/handoff/pages directory no longer contains page implementations."""
-    old_pages_dir = Path("/workspace/src/handoff/pages")
+    old_pages_dir = REPO_ROOT / "src/handoff/pages"
 
     # Directory may exist (for __init__.py placeholder) but should not have page modules
     if old_pages_dir.exists():
@@ -165,9 +161,8 @@ def test_pages_import_services_not_data_directly(monkeypatch: pytest.MonkeyPatch
     This is an architectural guard that checks the actual imports.
     """
     import ast
-    from pathlib import Path
 
-    pages_dir = Path("src/handoff/interfaces/streamlit/pages")
+    pages_dir = REPO_ROOT / "src/handoff/interfaces/streamlit/pages"
 
     # Check each page file
     for page_file in pages_dir.glob("*.py"):

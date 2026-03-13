@@ -10,11 +10,15 @@ These tests prevent regressions when the Streamlit UI is relocated to handoff/in
 
 from __future__ import annotations
 
+import ast
 import importlib
 from contextlib import suppress
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_handoff_ui_compatibility_shim_exports_setup() -> None:
@@ -256,17 +260,27 @@ def test_import_from_handoff_interfaces_pages_submodules() -> None:
 
 def test_app_py_imports_from_new_paths() -> None:
     """Verify app.py uses the new import paths (not the old ones)."""
-    app_py_path = "/workspace/app.py"
-    with open(app_py_path) as f:
-        content = f.read()
+    app_py = _REPO_ROOT / "app.py"
+    content = app_py.read_text(encoding="utf-8")
+    tree = ast.parse(content)
 
-    # Should import from new paths
-    assert "from handoff.interfaces.streamlit.pages.now import" in content
-    assert "from handoff.interfaces.streamlit.ui import" in content
+    imported_modules: set[str] = set()
+    handoff_ui_render_names: set[str] = set()
 
-    # Should NOT import from old paths
-    assert "from handoff.pages" not in content
-    assert "from handoff.ui import render_" not in content
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            imported_modules.add(node.module)
+            if node.module == "handoff.ui":
+                for alias in node.names:
+                    if alias.name.startswith("render_"):
+                        handoff_ui_render_names.add(alias.name)
+
+    assert "handoff.interfaces.streamlit.pages.now" in imported_modules
+    assert "handoff.interfaces.streamlit.ui" in imported_modules
+    assert not any(m.startswith("handoff.pages") for m in imported_modules)
+    assert len(handoff_ui_render_names) == 0, (
+        f"app.py should not import render_* from handoff.ui, got {handoff_ui_render_names}"
+    )
 
 
 def test_compatibility_shim_enables_gradual_migration() -> None:
