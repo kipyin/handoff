@@ -973,6 +973,32 @@ def test_render_add_form_submit_calls_create_handoff(monkeypatch: pytest.MonkeyP
     assert _NOW_ADD_EXPANDED_KEY not in st_mock.session_state
 
 
+def test_render_add_form_sets_clear_on_submit_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Add form keeps widget values after failed submits by disabling auto-clear."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    st_mock.form.assert_called_once_with(key="now_add_form", clear_on_submit=False)
+
+
+def test_render_add_form_marks_required_field_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Required add-form fields include visual indicators in their labels."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    selectbox_labels = [call.args[0] for call in st_mock.selectbox.call_args_list if call.args]
+    text_input_labels = [call.args[0] for call in st_mock.text_input.call_args_list if call.args]
+    date_input_labels = [call.args[0] for call in st_mock.date_input.call_args_list if call.args]
+
+    assert "Project *" in selectbox_labels
+    assert "Need back *" in text_input_labels
+    assert "Next check *" in date_input_labels
+
+
 def test_render_add_form_missing_need_back_sets_flash_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
