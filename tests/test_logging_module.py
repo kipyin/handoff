@@ -57,7 +57,8 @@ def test_log_application_action_includes_db_path_and_details(
     import handoff.db as db_mod
     import handoff.logging as log_mod
 
-    monkeypatch.setattr(db_mod, "get_db_path", lambda: Path("/tmp/handoff.db"))
+    db_path = Path("/tmp/handoff.db")
+    monkeypatch.setattr(db_mod, "get_db_path", lambda: db_path)
     messages: list[str] = []
     monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
 
@@ -66,7 +67,7 @@ def test_log_application_action_includes_db_path_and_details(
     assert len(messages) == 1
     message = messages[0]
     assert message.startswith("application action=data_export")
-    assert "db_path=/tmp/handoff.db" in message
+    assert f"db_path={db_path}" in message
     assert "format=json" in message
 
 
