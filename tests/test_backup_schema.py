@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 import pytest
 
-from handoff.backup_schema import (
+from handoff.core.backup_schema import (
     BackupCheckInRecord,
     BackupHandoffRecord,
     BackupPayload,

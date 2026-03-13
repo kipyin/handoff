@@ -6,8 +6,8 @@ from typing import Any
 
 from sqlmodel import select
 
-from handoff.backup_schema import BackupPayload
 from handoff.bootstrap.logging import log_application_action
+from handoff.core.backup_schema import BackupPayload
 from handoff.core.models import CheckIn, Handoff, Project
 from handoff.db import session_context
 

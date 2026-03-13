@@ -13,6 +13,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from handoff.core.models import CheckInType
+from handoff.core.rulebook import NextCheckDueCondition, RulebookSettings, RuleDefinition
 from handoff.pages.system_settings import (
     APP_VERSION,
     CSV_HANDOFF_COLUMNS,
@@ -25,7 +26,6 @@ from handoff.pages.system_settings import (
     _render_send_log_section,
     render_system_settings_page,
 )
-from handoff.rulebook import NextCheckDueCondition, RulebookSettings, RuleDefinition
 from handoff.services.settings_service import DEADLINE_NEAR_DAYS_MAX
 
 
@@ -84,7 +84,7 @@ class TestRenderSendLogSection:
 class TestRenderRulebookSection:
     def test_collect_edited_rule_clamps_and_normalizes_values(self, monkeypatch) -> None:
         """Collected rule values clamp and normalize edited widget state."""
-        from handoff.rulebook import DeadlineWithinDaysCondition, LatestCheckInTypeIsCondition
+        from handoff.core.rulebook import DeadlineWithinDaysCondition, LatestCheckInTypeIsCondition
 
         # Include all three editable condition primitives in one rule.
         # Order matters for widget key construction.
@@ -123,7 +123,7 @@ class TestRenderRulebookSection:
 
     def test_preview_renders_rules_and_caption(self, monkeypatch) -> None:
         """Rulebook section displays active rules, caption, and preview counts."""
-        from handoff.rulebook import build_default_rulebook_settings
+        from handoff.core.rulebook import build_default_rulebook_settings
 
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.button.side_effect = lambda label, key=None: False
@@ -146,7 +146,7 @@ class TestRenderRulebookSection:
 
     def test_reset_button_calls_reset_and_shows_success(self, monkeypatch) -> None:
         """When Reset button is clicked, reset_rulebook_settings is called and success shown."""
-        from handoff.rulebook import build_default_rulebook_settings
+        from handoff.core.rulebook import build_default_rulebook_settings
 
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.button.side_effect = lambda label, key=None: (
@@ -176,7 +176,7 @@ class TestRenderRulebookSection:
 
     def test_save_button_persists_valid_rulebook(self, monkeypatch) -> None:
         """When Save is clicked with valid form state, save_rulebook_settings is called."""
-        from handoff.rulebook import build_default_rulebook_settings
+        from handoff.core.rulebook import build_default_rulebook_settings
 
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.button.side_effect = lambda label, key=None: (
@@ -216,7 +216,7 @@ class TestRenderRulebookSection:
         _render_rulebook_section()
 
         assert len(save_called) == 1
-        from handoff.rulebook import DeadlineWithinDaysCondition
+        from handoff.core.rulebook import DeadlineWithinDaysCondition
 
         risk_rule = save_called[0].rules[0]
         deadline_cond = next(
@@ -229,7 +229,7 @@ class TestRenderRulebookSection:
 
     def test_save_invalid_config_shows_error(self, monkeypatch) -> None:
         """When form state produces invalid config, error is shown."""
-        from handoff.rulebook import build_default_rulebook_settings
+        from handoff.core.rulebook import build_default_rulebook_settings
 
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.button.side_effect = lambda label, key=None: (
@@ -257,7 +257,7 @@ class TestRenderRulebookSection:
 
     def test_reset_clears_session_state_and_reruns(self, monkeypatch) -> None:
         """After Reset, rulebook widget keys are cleared and rerun is triggered."""
-        from handoff.rulebook import build_default_rulebook_settings
+        from handoff.core.rulebook import build_default_rulebook_settings
 
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.button.side_effect = lambda label, key=None: (
@@ -368,7 +368,7 @@ class TestRenderRulebookSection:
 
     def test_remove_custom_section_persists_and_reruns(self, monkeypatch) -> None:
         """Remove button for custom rule persists changes and reruns."""
-        from handoff.rulebook import build_default_rulebook_settings
+        from handoff.core.rulebook import build_default_rulebook_settings
 
         defaults = build_default_rulebook_settings()
         custom_rule = RuleDefinition(
@@ -411,7 +411,7 @@ class TestRenderRulebookSection:
 
     def test_add_section_form_submit_persists_custom_rule(self, monkeypatch) -> None:
         """Add section form submit creates and persists a custom rule."""
-        from handoff.rulebook import build_default_rulebook_settings
+        from handoff.core.rulebook import build_default_rulebook_settings
 
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.form_submit_button.side_effect = lambda label: label == "Add section"
@@ -500,7 +500,7 @@ class TestRenderRulebookSection:
 
     def test_add_section_value_error_surfaces_validation_message(self, monkeypatch) -> None:
         """When add-section validation raises, the UI shows a clean configuration error."""
-        from handoff.rulebook import build_default_rulebook_settings
+        from handoff.core.rulebook import build_default_rulebook_settings
 
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.form_submit_button.side_effect = lambda label: label == "Add section"
@@ -592,7 +592,7 @@ class TestRenderRulebookSection:
 
     def test_save_persists_risk_deadline_days_when_preview_is_reordered(self, monkeypatch) -> None:
         """Risk deadline edits persist by stored rule index even when display order changes."""
-        from handoff.rulebook import DeadlineWithinDaysCondition, LatestCheckInTypeIsCondition
+        from handoff.core.rulebook import DeadlineWithinDaysCondition, LatestCheckInTypeIsCondition
 
         settings = RulebookSettings(
             version=1,
@@ -664,7 +664,7 @@ class TestRenderRulebookSection:
 
     def test_warns_when_rule_uses_unsupported_check_in_type(self, monkeypatch) -> None:
         """Unsupported saved check-in types trigger warning and default select index."""
-        from handoff.rulebook import LatestCheckInTypeIsCondition
+        from handoff.core.rulebook import LatestCheckInTypeIsCondition
 
         settings = RulebookSettings(
             version=1,

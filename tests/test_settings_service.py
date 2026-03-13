@@ -10,7 +10,7 @@ import pytest
 from sqlmodel import select
 
 from handoff.core.models import CheckInType, Handoff, Project
-from handoff.rulebook import (
+from handoff.core.rulebook import (
     DEFAULT_ACTION_RULE_ID,
     DEFAULT_RISK_RULE_ID,
     BuiltInSection,
@@ -567,7 +567,7 @@ def test_custom_section_rule_matches_and_persists(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Custom section rules match handoffs and persist across load/save."""
-    from handoff.rulebook import (
+    from handoff.core.rulebook import (
         LatestCheckInTypeIsCondition,
         get_open_section_display_order,
         is_built_in_rule,
@@ -609,7 +609,7 @@ def test_risk_rule_syncs_with_deadline_near_days_after_custom_section(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Changing deadline_near_days updates Risk rule when loading, even after custom sections."""
-    from handoff.rulebook import DEFAULT_RISK_RULE_ID, DeadlineWithinDaysCondition
+    from handoff.core.rulebook import DEFAULT_RISK_RULE_ID, DeadlineWithinDaysCondition
 
     _patch_settings_path(monkeypatch, tmp_path)
 
