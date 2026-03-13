@@ -273,7 +273,6 @@ def _save_edit_submission(
             deadline=deadline_value if isinstance(deadline_value, date) else None,
             notes=str(context_raw).strip() or None,
         )
-    st.session_state.pop("now_editing_handoff_id", None)
     if action_mode_key:
         st.session_state.pop(action_mode_key, None)
     _set_flash_success("Saved.")
@@ -551,11 +550,10 @@ def _render_item(
         and show_check_in_controls
         and (has_active_check_in_mode or action_mode in ("edit", "delete"))
     ) or (allow_reopen and has_active_reopen_mode)
-    # Auto-expand for due action items so check-in controls are visible without clicking
-    is_due_action = show_check_in_controls and _is_check_in_due(handoff)
-    with st.expander(
-        header, expanded=editing or deleting or keep_expanded_for_mode or is_due_action
-    ):
+    # Default collapsed; only expand when editing, deleting, or form mode is active.
+    # Removed is_due_action so operations on one handoff don't expand others.
+    expanded = editing or deleting or keep_expanded_for_mode
+    with st.expander(header, expanded=expanded):
         if match_explanation:
             st.caption(match_explanation)
         if editing:

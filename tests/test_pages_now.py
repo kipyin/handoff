@@ -1023,6 +1023,32 @@ def test_render_add_form_submit_calls_create_handoff(monkeypatch: pytest.MonkeyP
     assert _NOW_ADD_EXPANDED_KEY not in st_mock.session_state
 
 
+def test_render_add_form_sets_clear_on_submit_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Add form keeps widget values after failed submits by disabling auto-clear."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    st_mock.form.assert_called_once_with(key="now_add_form", clear_on_submit=False)
+
+
+def test_render_add_form_marks_required_field_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Required add-form fields include visual indicators in their labels."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    selectbox_labels = [call.args[0] for call in st_mock.selectbox.call_args_list if call.args]
+    text_input_labels = [call.args[0] for call in st_mock.text_input.call_args_list if call.args]
+    date_input_labels = [call.args[0] for call in st_mock.date_input.call_args_list if call.args]
+
+    assert "Project *" in selectbox_labels
+    assert "Need back *" in text_input_labels
+    assert "Next check *" in date_input_labels
+
+
 def test_render_add_form_missing_need_back_sets_flash_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1930,10 +1956,10 @@ def test_render_now_page_no_projects_with_include_archived_true_shows_create_inf
 # --- Regression tests for PR #88: Snooze removal + segmented_control ---
 
 
-def test_render_item_auto_expands_due_action_items(
+def test_render_item_does_not_auto_expand_due_action_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Due action items auto-expand so check-in controls are visible without clicking."""
+    """Due action items start collapsed; user must expand to see check-in controls."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
 
@@ -1944,7 +1970,6 @@ def test_render_item_auto_expands_due_action_items(
 
     monkeypatch.setattr("handoff.pages.now.date", FixedDate)
 
-    # Handoff due today should auto-expand
     due_handoff = _make_fake_handoff(
         handoff_id=100,
         need_back="Due now",
@@ -1960,8 +1985,8 @@ def test_render_item_auto_expands_due_action_items(
         allow_actions=True,
     )
 
-    # Expander should be expanded due to is_due_action logic
-    assert st_mock.expander.call_args.kwargs["expanded"] is True
+    # Expander starts collapsed; user expands manually
+    assert st_mock.expander.call_args.kwargs["expanded"] is False
 
 
 def test_render_item_does_not_auto_expand_future_items(
@@ -1971,7 +1996,6 @@ def test_render_item_does_not_auto_expand_future_items(
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
 
-    # Handoff due in the future should not auto-expand
     future_handoff = _make_fake_handoff(
         handoff_id=101,
         need_back="Future check",
@@ -1987,8 +2011,85 @@ def test_render_item_does_not_auto_expand_future_items(
         allow_actions=True,
     )
 
-    # Expander should not be expanded (no active mode, not due)
+    # Expander starts collapsed (no active mode, not due)
     assert st_mock.expander.call_args.kwargs["expanded"] is False
+
+
+def test_render_item_only_expands_handoff_with_active_check_in_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the handoff with active check-in mode should start expanded."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr("handoff.pages.now.date", FixedDate)
+
+    first_handoff = _make_fake_handoff(
+        handoff_id=201,
+        need_back="First due item",
+        next_check=date(2026, 3, 9),
+    )
+    second_handoff = _make_fake_handoff(
+        handoff_id=202,
+        need_back="Second due item",
+        next_check=date(2026, 3, 9),
+    )
+    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    st_mock.session_state["now_action_check_in_mode_202"] = "on_track"
+
+    _render_item(
+        first_handoff,
+        key_prefix="now_action",
+        project_by_name=project_by_name,
+        show_check_in_controls=True,
+        allow_actions=True,
+    )
+    _render_item(
+        second_handoff,
+        key_prefix="now_action",
+        project_by_name=project_by_name,
+        show_check_in_controls=True,
+        allow_actions=True,
+    )
+
+    expanded_states = [call.kwargs["expanded"] for call in st_mock.expander.call_args_list[-2:]]
+    assert expanded_states == [False, True]
+
+
+def test_render_item_only_expands_handoff_with_active_reopen_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the handoff with active reopen mode should start expanded."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    first_handoff = _make_fake_handoff(handoff_id=301, need_back="Closed first")
+    second_handoff = _make_fake_handoff(handoff_id=302, need_back="Closed second")
+    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    st_mock.session_state["now_concluded_reopen_mode_302"] = "reopen"
+
+    _render_item(
+        first_handoff,
+        key_prefix="now_concluded",
+        project_by_name=project_by_name,
+        allow_actions=False,
+        allow_reopen=True,
+    )
+    _render_item(
+        second_handoff,
+        key_prefix="now_concluded",
+        project_by_name=project_by_name,
+        allow_actions=False,
+        allow_reopen=True,
+    )
+
+    expanded_states = [call.kwargs["expanded"] for call in st_mock.expander.call_args_list[-2:]]
+    assert expanded_states == [False, True]
 
 
 def test_render_check_in_flow_edit_button_visible_with_allow_actions(
