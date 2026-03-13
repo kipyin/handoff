@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-__all__: list[str] = ["run_cli"]
+__all__ = ["run_cli"]
 
 
 def run_cli() -> None:
