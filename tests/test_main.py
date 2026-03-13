@@ -36,8 +36,15 @@ def test_main_runs_streamlit_with_app_py() -> None:
 
 def test_main_applies_bootstrap_config_defaults_to_subprocess_env() -> None:
     """Entry-point import should apply Streamlit defaults before spawning subprocess."""
-    subprocess_run = MagicMock(return_value=MagicMock(returncode=0))
+    captured_env: dict[str, str] | None = None
     exit_calls: list[int] = []
+
+    def capture_run(*args: object, **kwargs: object) -> MagicMock:
+        nonlocal captured_env
+        env = kwargs.get("env")
+        if env is not None:
+            captured_env = dict(env)
+        return MagicMock(returncode=0)
 
     def capture_exit(code: int) -> None:
         exit_calls.append(code)
@@ -60,7 +67,7 @@ def test_main_applies_bootstrap_config_defaults_to_subprocess_env() -> None:
         sys.modules.pop("handoff.bootstrap.config", None)
 
         with (
-            patch("subprocess.run", subprocess_run),
+            patch("subprocess.run", side_effect=capture_run),
             patch("sys.exit", side_effect=capture_exit),
             contextlib.suppress(SystemExit),
         ):
@@ -77,6 +84,6 @@ def test_main_applies_bootstrap_config_defaults_to_subprocess_env() -> None:
             sys.modules["handoff.bootstrap.config"] = old_config_module
 
     assert exit_calls == [0]
-    passed_env = subprocess_run.call_args.kwargs["env"]
+    assert captured_env is not None, "subprocess.run should have been called with env"
     for key, expected in streamlit_defaults.items():
-        assert passed_env[key] == expected
+        assert captured_env[key] == expected
