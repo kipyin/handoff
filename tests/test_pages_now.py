@@ -2685,3 +2685,625 @@ def test_render_check_in_flow_save_clears_mode_and_shows_success(
     # Check that success message was set
     assert "now_flash_success" in st_mock.session_state
     assert "Checked in today" in str(st_mock.session_state.get("now_flash_success", ""))
+
+
+# --- Additional coverage tests for error paths and edge cases ---
+
+
+def test_save_edit_submission_with_project_id_none_sets_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edit with a project that has None id rejects with flash error."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    update_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.update_handoff",
+        lambda **kw: update_calls.append(kw),
+    )
+    st_mock.session_state["test_project"] = "Work"
+    st_mock.session_state["test_who"] = "Alice"
+    st_mock.session_state["test_need"] = "Ship it"
+    st_mock.session_state["test_next"] = date(2026, 3, 16)
+    st_mock.session_state["test_deadline"] = None
+    st_mock.session_state["test_context"] = ""
+
+    _save_edit_submission(
+        handoff_id=1,
+        project_options={"Work": SimpleNamespace(id=None, name="Work")},
+        project_key="test_project",
+        who_key="test_who",
+        need_key="test_need",
+        next_check_key="test_next",
+        deadline_key="test_deadline",
+        context_key="test_context",
+    )
+
+    assert update_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a valid project."
+
+
+def test_save_edit_submission_with_invalid_next_check_date_type_sets_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edit with non-date next_check rejects with flash error."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    update_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.update_handoff",
+        lambda **kw: update_calls.append(kw),
+    )
+    st_mock.session_state["test_project"] = "Work"
+    st_mock.session_state["test_who"] = "Alice"
+    st_mock.session_state["test_need"] = "Ship it"
+    st_mock.session_state["test_next"] = "2026-03-16"  # String, not date
+    st_mock.session_state["test_deadline"] = None
+    st_mock.session_state["test_context"] = ""
+
+    _save_edit_submission(
+        handoff_id=1,
+        project_options={"Work": SimpleNamespace(id=1, name="Work")},
+        project_key="test_project",
+        who_key="test_who",
+        need_key="test_need",
+        next_check_key="test_next",
+        deadline_key="test_deadline",
+        context_key="test_context",
+    )
+
+    assert update_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a valid next check date."
+
+
+def test_save_edit_submission_with_unknown_project_label_sets_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edit with unknown project label rejects with flash error."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    update_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.update_handoff",
+        lambda **kw: update_calls.append(kw),
+    )
+    st_mock.session_state["test_project"] = "Unknown"
+    st_mock.session_state["test_who"] = "Alice"
+    st_mock.session_state["test_need"] = "Ship it"
+    st_mock.session_state["test_next"] = date(2026, 3, 16)
+    st_mock.session_state["test_deadline"] = None
+    st_mock.session_state["test_context"] = ""
+
+    _save_edit_submission(
+        handoff_id=1,
+        project_options={"Work": SimpleNamespace(id=1, name="Work")},
+        project_key="test_project",
+        who_key="test_who",
+        need_key="test_need",
+        next_check_key="test_next",
+        deadline_key="test_deadline",
+        context_key="test_context",
+    )
+
+    assert update_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a project."
+
+
+def test_save_add_submission_with_project_id_none_sets_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Add with a project that has None id rejects with flash error."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    create_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
+        lambda **kw: create_calls.append(kw),
+    )
+    st_mock.session_state["test_project"] = "Work"
+    st_mock.session_state["test_who"] = "Alice"
+    st_mock.session_state["test_need"] = "New item"
+    st_mock.session_state["test_next"] = date(2026, 3, 16)
+    st_mock.session_state["test_deadline"] = None
+    st_mock.session_state["test_context"] = ""
+
+    _save_add_submission(
+        project_options={"Work": SimpleNamespace(id=None, name="Work")},
+        project_key="test_project",
+        who_key="test_who",
+        need_key="test_need",
+        next_check_key="test_next",
+        deadline_key="test_deadline",
+        context_key="test_context",
+    )
+
+    assert create_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a valid project."
+
+
+def test_save_add_submission_with_invalid_next_check_date_type_sets_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Add with non-date next_check rejects with flash error."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    create_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
+        lambda **kw: create_calls.append(kw),
+    )
+    st_mock.session_state["test_project"] = "Work"
+    st_mock.session_state["test_who"] = "Alice"
+    st_mock.session_state["test_need"] = "New item"
+    st_mock.session_state["test_next"] = "2026-03-16"  # String, not date
+    st_mock.session_state["test_deadline"] = None
+    st_mock.session_state["test_context"] = ""
+
+    _save_add_submission(
+        project_options={"Work": SimpleNamespace(id=1, name="Work")},
+        project_key="test_project",
+        who_key="test_who",
+        need_key="test_need",
+        next_check_key="test_next",
+        deadline_key="test_deadline",
+        context_key="test_context",
+    )
+
+    assert create_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a valid next check date."
+
+
+def test_save_add_submission_with_unknown_project_label_sets_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Add with unknown project label rejects with flash error."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    create_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
+        lambda **kw: create_calls.append(kw),
+    )
+    st_mock.session_state["test_project"] = "Unknown"
+    st_mock.session_state["test_who"] = "Alice"
+    st_mock.session_state["test_need"] = "New item"
+    st_mock.session_state["test_next"] = date(2026, 3, 16)
+    st_mock.session_state["test_deadline"] = None
+    st_mock.session_state["test_context"] = ""
+
+    _save_add_submission(
+        project_options={"Work": SimpleNamespace(id=1, name="Work")},
+        project_key="test_project",
+        who_key="test_who",
+        need_key="test_need",
+        next_check_key="test_next",
+        deadline_key="test_deadline",
+        context_key="test_context",
+    )
+
+    assert create_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a project."
+
+
+def test_set_mode_updates_session_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_set_mode directly sets a session state value."""
+    from handoff.interfaces.streamlit.pages.now_helpers import _set_mode
+
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    _set_mode(mode_key="test_key", mode="edit")
+
+    assert st_mock.session_state["test_key"] == "edit"
+
+
+def test_clear_session_key_removes_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_clear_session_key removes a key from session state without error if missing."""
+    from handoff.interfaces.streamlit.pages.now_helpers import _clear_session_key
+
+    st_mock = _build_streamlit_mock()
+    st_mock.session_state["test_key"] = "value"
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    _clear_session_key(state_key="test_key")
+
+    assert "test_key" not in st_mock.session_state
+
+
+def test_clear_session_key_safe_when_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_clear_session_key does not raise when key is already missing."""
+    from handoff.interfaces.streamlit.pages.now_helpers import _clear_session_key
+
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    # Should not raise even though key doesn't exist
+    _clear_session_key(state_key="nonexistent_key")
+
+    assert "nonexistent_key" not in st_mock.session_state
+
+
+def test_build_project_options_empty_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """_build_project_options handles empty project list."""
+    options = _build_project_options([])
+    assert options == {}
+
+
+def test_project_option_label_for_id_with_no_projects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_project_option_label_for_id returns None when no projects match."""
+    project_options = {
+        "Work": SimpleNamespace(id=1, name="Work"),
+        "Personal": SimpleNamespace(id=2, name="Personal"),
+    }
+
+    result = _project_option_label_for_id(project_options, 99)
+
+    assert result is None
+
+
+def test_render_delete_confirmation_need_back_empty_uses_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Delete confirmation uses 'this handoff' when need_back is missing or empty."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    handoff = _make_fake_handoff(handoff_id=200, need_back=None)
+
+    _render_delete_confirmation(handoff, key_prefix="now_action")
+
+    caption_text = next(
+        (call[0][0] for call in st_mock.caption.call_args_list if call[0]),
+        None,
+    )
+    assert caption_text is not None
+    assert "this handoff" in caption_text
+
+
+def test_render_item_without_handoff_id_returns_early(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_render_item with None id returns without rendering anything."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    handoff = _make_fake_handoff(handoff_id=None)
+
+    _render_item(
+        handoff,
+        key_prefix="now_action",
+        project_options={"Work": SimpleNamespace(id=1, name="Work")},
+    )
+
+    st_mock.expander.assert_not_called()
+
+
+def test_render_check_in_flow_without_handoff_id_returns_early(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_render_check_in_flow with None id returns without rendering."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    handoff = _make_fake_handoff(handoff_id=None)
+
+    _render_check_in_flow(handoff, key_prefix="now_action")
+
+    st_mock.segmented_control.assert_not_called()
+
+
+def test_render_reopen_flow_without_handoff_id_returns_early(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_render_reopen_flow with None id returns without rendering."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    handoff = _make_fake_handoff(handoff_id=None)
+
+    _render_reopen_flow(handoff, key_prefix="now_concluded")
+
+    st_mock.button.assert_not_called()
+
+
+def test_render_delete_confirmation_without_handoff_id_returns_early(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_render_delete_confirmation with None id returns without rendering."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    handoff = _make_fake_handoff(handoff_id=None)
+
+    _render_delete_confirmation(handoff, key_prefix="now_action")
+
+    st_mock.warning.assert_not_called()
+
+
+def test_render_edit_form_without_handoff_id_returns_early(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_render_edit_form with None id returns without rendering."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    handoff = _make_fake_handoff(handoff_id=None)
+
+    _render_edit_form(
+        handoff,
+        project_options={"Work": SimpleNamespace(id=1, name="Work")},
+        key_prefix="now_action_edit",
+        action_mode_key="now_action_action_mode",
+    )
+
+    st_mock.form.assert_not_called()
+
+
+def test_save_reopen_submission_with_invalid_next_check_date_type_sets_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reopen submission with non-date next_check rejects with flash error."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    reopen_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.reopen_handoff",
+        lambda **kw: reopen_calls.append(kw),
+    )
+    st_mock.session_state["test_mode"] = "reopen"
+    st_mock.session_state["test_note"] = "Reopening"
+    st_mock.session_state["test_next_check"] = "2026-03-16"  # String, not date
+
+    _save_reopen_submission(
+        handoff_id=1,
+        mode_key="test_mode",
+        note_key="test_note",
+        next_check_key="test_next_check",
+    )
+
+    assert reopen_calls == []
+    assert st_mock.session_state["now_flash_error"] == "Select a valid next check-in date."
+    assert st_mock.session_state["test_mode"] == "reopen"
+
+
+def test_save_edit_submission_logs_edit_action(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Edit action logs instrumentation with time_action."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    update_mock = MagicMock()
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.update_handoff", update_mock)
+
+    logger_mock = MagicMock()
+    monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
+
+    st_mock.session_state["test_project"] = "Work"
+    st_mock.session_state["test_need"] = "Updated need"
+    st_mock.session_state["test_who"] = "Bob"
+    st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+    st_mock.session_state["test_deadline"] = date(2026, 3, 20)
+    st_mock.session_state["test_context"] = "Context"
+
+    _save_edit_submission(
+        handoff_id=1,
+        project_options={"Work": SimpleNamespace(id=1)},
+        project_key="test_project",
+        who_key="test_who",
+        need_key="test_need",
+        next_check_key="test_next_check",
+        deadline_key="test_deadline",
+        context_key="test_context",
+    )
+
+    update_mock.assert_called_once()
+    logger_mock.info.assert_called_once()
+    call_args = logger_mock.info.call_args[0]
+    assert call_args[1] == "now_edit"
+
+
+def test_confirm_delete_handoff_failure_keeps_mode_and_shows_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Confirm delete with delete failure keeps mode active and shows error."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+
+    delete_calls: list[int] = []
+
+    def _fake_delete(handoff_id: int) -> bool:
+        delete_calls.append(handoff_id)
+        return False
+
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.delete_handoff", _fake_delete)
+
+    from handoff.interfaces.streamlit.pages.now_forms import _confirm_delete_handoff
+
+    st_mock.session_state["test_action_mode"] = "delete"
+    _confirm_delete_handoff(handoff_id=42, action_mode_key="test_action_mode")
+
+    assert delete_calls == [42]
+    assert st_mock.session_state["test_action_mode"] == "delete"  # Mode not cleared
+    assert st_mock.session_state["now_flash_error"] == "Could not delete handoff."
+    assert "now_flash_success" not in st_mock.session_state
+
+
+def test_render_edit_form_clears_project_key_when_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edit form clears stale project key when it's not in available options."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    # Set an invalid project in session state
+    st_mock.session_state["now_action_edit_1_project"] = "DeletedProject"
+    handoff = _make_fake_handoff(handoff_id=1, project_name="Work")
+
+    _render_edit_form(
+        handoff,
+        project_options={"Work": SimpleNamespace(id=1, name="Work")},
+        key_prefix="now_action_edit_1",
+        action_mode_key="now_action_action_mode_1",
+    )
+
+    # Invalid project should be cleared
+    assert "now_action_edit_1_project" not in st_mock.session_state
+
+
+def test_render_add_form_clears_project_key_when_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Add form clears stale project key when it's not in available options."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    # Set an invalid project in session state
+    st_mock.session_state["now_add_project"] = "DeletedProject"
+
+    _render_add_form(
+        {"Work": SimpleNamespace(id=7, name="Work")},
+        [],
+        key_prefix="now",
+    )
+
+    # Invalid project should be cleared
+    assert "now_add_project" not in st_mock.session_state
+
+
+def test_render_item_with_deadline_and_is_risk_shows_risk_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Risk items with deadlines show risk emoji prefix in header."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    handoff = _make_fake_handoff(
+        handoff_id=300,
+        need_back="At risk item",
+        deadline=date(2026, 3, 10),
+    )
+    project_options = {"Work": SimpleNamespace(id=1, name="Work")}
+
+    _render_item(
+        handoff,
+        key_prefix="now_risk",
+        project_options=project_options,
+        is_risk=True,
+    )
+
+    # Verify expander was called (header contains risk prefix)
+    expander_header = st_mock.expander.call_args[0][0]
+    assert "⏰" in expander_header
+
+
+def test_render_item_with_deadline_not_risk_shows_deadline_in_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-risk items with deadlines show deadline in header."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    handoff = _make_fake_handoff(
+        handoff_id=301,
+        need_back="Has deadline",
+        next_check=date(2026, 4, 1),
+        deadline=date(2026, 3, 20),
+    )
+    project_options = {"Work": SimpleNamespace(id=1, name="Work")}
+
+    _render_item(
+        handoff,
+        key_prefix="now_upcoming",
+        project_options=project_options,
+        is_risk=False,
+    )
+
+    expander_header = st_mock.expander.call_args[0][0]
+    # Should contain the deadline as a separator
+    assert "⏰" in expander_header
+
+
+def test_render_item_deleting_mode_shows_delete_confirmation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When action_mode is 'delete', _render_delete_confirmation is called."""
+    st_mock = _build_streamlit_mock()
+    _patch_now_streamlit(monkeypatch, st_mock)
+    handoff = _make_fake_handoff(handoff_id=302, need_back="To delete")
+    project_options = {"Work": SimpleNamespace(id=1, name="Work")}
+    st_mock.session_state["now_action_action_mode_302"] = "delete"
+
+    delete_called = []
+
+    def _track_delete(*args, **kwargs):
+        delete_called.append(True)
+
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms._render_delete_confirmation",
+        _track_delete,
+    )
+
+    _render_item(
+        handoff,
+        key_prefix="now_action",
+        project_options=project_options,
+        allow_actions=True,
+    )
+
+    assert delete_called == [True]
+
+
+def test_build_project_options_colliding_labels_uses_id_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When duplicate labels collide after name-based deduplication, id suffix is added."""
+    projects = [
+        SimpleNamespace(id=1, name="Work"),
+        SimpleNamespace(id=2, name="Work"),
+        SimpleNamespace(id=3, name="Work #1"),
+    ]
+
+    options = _build_project_options(projects)
+
+    # The third project also has name "Work #1", so label collision needs resolution
+    assert len(options) == 3
+    labels = list(options.keys())
+    # All labels must be unique
+    assert len(set(labels)) == 3
+
+
+def test_project_option_label_for_id_returns_none_when_id_is_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """_project_option_label_for_id with None id returns None."""
+    project_options = {
+        "Work": SimpleNamespace(id=1, name="Work"),
+    }
+
+    result = _project_option_label_for_id(project_options, None)
+
+    assert result is None
+
+
+def test_build_project_options_handles_label_collision_with_id_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When projects create label collisions, id suffix is applied to resolve."""
+    # Create projects where initial labeling produces collisions
+    projects = [
+        SimpleNamespace(id=1, name="Project"),
+        SimpleNamespace(id=2, name="Project"),
+        SimpleNamespace(id=3, name="Project (1)"),  # This creates a collision
+    ]
+
+    options = _build_project_options(projects)
+
+    # All labels must remain unique after collision resolution
+    labels = list(options.keys())
+    assert len(set(labels)) == 3
+    # Verify each project is still accessible
+    for proj in projects:
+        found = False
+        for label, option_proj in options.items():
+            if option_proj.id == proj.id:
+                found = True
+                break
+        assert found, f"Project with id {proj.id} not found in options"
