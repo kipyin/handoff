@@ -354,6 +354,7 @@ def _render_reopen_flow(handoff: Handoff, *, key_prefix: str) -> None:
 
 
 def _render_delete_confirmation(handoff: Handoff, *, key_prefix: str) -> None:
+    """Render deletion confirmation dialog with warning and confirm/cancel buttons."""
     handoff_id = handoff.id
     if handoff_id is None:
         return
