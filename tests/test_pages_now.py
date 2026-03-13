@@ -11,24 +11,28 @@ import pytest
 from handoff.core.models import CheckIn, CheckInType
 from handoff.core.page_models import NowSnapshot
 from handoff.interfaces.streamlit.pages.now import (
-    _NOW_ADD_EXPANDED_KEY,
-    _build_project_options,
-    _check_in_header,
-    _is_check_in_due,
-    _project_option_label_for_id,
+    _render_filters,
+    render_now_page,
+)
+from handoff.interfaces.streamlit.pages.now_forms import (
     _render_add_form,
     _render_check_in_flow,
-    _render_check_in_trail,
     _render_delete_confirmation,
     _render_edit_form,
-    _render_filters,
     _render_item,
     _render_reopen_flow,
     _save_add_submission,
     _save_check_in_submission,
     _save_edit_submission,
     _save_reopen_submission,
-    render_now_page,
+)
+from handoff.interfaces.streamlit.pages.now_helpers import (
+    _NOW_ADD_EXPANDED_KEY,
+    _build_project_options,
+    _check_in_header,
+    _is_check_in_due,
+    _project_option_label_for_id,
+    _render_check_in_trail,
 )
 
 
@@ -113,6 +117,13 @@ def _build_streamlit_mock() -> MagicMock:
     return st_mock
 
 
+def _patch_now_streamlit(monkeypatch: pytest.MonkeyPatch, st_mock: MagicMock) -> None:
+    """Patch streamlit in now, now_forms, and now_helpers for Now page tests."""
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.st", st_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_helpers.st", st_mock)
+
+
 def _simulate_widget_submit(label_to_click: str):
     """Return a side-effect that submits one widget label callback."""
 
@@ -148,7 +159,7 @@ def test_render_filters_duplicate_project_label_returns_selected_id(
     """Project filters keep duplicate names distinct by mapping labels back to ids."""
     st_mock = _build_streamlit_mock()
     st_mock.multiselect.side_effect = [["Work (#2)"], []]
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     project_ids, pitchman_names, search_text = _render_filters(
         project_options={
@@ -167,7 +178,7 @@ def test_render_filters_duplicate_project_label_returns_selected_id(
 def test_render_now_page_no_projects_shows_info(monkeypatch: pytest.MonkeyPatch) -> None:
     """When there are no projects, the Now page shows an info message."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [])
     render_now_page()
     st_mock.info.assert_called_once()
@@ -180,7 +191,7 @@ def test_render_now_page_flash_error_message_is_rendered_once(
     """Flash errors are displayed once and cleared from session state."""
     st_mock = _build_streamlit_mock()
     st_mock.session_state["now_flash_error"] = "Invalid form submission"
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [])
 
     render_now_page()
@@ -194,7 +205,7 @@ def test_render_now_page_archived_only_projects_shows_toggle_hint(
 ) -> None:
     """When only archived projects exist, the page suggests enabling archived visibility."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     archived_project = SimpleNamespace(id=2, name="Archived")
     list_project_calls: list[bool] = []
 
@@ -221,7 +232,7 @@ def test_render_now_page_include_archived_falls_back_to_checkbox(
     st_mock = _build_streamlit_mock()
     st_mock.toggle = None
     st_mock.checkbox.return_value = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     list_project_calls: list[bool] = []
 
     def _list_projects(**kwargs):
@@ -247,7 +258,7 @@ def test_render_now_page_include_archived_toggle_value_is_coerced_to_bool(
     """Now page coerces include-archived widget values to bool."""
     st_mock = _build_streamlit_mock()
     st_mock.toggle.return_value = "yes"
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     list_project_calls: list[bool] = []
 
     def _list_projects(**kwargs):
@@ -266,7 +277,7 @@ def test_render_now_page_include_archived_toggle_value_is_coerced_to_bool(
 def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     """Now page calls get_now_snapshot with filters from the UI."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     prefetched_projects = [mock_project]
     prefetched_pitchmen = ["Alice"]
@@ -304,7 +315,7 @@ def test_render_now_page_add_button_has_shortcut_when_collapsed(
 ) -> None:
     """Add handoff trigger button has shortcut 'a' when Streamlit supports it."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -341,7 +352,7 @@ def test_render_now_page_add_button_fallback_when_shortcut_unsupported(
         return False
 
     st_mock.button.side_effect = button_raising_shortcut
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -380,7 +391,7 @@ def test_render_now_page_expanded_add_button_fallback_when_shortcut_unsupported(
         return False
 
     st_mock.button.side_effect = button_raising_shortcut
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -415,10 +426,10 @@ def test_expand_add_form_sets_session_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Expand add form callback sets now_add_expanded in session state."""
-    from handoff.interfaces.streamlit.pages.now import _expand_add_form
+    from handoff.interfaces.streamlit.pages.now_helpers import _expand_add_form
 
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     _expand_add_form()
 
@@ -429,11 +440,11 @@ def test_collapse_add_form_clears_session_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Collapse add form callback removes now_add_expanded from session state."""
-    from handoff.interfaces.streamlit.pages.now import _collapse_add_form
+    from handoff.interfaces.streamlit.pages.now_helpers import _collapse_add_form
 
     st_mock = _build_streamlit_mock()
     st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     _collapse_add_form()
 
@@ -446,7 +457,7 @@ def test_render_now_page_trigger_button_not_shown_when_form_expanded(
     """When the add form is expanded, the trigger button is not rendered."""
     st_mock = _build_streamlit_mock()
     st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -474,7 +485,7 @@ def test_render_now_page_add_form_expands_when_add_expanded_true(
     """When now_add_expanded is True, the add form is rendered instead of the trigger button."""
     st_mock = _build_streamlit_mock()
     st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -505,7 +516,7 @@ def test_render_now_page_add_form_uses_snapshot_pitchmen(
     """Now page uses snapshot.pitchmen for add form options."""
     st_mock = _build_streamlit_mock()
     st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -546,7 +557,7 @@ def test_render_now_page_include_archived_projects_passed_to_snapshot(
     """Now page passes the include-archived toggle to get_now_snapshot."""
     st_mock = _build_streamlit_mock()
     st_mock.toggle.return_value = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -578,7 +589,7 @@ def test_render_now_page_include_archived_passed_to_list_pitchmen(
     """Now page forwards include-archived toggle to list_pitchmen_with_open_handoffs."""
     st_mock = _build_streamlit_mock()
     st_mock.toggle.return_value = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -604,14 +615,15 @@ def test_render_now_page_action_item_shows_check_in_segmented_control(
 ) -> None:
     """Action items render On-track/Delayed/Conclude and Edit|Delete via segmented_control."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     class FixedDate(date):
         @classmethod
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.date", FixedDate)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.date", FixedDate)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_helpers.date", FixedDate)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -651,7 +663,7 @@ def test_render_now_page_risk_item_shows_check_in_segmented_control(
 ) -> None:
     """Risk items also render On-track/Delayed/Conclude and Edit|Delete via segmented_control."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -685,7 +697,7 @@ def test_render_now_page_upcoming_item_shows_check_in_segmented_control(
 ) -> None:
     """Upcoming items render check-in and Edit|Delete via segmented_control."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -716,7 +728,7 @@ def test_render_now_page_upcoming_item_shows_check_in_segmented_control(
 def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.MonkeyPatch) -> None:
     """Concluded handoffs are rendered as item expanders with no dataframe."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -741,7 +753,7 @@ def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.Mon
 def test_render_now_page_risk_section_renders_items(monkeypatch: pytest.MonkeyPatch) -> None:
     """Risk items appear in the Risk section with their expanders."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -769,7 +781,7 @@ def test_render_now_page_risk_section_renders_items(monkeypatch: pytest.MonkeyPa
 def test_render_now_page_upcoming_section_renders_items(monkeypatch: pytest.MonkeyPatch) -> None:
     """Upcoming items appear in the Upcoming section with their expanders."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -799,7 +811,7 @@ def test_render_now_page_item_with_context_renders_markdown(
 ) -> None:
     """Items with notes display context markdown inside the expander."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -829,7 +841,7 @@ def test_render_now_page_section_explanations_rendered_for_open_sections(
 ) -> None:
     """Rule-based explanations appear for Risk, Action, and Upcoming items."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -880,7 +892,7 @@ def test_render_now_page_upcoming_caption_uses_upcoming_section_id(
 ) -> None:
     """Upcoming caption lookup uses snapshot.upcoming_section_id instead of fixed key."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -912,7 +924,7 @@ def test_render_now_page_custom_sections_rendered_between_action_and_upcoming(
 ) -> None:
     """Custom sections from snapshot are rendered between Action and Upcoming."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -951,7 +963,7 @@ def test_render_now_page_empty_custom_section_shows_no_handoffs_caption(
 ) -> None:
     """Empty custom sections render with 'No handoffs in X' info message."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -981,7 +993,7 @@ def test_render_now_page_empty_custom_section_still_shows_explanation(
 ) -> None:
     """Custom section explanation is shown even when the section has no handoffs."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -1010,7 +1022,7 @@ def test_render_item_edit_save_validation_sets_flash_error(
     """Invalid edit save keeps edit mode active and sets flash error."""
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     update_calls: list[tuple[int, dict[str, object]]] = []
 
@@ -1018,7 +1030,7 @@ def test_render_item_edit_save_validation_sets_flash_error(
         update_calls.append((handoff_id, changes))
 
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.update_handoff", _fake_update_handoff
+        "handoff.interfaces.streamlit.pages.now_forms.update_handoff", _fake_update_handoff
     )
     handoff = _make_fake_handoff(handoff_id=92, need_back="Original")
     st_mock.session_state["now_action_action_mode_92"] = "edit"
@@ -1049,7 +1061,7 @@ def test_render_item_edit_save_success_clears_editing_and_sets_flash(
     """Valid edit save updates the handoff and clears editing state."""
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     update_calls: list[tuple[int, dict[str, object]]] = []
 
@@ -1057,7 +1069,7 @@ def test_render_item_edit_save_success_clears_editing_and_sets_flash(
         update_calls.append((handoff_id, changes))
 
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.update_handoff", _fake_update_handoff
+        "handoff.interfaces.streamlit.pages.now_forms.update_handoff", _fake_update_handoff
     )
     handoff = _make_fake_handoff(handoff_id=93, need_back="Original")
     st_mock.session_state["now_action_action_mode_93"] = "edit"
@@ -1094,7 +1106,7 @@ def test_render_edit_form_defaults_to_current_duplicate_project(
 ) -> None:
     """Edit form keeps the handoff on its current duplicate-named project by default."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     handoff = _make_fake_handoff(handoff_id=94, project_name="Work")
     handoff.project = SimpleNamespace(id=2, name="Work")
@@ -1118,7 +1130,7 @@ def test_render_delete_confirmation_shows_irreversible_warning(
 ) -> None:
     """Delete mode shows irreversible warning and Confirm delete button."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=94, need_back="Item to delete")
 
     _render_delete_confirmation(handoff, key_prefix="now_action")
@@ -1143,7 +1155,7 @@ def test_render_delete_confirmation_confirm_calls_delete_handoff(
         return False
 
     st_mock.button.side_effect = _simulate_confirm_click
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     delete_calls: list[int] = []
 
@@ -1151,7 +1163,7 @@ def test_render_delete_confirmation_confirm_calls_delete_handoff(
         delete_calls.append(handoff_id)
         return True
 
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.delete_handoff", _fake_delete)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.delete_handoff", _fake_delete)
     handoff = _make_fake_handoff(handoff_id=95, need_back="Delete me")
     st_mock.session_state["now_action_action_mode_95"] = "delete"
 
@@ -1176,11 +1188,11 @@ def test_render_delete_confirmation_cancel_clears_action_mode_without_delete(
         return False
 
     st_mock.button.side_effect = _simulate_cancel_click
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     delete_calls: list[int] = []
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.delete_handoff",
+        "handoff.interfaces.streamlit.pages.now_forms.delete_handoff",
         lambda handoff_id: delete_calls.append(handoff_id) or True,
     )
     handoff = _make_fake_handoff(handoff_id=96, need_back="Keep me")
@@ -1208,7 +1220,7 @@ def test_render_delete_confirmation_confirm_failure_sets_flash_error(
         return False
 
     st_mock.button.side_effect = _simulate_confirm_click
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     delete_calls: list[int] = []
 
@@ -1216,7 +1228,7 @@ def test_render_delete_confirmation_confirm_failure_sets_flash_error(
         delete_calls.append(handoff_id)
         return False
 
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.delete_handoff", _fake_delete)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.delete_handoff", _fake_delete)
     handoff = _make_fake_handoff(handoff_id=97, need_back="Delete fails")
     st_mock.session_state["now_action_action_mode_97"] = "delete"
 
@@ -1233,7 +1245,7 @@ def test_render_item_keeps_expander_open_when_check_in_mode_active(
 ) -> None:
     """Active check-in mode keeps the handoff expander open across reruns."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=88, need_back="Needs check-in")
     project_options = {"Work": SimpleNamespace(id=1, name="Work")}
     st_mock.session_state["now_action_check_in_mode_88"] = "on_track"
@@ -1254,7 +1266,7 @@ def test_render_item_keeps_expander_open_when_reopen_mode_active(
 ) -> None:
     """Active reopen mode keeps concluded handoff expander open."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=89, need_back="Closed")
     project_options = {"Work": SimpleNamespace(id=1, name="Work")}
     st_mock.session_state["now_concluded_reopen_mode_89"] = "reopen"
@@ -1274,7 +1286,7 @@ def test_render_add_form_submit_calls_create_handoff(monkeypatch: pytest.MonkeyP
     """Submitting Add persists a handoff using callback-driven state values."""
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     create_calls: list[dict[str, object]] = []
 
@@ -1282,7 +1294,7 @@ def test_render_add_form_submit_calls_create_handoff(monkeypatch: pytest.MonkeyP
         create_calls.append(kwargs)
 
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.create_handoff", _fake_create_handoff
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff", _fake_create_handoff
     )
     st_mock.session_state["now_add_project"] = "Work"
     st_mock.session_state["now_add_who"] = "  Alex  "
@@ -1310,11 +1322,11 @@ def test_render_add_form_duplicate_project_label_calls_create_handoff_for_select
     """Add form uses the selected duplicate-name label's project id."""
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     create_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.create_handoff",
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
         lambda **kw: create_calls.append(kw),
     )
     st_mock.session_state["now_add_project"] = "Work (#2)"
@@ -1340,7 +1352,7 @@ def test_render_add_form_duplicate_project_label_calls_create_handoff_for_select
 def test_render_add_form_sets_clear_on_submit_false(monkeypatch: pytest.MonkeyPatch) -> None:
     """Add form keeps widget values after failed submits by disabling auto-clear."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
 
@@ -1350,7 +1362,7 @@ def test_render_add_form_sets_clear_on_submit_false(monkeypatch: pytest.MonkeyPa
 def test_render_add_form_marks_required_field_labels(monkeypatch: pytest.MonkeyPatch) -> None:
     """Required add-form fields include visual indicators in their labels."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
 
@@ -1369,7 +1381,7 @@ def test_render_add_form_missing_need_back_sets_flash_error(
     """Submitting Add with empty need-back fails validation and does not persist."""
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     create_calls: list[dict[str, object]] = []
 
@@ -1377,7 +1389,7 @@ def test_render_add_form_missing_need_back_sets_flash_error(
         create_calls.append(kwargs)
 
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.create_handoff", _fake_create_handoff
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff", _fake_create_handoff
     )
     st_mock.session_state["now_add_project"] = "Work"
     st_mock.session_state["now_add_who"] = "Alex"
@@ -1400,11 +1412,11 @@ def test_render_add_form_validation_failure_does_not_collapse_form(
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
     st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     create_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.create_handoff",
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
         lambda **kw: create_calls.append(kw),
     )
     st_mock.session_state["now_add_project"] = "Work"
@@ -1427,11 +1439,11 @@ def test_render_add_form_close_button_collapses_form_without_save(
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Close")
     st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     create_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.create_handoff",
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
         lambda **kw: create_calls.append(kw),
     )
     st_mock.session_state["now_add_project"] = "Work"
@@ -1453,11 +1465,11 @@ def test_render_add_form_invalid_project_sets_flash_error(
     """Add form with an unknown project name rejects the submission."""
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     create_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.create_handoff",
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
         lambda **kw: create_calls.append(kw),
     )
     st_mock.session_state["now_add_project"] = "DoesNotExist"
@@ -1479,11 +1491,11 @@ def test_render_add_form_invalid_next_check_sets_flash_error(
     """Add form with a non-date next_check value rejects the submission."""
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     create_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.create_handoff",
+        "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
         lambda **kw: create_calls.append(kw),
     )
     st_mock.session_state["now_add_project"] = "Work"
@@ -1513,7 +1525,7 @@ def test_render_check_in_flow_note_label_matches_mode(
 ) -> None:
     """Check-in note text_area uses the correct label for on_track and delayed modes."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=50, next_check=date(2026, 3, 9))
     st_mock.session_state["now_action_check_in_mode_50"] = mode
 
@@ -1528,7 +1540,7 @@ def test_render_check_in_flow_conclude_uses_conclusion_label(
 ) -> None:
     """Conclude mode uses 'Conclusion (optional)' label for the note field."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=51, next_check=date(2026, 3, 9))
     st_mock.session_state["now_action_check_in_mode_51"] = "concluded"
 
@@ -1541,7 +1553,7 @@ def test_render_check_in_flow_conclude_uses_conclusion_label(
 def test_render_check_in_flow_due_shows_due_caption(monkeypatch: pytest.MonkeyPatch) -> None:
     """Due handoffs keep due-state check-in messaging."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=31, next_check=date(2000, 1, 1))
 
     _render_check_in_flow(handoff, key_prefix="now_action")
@@ -1553,7 +1565,7 @@ def test_render_check_in_flow_due_shows_due_caption(monkeypatch: pytest.MonkeyPa
 def test_render_check_in_flow_non_due_shows_early_caption(monkeypatch: pytest.MonkeyPatch) -> None:
     """Non-due handoffs offer optional early check-in messaging."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=32, next_check=date(2099, 1, 1))
 
     _render_check_in_flow(handoff, key_prefix="now_upcoming")
@@ -1574,7 +1586,7 @@ def test_render_check_in_flow_mode_segmented_control_updates_state_without_rerun
         return "on_track"
 
     st_mock.segmented_control.side_effect = _seg_effect
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=77, next_check=date(2026, 3, 9))
 
     _render_check_in_flow(handoff, key_prefix="now_action")
@@ -1589,7 +1601,7 @@ def test_render_check_in_flow_cancel_clears_mode_without_rerun(
     """Cancel in check-in flow clears mode state and avoids explicit rerun."""
     st_mock = _build_streamlit_mock()
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Cancel")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=78, next_check=date(2026, 3, 9))
     st_mock.session_state["now_action_check_in_mode_78"] = "on_track"
 
@@ -1607,7 +1619,7 @@ def test_render_check_in_flow_prefills_future_next_check_date(
     """On-track/delayed forms keep a future next_check as the default date input."""
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=35, next_check=date(2099, 1, 5))
     st_mock.session_state["now_action_check_in_mode_35"] = mode
 
@@ -1621,7 +1633,7 @@ def test_render_check_in_flow_prefills_next_business_day_for_due_item(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Overdue next_check values default to the next business day when checking in."""
-    from handoff.interfaces.streamlit.pages import now as now_page
+    from handoff.dates import add_business_days
 
     class _FrozenDate(date):
         @classmethod
@@ -1630,14 +1642,15 @@ def test_render_check_in_flow_prefills_next_business_day_for_due_item(
 
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
-    monkeypatch.setattr(now_page, "date", _FrozenDate)
+    _patch_now_streamlit(monkeypatch, st_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.date", _FrozenDate)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_helpers.date", _FrozenDate)
     handoff = _make_fake_handoff(handoff_id=36, next_check=date(2000, 1, 5))
     st_mock.session_state["now_action_check_in_mode_36"] = "on_track"
 
     _render_check_in_flow(handoff, key_prefix="now_action")
 
-    expected_default = now_page.add_business_days(_FrozenDate.today(), 1)
+    expected_default = add_business_days(_FrozenDate.today(), 1)
     assert st_mock.date_input.call_count == 1
     assert st_mock.date_input.call_args.kwargs["value"] == expected_default
 
@@ -1647,7 +1660,7 @@ def test_render_now_page_concluded_item_shows_reopen_button(
 ) -> None:
     """Concluded section renders a dedicated Reopen action."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -1674,7 +1687,7 @@ def test_render_reopen_flow_save_calls_reopen_handoff(monkeypatch: pytest.Monkey
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save reopen")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     calls: list[dict[str, object]] = []
 
@@ -1688,7 +1701,7 @@ def test_render_reopen_flow_save_calls_reopen_handoff(monkeypatch: pytest.Monkey
         )
 
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.reopen_handoff", _fake_reopen_handoff
+        "handoff.interfaces.streamlit.pages.now_forms.reopen_handoff", _fake_reopen_handoff
     )
     handoff = _make_fake_handoff(handoff_id=19, need_back="Closed")
     st_mock.session_state["now_concluded_reopen_mode_19"] = "reopen"
@@ -1709,7 +1722,7 @@ def test_render_reopen_flow_invalid_next_check_sets_flash_error(
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save reopen")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     reopen_calls: list[dict[str, object]] = []
 
@@ -1723,7 +1736,7 @@ def test_render_reopen_flow_invalid_next_check_sets_flash_error(
         )
 
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.reopen_handoff", _fake_reopen_handoff
+        "handoff.interfaces.streamlit.pages.now_forms.reopen_handoff", _fake_reopen_handoff
     )
     handoff = _make_fake_handoff(handoff_id=20, need_back="Closed")
     st_mock.session_state["now_concluded_reopen_mode_20"] = "reopen"
@@ -1742,7 +1755,7 @@ def test_render_check_in_flow_save_sets_flash_message(monkeypatch: pytest.Monkey
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save check-in")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     calls: list[dict[str, object]] = []
 
@@ -1762,7 +1775,9 @@ def test_render_check_in_flow_save_sets_flash_message(monkeypatch: pytest.Monkey
             }
         )
 
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.add_check_in", _fake_add_check_in)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.add_check_in", _fake_add_check_in
+    )
     handoff = _make_fake_handoff(handoff_id=41, next_check=date(2026, 3, 12))
     st_mock.session_state["now_action_check_in_mode_41"] = "on_track"
     st_mock.session_state["now_action_check_in_form_41_on_track_note"] = "  shipped  "
@@ -1783,7 +1798,7 @@ def test_render_check_in_flow_save_concluded_sets_flash_message(
     st_mock.button.return_value = False
     st_mock.text_area.return_value = "  wrapped up  "
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save conclude check-in")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     calls: list[dict[str, object]] = []
 
@@ -1791,7 +1806,7 @@ def test_render_check_in_flow_save_concluded_sets_flash_message(
         calls.append({"handoff_id": handoff_id, "note": note})
 
     monkeypatch.setattr(
-        "handoff.interfaces.streamlit.pages.now.conclude_handoff", _fake_conclude_handoff
+        "handoff.interfaces.streamlit.pages.now_forms.conclude_handoff", _fake_conclude_handoff
     )
     handoff = _make_fake_handoff(handoff_id=42, next_check=date(2026, 3, 12))
     st_mock.session_state["now_action_check_in_mode_42"] = "concluded"
@@ -1812,7 +1827,7 @@ def test_render_check_in_flow_delayed_mode_uses_delayed_type(
     st_mock.text_area.return_value = "  waiting on dependency  "
     st_mock.date_input.return_value = date(2026, 3, 20)
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save check-in")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     calls: list[dict[str, object]] = []
 
@@ -1832,7 +1847,9 @@ def test_render_check_in_flow_delayed_mode_uses_delayed_type(
             }
         )
 
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.add_check_in", _fake_add_check_in)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.add_check_in", _fake_add_check_in
+    )
     handoff = _make_fake_handoff(handoff_id=43, next_check=date(2026, 3, 12))
     st_mock.session_state["now_action_check_in_mode_43"] = "delayed"
     st_mock.session_state["now_action_check_in_form_43_delayed_note"] = "  waiting on dependency  "
@@ -1862,7 +1879,7 @@ def test_render_check_in_flow_note_label_per_mode(
     """Each check-in mode shows the correct distinct label on its note text area."""
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=50, next_check=date(2026, 3, 20))
     st_mock.session_state["now_action_check_in_mode_50"] = mode
 
@@ -1879,7 +1896,7 @@ def test_render_reopen_flow_save_value_error_shows_message(
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save reopen")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     def _raise_value_error(
         handoff_id: int,
@@ -1889,7 +1906,9 @@ def test_render_reopen_flow_save_value_error_shows_message(
     ) -> None:
         raise ValueError("Can only reopen concluded handoffs")
 
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.reopen_handoff", _raise_value_error)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.reopen_handoff", _raise_value_error
+    )
     handoff = _make_fake_handoff(handoff_id=19, need_back="Closed")
     st_mock.session_state["now_concluded_reopen_mode_19"] = "reopen"
     st_mock.session_state["now_concluded_reopen_form_19_note"] = "reason"
@@ -1961,7 +1980,7 @@ def test_check_in_header_multiline_note_flattened() -> None:
 def test_render_check_in_trail_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     """An empty check-in list shows 'No check-ins yet.' caption."""
     st_mock = MagicMock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     fake_handoff = SimpleNamespace(check_ins=[])
     _render_check_in_trail(fake_handoff)
     st_mock.caption.assert_called_once_with("No check-ins yet.")
@@ -1972,7 +1991,7 @@ def test_render_check_in_trail_with_entry_no_note(monkeypatch: pytest.MonkeyPatc
     """A check-in without a note shows 'No note.' caption inside the expander."""
     st_mock = MagicMock()
     st_mock.expander.return_value = _Ctx()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     ci = _make_check_in(check_in_type=CheckInType.ON_TRACK, note=None)
     fake_handoff = SimpleNamespace(check_ins=[ci])
@@ -1986,7 +2005,7 @@ def test_render_check_in_trail_with_entry_with_note(monkeypatch: pytest.MonkeyPa
     """A check-in with a note renders the note as markdown inside the expander."""
     st_mock = MagicMock()
     st_mock.expander.return_value = _Ctx()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     ci = _make_check_in(check_in_type=CheckInType.DELAYED, note="Still waiting")
     fake_handoff = SimpleNamespace(check_ins=[ci])
@@ -2027,9 +2046,9 @@ def test_save_check_in_submission_with_missing_next_check_key_sets_error(
 ) -> None:
     """Check-in submission with missing next_check_key sets flash error."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     services_mock = MagicMock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.add_check_in", services_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.add_check_in", services_mock)
 
     st_mock.session_state["test_mode"] = "on_track"
     st_mock.session_state["test_note"] = "Going well"
@@ -2051,9 +2070,9 @@ def test_save_check_in_submission_with_invalid_next_check_date_sets_error(
 ) -> None:
     """Check-in submission with invalid next_check_date type sets flash error."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     services_mock = MagicMock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.add_check_in", services_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.add_check_in", services_mock)
 
     st_mock.session_state["test_mode"] = "on_track"
     st_mock.session_state["test_note"] = "Going well"
@@ -2076,10 +2095,12 @@ def test_save_check_in_submission_conclude_logs_instrumentation(
 ) -> None:
     """Conclude action flow logs instrumentation with time_action."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     conclude_mock = MagicMock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.conclude_handoff", conclude_mock)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.conclude_handoff", conclude_mock
+    )
 
     logger_mock = MagicMock()
     monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
@@ -2107,10 +2128,10 @@ def test_save_check_in_submission_on_track_logs_instrumentation(
 ) -> None:
     """On-track check-in logs instrumentation with time_action."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     check_in_mock = MagicMock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.add_check_in", check_in_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.add_check_in", check_in_mock)
 
     logger_mock = MagicMock()
     monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
@@ -2138,10 +2159,10 @@ def test_save_reopen_submission_logs_instrumentation(
 ) -> None:
     """Reopen action logs instrumentation with time_action."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     reopen_mock = MagicMock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.reopen_handoff", reopen_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.reopen_handoff", reopen_mock)
 
     logger_mock = MagicMock()
     monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
@@ -2168,10 +2189,10 @@ def test_save_reopen_submission_with_error_logs_and_sets_flash(
 ) -> None:
     """Reopen error logs instrumentation and sets flash instead of raising."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     reopen_mock = MagicMock(side_effect=ValueError("Cannot reopen"))
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.reopen_handoff", reopen_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.reopen_handoff", reopen_mock)
 
     logger_mock = MagicMock()
     monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
@@ -2196,10 +2217,10 @@ def test_save_edit_submission_logs_instrumentation(
 ) -> None:
     """Edit action logs instrumentation with time_action."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     update_mock = MagicMock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.update_handoff", update_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.update_handoff", update_mock)
 
     logger_mock = MagicMock()
     monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
@@ -2233,10 +2254,10 @@ def test_save_add_submission_logs_instrumentation(
 ) -> None:
     """Add action logs instrumentation with time_action."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     create_mock = MagicMock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.create_handoff", create_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.create_handoff", create_mock)
 
     logger_mock = MagicMock()
     monkeypatch.setattr("handoff.instrumentation.logger", logger_mock)
@@ -2268,7 +2289,7 @@ def test_render_now_page_flash_success_displays(monkeypatch: pytest.MonkeyPatch)
     """Flash success message is displayed when present in session state."""
     st_mock = _build_streamlit_mock()
     st_mock.session_state["now_flash_success"] = "Operation successful"
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.list_projects", lambda **kw: [])
 
@@ -2283,7 +2304,7 @@ def test_render_now_page_no_projects_with_include_archived_true_shows_create_inf
     """When include_archived=True and truly no projects, shows create info."""
     st_mock = _build_streamlit_mock()
     st_mock.toggle.return_value = True
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.list_projects", lambda **kw: [])
 
     render_now_page()
@@ -2300,14 +2321,15 @@ def test_render_item_does_not_auto_expand_due_action_items(
 ) -> None:
     """Due action items start collapsed; user must expand to see check-in controls."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     class FixedDate(date):
         @classmethod
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.date", FixedDate)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.date", FixedDate)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_helpers.date", FixedDate)
 
     due_handoff = _make_fake_handoff(
         handoff_id=100,
@@ -2333,7 +2355,7 @@ def test_render_item_does_not_auto_expand_future_items(
 ) -> None:
     """Future action items do not auto-expand (unless check-in mode is active)."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     future_handoff = _make_fake_handoff(
         handoff_id=101,
@@ -2359,14 +2381,15 @@ def test_render_item_only_expands_handoff_with_active_check_in_mode(
 ) -> None:
     """Only the handoff with active check-in mode should start expanded."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     class FixedDate(date):
         @classmethod
         def today(cls) -> date:
             return date(2026, 3, 9)
 
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.date", FixedDate)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_forms.date", FixedDate)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now_helpers.date", FixedDate)
 
     first_handoff = _make_fake_handoff(
         handoff_id=201,
@@ -2405,7 +2428,7 @@ def test_render_item_only_expands_handoff_with_active_reopen_mode(
 ) -> None:
     """Only the handoff with active reopen mode should start expanded."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     first_handoff = _make_fake_handoff(handoff_id=301, need_back="Closed first")
     second_handoff = _make_fake_handoff(handoff_id=302, need_back="Closed second")
@@ -2436,7 +2459,7 @@ def test_render_check_in_flow_edit_button_visible_with_allow_actions(
 ) -> None:
     """Edit|Delete segmented control is visible in check-in flow when allow_actions is True."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=102, next_check=date(2026, 3, 20))
 
     _render_check_in_flow(
@@ -2458,7 +2481,7 @@ def test_render_check_in_flow_edit_button_hidden_without_allow_actions(
 ) -> None:
     """Edit|Delete segmented control is not rendered when allow_actions is False."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=103, next_check=date(2026, 3, 20))
 
     _render_check_in_flow(
@@ -2476,7 +2499,7 @@ def test_render_check_in_flow_segmented_control_options_correct(
 ) -> None:
     """Segmented control always shows on_track, delayed, concluded options."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=104, next_check=date(2026, 3, 20))
 
     _render_check_in_flow(handoff, key_prefix="now_action")
@@ -2494,7 +2517,7 @@ def test_render_check_in_flow_segmented_control_has_format_func(
 ) -> None:
     """Segmented control uses format_func to display friendly labels."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=105, next_check=date(2026, 3, 20))
 
     _render_check_in_flow(handoff, key_prefix="now_action")
@@ -2514,7 +2537,7 @@ def test_render_check_in_flow_segmented_control_key_matches_prefix(
 ) -> None:
     """Segmented control key follows the naming pattern for state management."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=106, next_check=date(2026, 3, 20))
 
     _render_check_in_flow(handoff, key_prefix="now_risk")
@@ -2531,7 +2554,7 @@ def test_render_check_in_flow_note_label_on_track_unchanged(
     """On-track mode shows 'Current progress (optional)' label."""
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=107, next_check=date(2026, 3, 20))
     st_mock.session_state["now_action_check_in_mode_107"] = "on_track"
 
@@ -2547,7 +2570,7 @@ def test_render_check_in_flow_note_label_delayed_changed_from_why_delayed(
     """Delayed mode shows 'Why? (optional)' label (was 'Why delayed?')."""
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=108, next_check=date(2026, 3, 20))
     st_mock.session_state["now_action_check_in_mode_108"] = "delayed"
 
@@ -2571,7 +2594,7 @@ def test_render_item_columns_layout_for_check_in_controls(
         return [_Ctx() for _ in range(2)]  # Return 2 contexts for [3, 1]
 
     st_mock.columns.side_effect = _capture_columns
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     handoff = _make_fake_handoff(handoff_id=109, next_check=date(2026, 3, 20))
 
     _render_check_in_flow(handoff, key_prefix="now_action")
@@ -2585,7 +2608,7 @@ def test_render_check_in_flow_upcoming_shows_controls_and_edit(
 ) -> None:
     """Upcoming items render check-in segmented control with Edit|Delete control."""
     st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr(
         "handoff.interfaces.streamlit.pages.now.list_projects", lambda **kwargs: [mock_project]
@@ -2622,7 +2645,7 @@ def test_render_check_in_flow_save_clears_mode_and_shows_success(
     st_mock = _build_streamlit_mock()
     st_mock.button.return_value = False
     st_mock.form_submit_button.side_effect = _simulate_widget_submit("Save check-in")
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.st", st_mock)
+    _patch_now_streamlit(monkeypatch, st_mock)
 
     calls: list[dict[str, object]] = []
 
@@ -2642,7 +2665,9 @@ def test_render_check_in_flow_save_clears_mode_and_shows_success(
             }
         )
 
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.now.add_check_in", _fake_add_check_in)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.now_forms.add_check_in", _fake_add_check_in
+    )
     handoff = _make_fake_handoff(handoff_id=111, next_check=date(2026, 3, 12))
     st_mock.session_state["now_action_check_in_mode_111"] = "on_track"
     st_mock.session_state["now_action_check_in_form_111_on_track_note"] = "done"

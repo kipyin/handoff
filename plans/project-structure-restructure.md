@@ -94,14 +94,18 @@ The PyArmor trial license refuses to obfuscate code objects over ~32KB. The proj
 
 **Rule:** No module may exceed 32,768 bytes of source.
 
+**90% threshold policy:** Proactively refactor any file that exceeds 90% of the limit (~29.5 KB). The sizecheck warns at this threshold. Splitting early avoids last-minute builds failing when a file crosses 32KB.
+
 **Files currently near the limit:**
 
-| File                     | Size  | Status   |
-|--------------------------|-------|----------|
-| `pages/now.py`           | 29 KB | Under    |
-| `data/queries.py`        | 26 KB | Under    |
-| `pages/system_settings.py` | 23 KB | Under |
-| `services/dashboard_service.py` | 22 KB | Under |
+| File                                   | Size   | Status |
+|----------------------------------------|--------|--------|
+| `interfaces/streamlit/pages/now_forms.py` | 20 KB | Under  |
+| `data/queries.py`                      | 26 KB  | Under  |
+| `interfaces/streamlit/pages/system_settings.py` | 23 KB | Under |
+| `services/dashboard_service.py`        | 22 KB  | Under  |
+
+Post-PR7, the Now page is split into `now.py` (8 KB), `now_forms.py` (20 KB), and `now_helpers.py` (4 KB)—all under 90%.
 
 **During restructure:** Do not merge modules if the result would approach 32KB. Prefer splitting large modules. Run `uv run handoff sizecheck` after each PR.
 
@@ -209,15 +213,33 @@ Each PR is implemented by one agent, reviewed by GitHub Copilot, and optionally 
 
 ---
 
-### PR 7: Split `data/queries.py` (conditional)
+### PR 7: Split `interfaces/streamlit/pages/now.py` (90% threshold)
+
+**Branch:** `refactor/split-now`  
+**Base:** current (can run in parallel with other PRs)
+
+**Condition:** Implement when `interfaces/streamlit/pages/now.py` exceeds 90% of the 32KB limit.
+
+**Scope:**
+- Split `now.py` into `now_helpers.py`, `now_forms.py`, and slim `now.py` so each stays under 90%
+- `now_helpers.py`: session state, project options, check-in trail
+- `now_forms.py`: form renderers, submission handlers, `_render_item`
+- `now.py`: `_render_filters`, `render_now_page` orchestration
+- Tests import from `now_forms` and `now_helpers` directly; monkeypatch `st` on all three modules
+
+**Verification:** `uv run handoff ci` and `uv run handoff sizecheck`
+
+---
+
+### PR 8: Split `data/queries.py` (conditional)
 
 **Branch:** `refactor/split-queries`  
 **Base:** branch with PR 6 merged
 
-**Condition:** Only implement if `uv run handoff sizecheck` fails due to `data/queries.py` exceeding 32KB.
+**Condition:** Only implement if `data/queries.py` exceeds 90% of the 32KB limit.
 
 **Scope:**
-- Split `data/queries.py` into smaller modules (e.g. `queries_filter.py`, `queries_now.py`) so each stays under 32KB
+- Split `data/queries.py` into smaller modules (e.g. `queries_filter.py`, `queries_now.py`) so each stays under 90%
 - Update `data/__init__.py` and internal imports
 - Add or adjust tests as needed
 
@@ -235,9 +257,10 @@ Each PR is implemented by one agent, reviewed by GitHub Copilot, and optionally 
 | 4  | Create `interfaces/streamlit` | 1, 2, 3      | ~30        |
 | 5  | Add `interfaces/cli` stub     | 4            | ~5         |
 | 6  | Data layer cleanup            | 2, 3         | ~10        |
-| 7  | Split `data/queries.py`       | 6            | ~8         |
+| 7  | Split `pages/now.py` (90%)    | —            | ~5         |
+| 8  | Split `data/queries.py` (90%) | 6            | ~8         |
 
-**Merge order:** 1 → 2 → 3 → (4 and 6 in parallel) → (5 and 7 in parallel; 7 only if needed).
+**Merge order:** 1 → 2 → 3 → (4 and 6 in parallel) → (5 and 7 in parallel; 8 only if queries.py exceeds 90%).
 
 ---
 
