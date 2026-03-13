@@ -12,11 +12,11 @@ from typing import Any
 
 import pandas as pd
 
+from handoff.core.models import CheckIn, CheckInType, Handoff
 from handoff.data import count_open_handoffs as _count_open_handoffs
 from handoff.data import get_handoff_close_date, query_handoffs, query_risk_handoffs
 from handoff.data import get_recent_activity as _get_recent_activity
 from handoff.dates import week_bounds
-from handoff.models import CheckIn, CheckInType, Handoff
 from handoff.services.settings_service import get_deadline_near_days
 
 
@@ -403,8 +403,8 @@ class DashboardMetrics:
     """Core PM-operational metrics for the top row."""
 
     at_risk_now: int
-    action_overdue: int
-    action_due_today: int
+    missed_check_in: int
+    check_in_due_today: int
     open_handoffs: int
     reopen_rate: str
     reopen_rate_detail: str
@@ -425,12 +425,12 @@ def get_dashboard_metrics(today: date) -> DashboardMetrics:
             include_archived_projects=False,
         )
     )
-    action_overdue = sum(
+    missed_check_in = sum(
         1
         for handoff in open_handoffs
         if handoff.next_check is not None and handoff.next_check < today
     )
-    action_due_today = sum(
+    check_in_due_today = sum(
         1
         for handoff in open_handoffs
         if handoff.next_check is not None and handoff.next_check == today
@@ -449,8 +449,8 @@ def get_dashboard_metrics(today: date) -> DashboardMetrics:
 
     return DashboardMetrics(
         at_risk_now=at_risk_now,
-        action_overdue=action_overdue,
-        action_due_today=action_due_today,
+        missed_check_in=missed_check_in,
+        check_in_due_today=check_in_due_today,
         open_handoffs=len(open_handoffs),
         reopen_rate=reopen_summary.rate_display,
         reopen_rate_detail=reopen_summary.detail_display,

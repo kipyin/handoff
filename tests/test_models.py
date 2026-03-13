@@ -4,7 +4,7 @@ from datetime import date, datetime
 
 from sqlmodel import Session
 
-from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.core.models import CheckIn, CheckInType, Handoff, Project
 
 
 def test_create_project(session: Session) -> None:

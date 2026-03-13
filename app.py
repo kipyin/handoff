@@ -12,12 +12,14 @@ from functools import wraps
 
 import streamlit as st
 
-from handoff.pages.about import render_about_page
-from handoff.pages.dashboard import render_dashboard_page
-from handoff.pages.now import render_now_page
-from handoff.pages.projects import render_projects_page
-from handoff.pages.system_settings import render_system_settings_page
-from handoff.ui import setup
+from handoff.interfaces.streamlit.pages.now import render_now_page
+from handoff.interfaces.streamlit.ui import (
+    render_about_page,
+    render_dashboard_page,
+    render_projects_page,
+    render_system_settings_page,
+    setup,
+)
 from handoff.version import __version__ as APP_VERSION
 
 

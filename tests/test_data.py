@@ -10,8 +10,8 @@ import pytest
 from sqlmodel import select
 
 import handoff.data as data
-from handoff.models import CheckIn, CheckInType, Handoff, Project
-from handoff.page_models import HandoffQuery
+from handoff.core.models import CheckIn, CheckInType, Handoff, Project
+from handoff.core.page_models import HandoffQuery
 
 
 def _patch_session_context(monkeypatch, session) -> None:
@@ -627,13 +627,13 @@ def test_list_projects_excludes_archived_by_default(session, monkeypatch) -> Non
 
 
 def test_list_projects_survives_models_reload(session, monkeypatch) -> None:
-    """Reloading handoff.models does not poison SQLModel's registry for list_projects."""
+    """Reloading handoff.core.models does not poison SQLModel's registry for list_projects."""
     _patch_session_context(monkeypatch, session)
     project = Project(name="Reload safe")
     session.add(project)
     session.commit()
 
-    import handoff.models as models
+    import handoff.core.models as models
 
     before_project = models.Project
     before_handoff = models.Handoff

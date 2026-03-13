@@ -105,7 +105,7 @@ def init_db() -> None:
         engine = get_engine()
         # Ensure models are imported so SQLModel's metadata is populated with
         # the Project, Handoff, and CheckIn tables before create_all() runs.
-        from handoff import models as _models  # noqa: F401
+        from handoff.core import models as _models  # noqa: F401
 
         SQLModel.metadata.create_all(engine)
 

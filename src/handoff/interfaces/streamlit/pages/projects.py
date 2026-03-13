@@ -8,8 +8,7 @@ import pandas as pd
 import streamlit as st
 from loguru import logger
 
-from handoff.autosave import autosave_editor
-from handoff.page_models import ProjectSummaryRow
+from handoff.core.page_models import ProjectSummaryRow
 from handoff.services.project_service import (
     archive_project,
     create_project,
@@ -18,6 +17,8 @@ from handoff.services.project_service import (
     rename_project,
     unarchive_project,
 )
+
+from ..autosave import autosave_editor
 
 
 def _render_create_project_form() -> None:
