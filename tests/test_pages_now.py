@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from handoff.core.models import CheckIn, CheckInType
-from handoff.page_models import NowSnapshot
+from handoff.core.page_models import NowSnapshot
 from handoff.pages.now import (
     _NOW_ADD_EXPANDED_KEY,
     _build_project_options,

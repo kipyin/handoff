@@ -11,7 +11,7 @@ from sqlmodel import select
 
 import handoff.data as data
 from handoff.core.models import CheckIn, CheckInType, Handoff, Project
-from handoff.page_models import HandoffQuery
+from handoff.core.page_models import HandoffQuery
 
 
 def _patch_session_context(monkeypatch, session) -> None:

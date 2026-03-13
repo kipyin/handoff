@@ -462,7 +462,7 @@ def test_service_get_now_snapshot_contract(session, monkeypatch) -> None:
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
-    from handoff.rulebook import build_default_rulebook_settings
+    from handoff.core.rulebook import build_default_rulebook_settings
 
     monkeypatch.setattr(
         "handoff.services.handoff_service.get_rulebook_settings",
@@ -500,7 +500,7 @@ def test_service_get_now_snapshot_contract(session, monkeypatch) -> None:
 
 def test_service_get_now_snapshot_uses_prefetched_supporting_data(monkeypatch) -> None:
     """Prefetched projects/pitchmen are returned directly without extra list queries."""
-    from handoff.rulebook import build_default_rulebook_settings
+    from handoff.core.rulebook import build_default_rulebook_settings
 
     monkeypatch.setattr(
         "handoff.services.handoff_service.get_rulebook_settings",
@@ -547,7 +547,7 @@ def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
-    from handoff.rulebook import build_default_rulebook_settings
+    from handoff.core.rulebook import build_default_rulebook_settings
 
     monkeypatch.setattr(
         "handoff.services.handoff_service.get_rulebook_settings",
@@ -625,7 +625,7 @@ def test_service_get_now_snapshot_rulebook_parity_with_legacy_queries(session, m
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
-    from handoff.rulebook import build_default_rulebook_settings
+    from handoff.core.rulebook import build_default_rulebook_settings
 
     monkeypatch.setattr(
         "handoff.services.handoff_service.get_rulebook_settings",
@@ -694,7 +694,7 @@ def test_get_rulebook_section_preview_counts_default_rulebook(session, monkeypat
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
-    from handoff.rulebook import BuiltInSection, build_default_rulebook_settings
+    from handoff.core.rulebook import BuiltInSection, build_default_rulebook_settings
 
     settings = build_default_rulebook_settings(deadline_near_days=1)
     monkeypatch.setattr(
@@ -740,7 +740,7 @@ def test_get_rulebook_section_preview_counts_default_rulebook(session, monkeypat
 def test_get_rulebook_section_preview_counts_empty_handoffs(session, monkeypatch) -> None:
     """Preview counts are all zero when no open handoffs exist."""
     _patch_session_context(monkeypatch, session)
-    from handoff.rulebook import BuiltInSection, build_default_rulebook_settings
+    from handoff.core.rulebook import BuiltInSection, build_default_rulebook_settings
 
     settings = build_default_rulebook_settings(deadline_near_days=1)
 
@@ -762,7 +762,7 @@ def test_get_rulebook_section_preview_counts_custom_rulebook(session, monkeypatc
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
-    from handoff.rulebook import (
+    from handoff.core.rulebook import (
         BuiltInSection,
         NextCheckDueCondition,
         RulebookSettings,
@@ -807,7 +807,7 @@ def test_get_rulebook_section_preview_counts_custom_rulebook(session, monkeypatc
 
 def test_get_rulebook_section_preview_counts_defaults_to_saved_rulebook(monkeypatch) -> None:
     """Preview counts use saved rulebook when settings are not provided."""
-    from handoff.rulebook import build_default_rulebook_settings
+    from handoff.core.rulebook import build_default_rulebook_settings
 
     settings = build_default_rulebook_settings(deadline_near_days=1)
     get_settings_calls: list[bool] = []
@@ -847,7 +847,7 @@ def test_get_rulebook_section_preview_counts_include_archived_projects(
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
-    from handoff.rulebook import BuiltInSection, build_default_rulebook_settings
+    from handoff.core.rulebook import BuiltInSection, build_default_rulebook_settings
 
     settings = build_default_rulebook_settings(deadline_near_days=1)
 
@@ -894,7 +894,7 @@ def test_service_get_now_snapshot_rulebook_parity_multiple_deadline_near_days(
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
-    from handoff.rulebook import build_default_rulebook_settings
+    from handoff.core.rulebook import build_default_rulebook_settings
 
     monkeypatch.setattr(
         "handoff.services.handoff_service.get_rulebook_settings",
@@ -954,7 +954,7 @@ def test_service_get_now_snapshot_rulebook_parity_empty_open_handoffs(
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
-    from handoff.rulebook import build_default_rulebook_settings
+    from handoff.core.rulebook import build_default_rulebook_settings
 
     monkeypatch.setattr(
         "handoff.services.handoff_service.get_rulebook_settings",
@@ -1007,7 +1007,7 @@ def test_service_get_now_snapshot_all_rules_disabled_falls_back_to_upcoming(
             return date(2026, 3, 9)
 
     _patch_date(monkeypatch, FixedDate)
-    from handoff.rulebook import (
+    from handoff.core.rulebook import (
         BuiltInSection,
         RulebookSettings,
         RuleDefinition,
@@ -1135,7 +1135,7 @@ def test_service_get_now_snapshot_forwards_parsed_filters(monkeypatch) -> None:
 
 def test_service_get_now_snapshot_includes_custom_sections_sorts_and_limits(monkeypatch) -> None:
     """Snapshot includes custom sections and applies canonical section sort/limit rules."""
-    from handoff.rulebook import (
+    from handoff.core.rulebook import (
         BuiltInSection,
         NextCheckDueCondition,
         RulebookSettings,
@@ -1274,7 +1274,7 @@ def test_service_get_now_snapshot_includes_custom_sections_sorts_and_limits(monk
 
 def test_service_get_now_snapshot_custom_fallback_routes_items_to_upcoming(monkeypatch) -> None:
     """Non-upcoming fallback ids still surface fallback items via snapshot.upcoming."""
-    from handoff.rulebook import (
+    from handoff.core.rulebook import (
         NextCheckDueCondition,
         RulebookSettings,
         RuleDefinition,

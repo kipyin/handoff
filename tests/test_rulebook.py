@@ -9,7 +9,7 @@ import pytest
 
 import handoff.data as data
 from handoff.core.models import CheckIn, CheckInType, Handoff, Project
-from handoff.rulebook import (
+from handoff.core.rulebook import (
     BuiltInSection,
     DeadlineWithinDaysCondition,
     LatestCheckInTypeIsCondition,

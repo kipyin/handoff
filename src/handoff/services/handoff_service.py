@@ -5,6 +5,14 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from handoff.core.models import CheckIn, CheckInType, Handoff, Project
+from handoff.core.page_models import HandoffQuery, NowSnapshot
+from handoff.core.rulebook import (
+    BuiltInSection,
+    RulebookSettings,
+    evaluate_open_handoff,
+    get_open_section_display_order,
+    get_section_explanations,
+)
 from handoff.data import conclude_handoff as _conclude_handoff
 from handoff.data import create_check_in as _create_check_in
 from handoff.data import create_handoff as _create_handoff
@@ -21,14 +29,6 @@ from handoff.data import query_risk_handoffs as _query_risk_handoffs
 from handoff.data import query_upcoming_handoffs as _query_upcoming_handoffs
 from handoff.data import reopen_handoff as _reopen_handoff
 from handoff.data import update_handoff as _update_handoff
-from handoff.page_models import HandoffQuery, NowSnapshot
-from handoff.rulebook import (
-    BuiltInSection,
-    RulebookSettings,
-    evaluate_open_handoff,
-    get_open_section_display_order,
-    get_section_explanations,
-)
 from handoff.search_parse import parse_search_query
 from handoff.services.project_service import list_projects
 from handoff.services.settings_service import get_rulebook_settings

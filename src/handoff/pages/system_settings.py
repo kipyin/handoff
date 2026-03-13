@@ -18,11 +18,11 @@ import pandas as pd
 import streamlit as st
 from loguru import logger
 
-from handoff.backup_schema import BackupPayload
 from handoff.bootstrap.docs import get_readme_intro
 from handoff.bootstrap.logging import _get_logs_dir
+from handoff.core.backup_schema import BackupPayload
 from handoff.core.models import CheckInType
-from handoff.rulebook import (
+from handoff.core.rulebook import (
     DeadlineWithinDaysCondition,
     LatestCheckInTypeIsCondition,
     NextCheckDueCondition,
