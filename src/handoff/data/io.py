@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from loguru import logger
 from sqlmodel import select
 
 from handoff.backup_schema import BackupPayload
-from handoff.db import get_db_path, session_context
+from handoff.db import session_context
+from handoff.logging import log_application_action
 from handoff.models import CheckIn, Handoff, Project
 
 
@@ -68,14 +68,8 @@ def import_payload(data_payload: dict[str, Any]) -> None:
             session.add(check_in)
 
         session.commit()
-        try:
-            db_path_str = str(get_db_path())
-        except Exception:
-            db_path_str = "(unknown)"
-        logger.info(
-            "data_import action=complete db_path={db_path} project_count={project_count} "
-            "handoff_count={handoff_count} check_in_count={check_in_count}",
-            db_path=db_path_str,
+        log_application_action(
+            "data_import",
             project_count=len(payload.projects),
             handoff_count=len(payload.handoffs),
             check_in_count=len(payload.check_ins),

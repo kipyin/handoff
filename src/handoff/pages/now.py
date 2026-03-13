@@ -14,10 +14,12 @@ import streamlit as st
 from handoff.dates import add_business_days, format_date_smart, format_risk_reason
 from handoff.instrumentation import time_action
 from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.rulebook import BuiltInSection
 from handoff.services import (
     add_check_in,
     conclude_handoff,
     create_handoff,
+    delete_handoff,
     get_now_snapshot,
     list_pitchmen_with_open_handoffs,
     list_projects,
@@ -27,6 +29,8 @@ from handoff.services import (
 
 CHECK_IN_MODES = ["on_track", "delayed", "concluded"]
 CHECK_IN_MODE_LABELS = {"on_track": "On-track", "delayed": "Delayed", "concluded": "Conclude"}
+ACTION_MODES = ["edit", "delete"]
+ACTION_MODE_LABELS = {"edit": "Edit", "delete": "Delete"}
 
 _NOW_FLASH_SUCCESS_KEY = "now_flash_success"
 _NOW_FLASH_ERROR_KEY = "now_flash_error"
@@ -101,7 +105,6 @@ def _build_project_options(projects: list[Project]) -> dict[str, Project]:
             label = f"{project.name} ({suffix})"
         else:
             label = project.name
-        # Ensure no collisions (e.g. user named project "Work (#1)")
         while label in options:
             label = (
                 f"{label} #{project.id}" if project.id is not None else f"{label} ({occurrence})"
@@ -157,38 +160,36 @@ def _is_check_in_due(handoff: Handoff) -> bool:
 
 
 def _set_flash_success(message: str) -> None:
-    """Persist one success message for display after the next rerun."""
     st.session_state[_NOW_FLASH_SUCCESS_KEY] = message
 
 
 def _set_flash_error(message: str) -> None:
-    """Persist one error message for display after the next rerun."""
     st.session_state[_NOW_FLASH_ERROR_KEY] = message
 
 
 def _set_mode(*, mode_key: str, mode: str) -> None:
-    """Set a local interaction mode in session state."""
     st.session_state[mode_key] = mode
 
 
 def _clear_session_key(*, state_key: str) -> None:
-    """Remove a session-state key when it exists."""
     st.session_state.pop(state_key, None)
 
 
 def _expand_add_form() -> None:
-    """Expand the Add handoff form (keyboard shortcut target)."""
     st.session_state[_NOW_ADD_EXPANDED_KEY] = True
 
 
 def _collapse_add_form() -> None:
-    """Collapse the Add handoff form."""
     st.session_state.pop(_NOW_ADD_EXPANDED_KEY, None)
 
 
-def _set_editing_handoff(*, handoff_id: int) -> None:
-    """Mark one handoff as currently being edited."""
-    st.session_state["now_editing_handoff_id"] = handoff_id
+def _confirm_delete_handoff(*, handoff_id: int, action_mode_key: str) -> None:
+    with time_action("now_delete"):
+        if delete_handoff(handoff_id):
+            _set_flash_success("Handoff deleted.")
+            st.session_state.pop(action_mode_key, None)
+        else:
+            _set_flash_error("Could not delete handoff.")
 
 
 def _save_check_in_submission(
@@ -272,6 +273,7 @@ def _save_edit_submission(
     next_check_key: str,
     deadline_key: str,
     context_key: str,
+    action_mode_key: str = "",
 ) -> None:
     """Persist a handoff edit form submission."""
     need_back_raw = st.session_state.get(need_key, "")
@@ -307,7 +309,8 @@ def _save_edit_submission(
             deadline=deadline_value if isinstance(deadline_value, date) else None,
             notes=str(context_raw).strip() or None,
         )
-    st.session_state.pop("now_editing_handoff_id", None)
+    if action_mode_key:
+        st.session_state.pop(action_mode_key, None)
     _set_flash_success("Saved.")
 
 
@@ -372,6 +375,7 @@ def _render_check_in_flow(handoff: Handoff, *, key_prefix: str, allow_actions: b
         st.caption(f"Optional early check-in. Planned next check: {planned_label}.")
 
     mode_key = f"{key_prefix}_check_in_mode_{handoff_id}"
+    action_mode_key = f"{key_prefix}_action_mode_{handoff_id}"
     row_col1, row_col2 = st.columns([3, 1])
     with row_col1:
         st.segmented_control(
@@ -384,11 +388,13 @@ def _render_check_in_flow(handoff: Handoff, *, key_prefix: str, allow_actions: b
         )
     with row_col2:
         if allow_actions:
-            st.button(
-                "Edit",
-                key=f"{key_prefix}_edit_btn_{handoff_id}",
-                on_click=_set_editing_handoff,
-                kwargs={"handoff_id": handoff_id},
+            st.segmented_control(
+                "Actions",
+                options=ACTION_MODES,
+                default=None,
+                format_func=lambda s: ACTION_MODE_LABELS.get(s, str(s)),
+                key=action_mode_key,
+                label_visibility="collapsed",
             )
     selected_mode = st.session_state.get(mode_key)
 
@@ -497,6 +503,32 @@ def _render_reopen_flow(handoff: Handoff, *, key_prefix: str) -> None:
         )
 
 
+def _render_delete_confirmation(handoff: Handoff, *, key_prefix: str) -> None:
+    handoff_id = handoff.id
+    if handoff_id is None:
+        return
+    action_mode_key = f"{key_prefix}_action_mode_{handoff_id}"
+    need_back = (handoff.need_back or "this handoff").strip()
+    st.warning("This action is irreversible.")
+    st.caption(f"You are about to permanently delete: **{need_back}**")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.button(
+            "Confirm delete",
+            key=f"{key_prefix}_confirm_delete_{handoff_id}",
+            type="primary",
+            on_click=_confirm_delete_handoff,
+            kwargs={"handoff_id": handoff_id, "action_mode_key": action_mode_key},
+        )
+    with col2:
+        st.button(
+            "Cancel",
+            key=f"{key_prefix}_cancel_delete_{handoff_id}",
+            on_click=_clear_session_key,
+            kwargs={"state_key": action_mode_key},
+        )
+
+
 def _render_item(
     handoff: Handoff,
     key_prefix: str,
@@ -506,7 +538,6 @@ def _render_item(
     show_check_in_controls: bool = False,
     allow_actions: bool = True,
     allow_reopen: bool = False,
-    match_explanation: str | None = None,
 ) -> None:
     """Render one handoff item in an expander."""
     handoff_id = handoff.id
@@ -537,6 +568,7 @@ def _render_item(
     header = risk_prefix + core
 
     check_in_mode_key = f"{key_prefix}_check_in_mode_{handoff_id}"
+    action_mode_key = f"{key_prefix}_action_mode_{handoff_id}"
     reopen_mode_key = f"{key_prefix}_reopen_mode_{handoff_id}"
     has_active_check_in_mode = st.session_state.get(check_in_mode_key) in {
         "on_track",
@@ -544,28 +576,33 @@ def _render_item(
         "concluded",
     }
     has_active_reopen_mode = st.session_state.get(reopen_mode_key) == "reopen"
-    editing = allow_actions and st.session_state.get("now_editing_handoff_id") == handoff_id
+    action_mode = st.session_state.get(action_mode_key)
+    editing = allow_actions and action_mode == "edit"
+    deleting = allow_actions and action_mode == "delete"
     keep_expanded_for_mode = (
-        allow_actions and show_check_in_controls and has_active_check_in_mode
+        allow_actions
+        and show_check_in_controls
+        and (has_active_check_in_mode or action_mode in ("edit", "delete"))
     ) or (allow_reopen and has_active_reopen_mode)
-    # Default collapsed; only expand when editing or form mode is active.
+    # Default collapsed; only expand when editing, deleting, or form mode is active.
     # Removed is_due_action so operations on one handoff don't expand others.
-    expanded = editing or keep_expanded_for_mode
+    expanded = editing or deleting or keep_expanded_for_mode
     with st.expander(header, expanded=expanded):
-        if match_explanation:
-            st.caption(match_explanation)
-        if not editing and allow_actions and show_check_in_controls:
-            _render_check_in_flow(handoff, key_prefix=key_prefix, allow_actions=allow_actions)
-        elif not editing and allow_reopen:
-            _render_reopen_flow(handoff, key_prefix=key_prefix)
-
         if editing:
             _render_edit_form(
                 handoff=handoff,
                 project_options=project_options,
                 key_prefix=f"{key_prefix}_edit_{handoff_id}",
+                action_mode_key=action_mode_key,
             )
             return
+        if deleting:
+            _render_delete_confirmation(handoff, key_prefix=key_prefix)
+            return
+        if allow_actions and show_check_in_controls:
+            _render_check_in_flow(handoff, key_prefix=key_prefix, allow_actions=allow_actions)
+        elif allow_reopen:
+            _render_reopen_flow(handoff, key_prefix=key_prefix)
 
         if context:
             st.markdown("**Context:**")
@@ -579,6 +616,8 @@ def _render_edit_form(
     handoff: Handoff,
     project_options: dict[str, Project],
     key_prefix: str,
+    *,
+    action_mode_key: str,
 ) -> None:
     """Render edit form for a handoff item.
 
@@ -586,6 +625,7 @@ def _render_edit_form(
         handoff: The handoff item being edited.
         project_options: Map of unique project labels to Project for form lookup.
         key_prefix: Prefix for Streamlit widget keys.
+        action_mode_key: Session key for the edit/delete segmented control.
     """
     handoff_id = handoff.id
     if handoff_id is None:
@@ -657,13 +697,14 @@ def _render_edit_form(
                     "next_check_key": next_key,
                     "deadline_key": deadline_key,
                     "context_key": context_key,
+                    "action_mode_key": action_mode_key,
                 },
             )
         with col2:
             st.form_submit_button(
                 "Cancel",
                 on_click=_clear_session_key,
-                kwargs={"state_key": "now_editing_handoff_id"},
+                kwargs={"state_key": action_mode_key},
             )
 
 
@@ -825,6 +866,9 @@ def render_now_page() -> None:
     # --- Risk section ---
     st.markdown("---")
     st.markdown("**Risk**")
+    risk_explanation = snapshot.section_explanations.get(BuiltInSection.RISK.value)
+    if risk_explanation:
+        st.caption(risk_explanation)
     if not snapshot.risk:
         st.info("No at-risk handoffs.")
     else:
@@ -836,16 +880,14 @@ def render_now_page() -> None:
                 is_risk=True,
                 show_check_in_controls=True,
                 allow_actions=True,
-                match_explanation=(
-                    snapshot.section_explanations.get(handoff.id, "") or None
-                    if handoff.id is not None
-                    else None
-                ),
             )
 
     # --- Action section ---
     st.markdown("---")
     st.markdown("**Action required**")
+    action_explanation = snapshot.section_explanations.get(BuiltInSection.ACTION_REQUIRED.value)
+    if action_explanation:
+        st.caption(action_explanation)
     if not snapshot.action:
         st.info("Nothing needs attention right now. Add handoffs or check back later.")
     else:
@@ -855,11 +897,6 @@ def render_now_page() -> None:
                 "now_action",
                 project_options=project_options,
                 show_check_in_controls=True,
-                match_explanation=(
-                    snapshot.section_explanations.get(handoff.id, "") or None
-                    if handoff.id is not None
-                    else None
-                ),
             )
 
     # --- Custom sections ---
@@ -867,6 +904,9 @@ def render_now_page() -> None:
         section_label = section_id.replace("_", " ").title()
         st.markdown("---")
         st.markdown(f"**{section_label}**")
+        custom_explanation = snapshot.section_explanations.get(section_id)
+        if custom_explanation:
+            st.caption(custom_explanation)
         if not handoffs:
             st.info(f"No handoffs in {section_label}.")
         else:
@@ -876,16 +916,14 @@ def render_now_page() -> None:
                     f"now_custom_{section_id}",
                     project_options=project_options,
                     show_check_in_controls=True,
-                    match_explanation=(
-                        snapshot.section_explanations.get(handoff.id, "") or None
-                        if handoff.id is not None
-                        else None
-                    ),
                 )
 
     # --- Upcoming section ---
     st.markdown("---")
     st.markdown("**Upcoming**")
+    upcoming_explanation = snapshot.section_explanations.get(snapshot.upcoming_section_id)
+    if upcoming_explanation:
+        st.caption(upcoming_explanation)
     if not snapshot.upcoming:
         st.info("No upcoming handoffs.")
     else:
@@ -895,11 +933,6 @@ def render_now_page() -> None:
                 key_prefix="now_upcoming",
                 project_options=project_options,
                 show_check_in_controls=True,
-                match_explanation=(
-                    snapshot.section_explanations.get(handoff.id, "") or None
-                    if handoff.id is not None
-                    else None
-                ),
             )
 
     # --- Concluded section ---
