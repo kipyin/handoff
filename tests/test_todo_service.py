@@ -1346,7 +1346,9 @@ def test_service_get_now_snapshot_custom_fallback_routes_items_to_upcoming(monke
     assert snapshot.action == []
     assert snapshot.custom_sections == [("blocked", [])]
     assert [handoff.need_back for handoff in snapshot.upcoming] == ["Needs manual triage"]
-    assert snapshot.section_explanations == {"manual_triage": "No custom rules matched."}
+    # section_explanations now derived from rulebook, not handoff evaluation
+    assert "manual_triage" in snapshot.section_explanations
+    assert "No enabled rule matched" in snapshot.section_explanations["manual_triage"]
 
 
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:

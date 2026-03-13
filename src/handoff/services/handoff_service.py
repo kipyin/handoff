@@ -27,6 +27,7 @@ from handoff.rulebook import (
     RulebookSettings,
     evaluate_open_handoff,
     get_open_section_display_order,
+    get_section_explanations,
 )
 from handoff.search_parse import parse_search_query
 from handoff.services.project_service import list_projects
@@ -126,13 +127,11 @@ def get_now_snapshot(
     today = date.today()
 
     buckets: dict[str, list[Handoff]] = {}
-    section_explanations: dict[str, str] = {}
+    section_explanations = get_section_explanations(rulebook)
 
     for handoff in open_handoffs:
         match_result = evaluate_open_handoff(handoff, settings=rulebook, today=today)
         sid = match_result.section_id
-        if sid not in section_explanations:
-            section_explanations[sid] = match_result.explanation
         if sid not in buckets:
             buckets[sid] = []
         buckets[sid].append(handoff)

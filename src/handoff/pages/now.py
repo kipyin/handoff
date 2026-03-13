@@ -505,9 +505,10 @@ def _render_item(
     keep_expanded_for_mode = (
         allow_actions and show_check_in_controls and has_active_check_in_mode
     ) or (allow_reopen and has_active_reopen_mode)
-    # Auto-expand for due action items so check-in controls are visible without clicking
-    is_due_action = show_check_in_controls and _is_check_in_due(handoff)
-    with st.expander(header, expanded=editing or keep_expanded_for_mode or is_due_action):
+    # Default collapsed; only expand when editing or form mode is active.
+    # Removed is_due_action so operations on one handoff don't expand others.
+    expanded = editing or keep_expanded_for_mode
+    with st.expander(header, expanded=expanded):
         if not editing and allow_actions and show_check_in_controls:
             _render_check_in_flow(handoff, key_prefix=key_prefix, allow_actions=allow_actions)
         elif not editing and allow_reopen:

@@ -39,9 +39,7 @@ def log_application_action(action: str, **details: Any) -> None:
 def _get_logs_dir() -> Path:
     """Return the directory where log files should be written.
 
-    Returns:
-        Path to the logs directory under user data (e.g. APPDATA on Windows).
-
+    Log files are stored under the user's data directory (e.g. APPDATA on Windows).
     """
     data_dir = Path(user_data_dir("handoff", "handoff"))
     logs_dir = data_dir / "logs"
