@@ -259,11 +259,6 @@ def conclude_handoff(handoff_id: int, note: str | None = None) -> CheckIn:
     return check_in
 
 
-def _latest_check_in(handoff: Handoff) -> CheckIn | None:
-    """Return the latest check-in on a handoff trail, or None."""
-    return handoff_lifecycle._latest_check_in(handoff)
-
-
 def handoff_is_open(handoff: Handoff) -> bool:
     """Return True when the latest check-in is not concluded."""
     return handoff_lifecycle.handoff_is_open(handoff)
