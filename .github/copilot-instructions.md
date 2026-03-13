@@ -5,8 +5,8 @@
 ## Key facts for Copilot
 
 - **Stack:** Python 3.13+, Streamlit, SQLite, SQLModel. No external services.
-- **Entrypoint:** `python -m handoff` / `uv run handoff` (launcher that runs `streamlit run app.py` → `src/handoff/` package → `pages/`, `services/`).
-- **Architecture rule:** `pages/` must import from `services/`, never from `handoff.data` directly (enforced by `tests/test_services_architecture.py`).
+- **Entrypoint:** `python -m handoff` / `uv run handoff` (launcher that runs `streamlit run app.py` → `src/handoff/` package → `interfaces/streamlit/pages/`, `services/`).
+- **Architecture rule:** Page modules must import from `handoff.services`, never from `handoff.data` directly (enforced by `tests/test_services_architecture.py`).
 - **Linter/formatter:** Ruff (`uv run handoff check --fix`). **Type checker:** Pyright (`uv run handoff typecheck`).
 - **Tests:** `uv run handoff test` (pytest). Full CI: `uv run handoff ci`.
 - **DB migrations:** Add numbered scripts under `src/handoff/migrations/scripts/` **and** register them in `handoff.migrations.scripts.ALL`; `db.init_db()` then runs them automatically.
