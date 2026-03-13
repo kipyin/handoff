@@ -590,6 +590,78 @@ class TestRenderRulebookSection:
         assert persisted.rules[1].priority == 5
         assert persisted.rules[1].conditions[0].include_missing_next_check is False
 
+    def test_save_persists_risk_deadline_days_when_preview_is_reordered(self, monkeypatch) -> None:
+        """Risk deadline edits persist by stored rule index even when display order changes."""
+        from handoff.rulebook import DeadlineWithinDaysCondition, LatestCheckInTypeIsCondition
+
+        settings = RulebookSettings(
+            version=1,
+            rules=(
+                RuleDefinition(
+                    rule_id="stored_risk",
+                    name="Stored Risk",
+                    section_id="risk",
+                    priority=40,
+                    enabled=True,
+                    conditions=(
+                        DeadlineWithinDaysCondition(days=1),
+                        LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),
+                    ),
+                ),
+                RuleDefinition(
+                    rule_id="stored_action",
+                    name="Stored Action",
+                    section_id="action_required",
+                    priority=10,
+                    enabled=True,
+                    conditions=(NextCheckDueCondition(include_missing_next_check=False),),
+                ),
+            ),
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.button.side_effect = lambda label, key=None: (
+            key == "settings_rulebook_save" if key else False
+        )
+        session_state = {
+            "settings_rule_0_enabled": True,
+            "settings_rule_0_priority": 42,
+            "settings_rule_0_cond_0_days": 7,
+            "settings_rule_0_cond_1_check_in_type": CheckInType.DELAYED.value,
+            "settings_rule_1_enabled": True,
+            "settings_rule_1_priority": 8,
+            "settings_rule_1_cond_0_include_missing": False,
+        }
+        st_mock.session_state = session_state
+        st_mock.checkbox.side_effect = lambda *a, **kw: session_state.get(
+            kw.get("key"), kw.get("value", False)
+        )
+        st_mock.number_input.side_effect = lambda *a, **kw: session_state.get(
+            kw.get("key"), kw.get("value", 0)
+        )
+        st_mock.selectbox.side_effect = lambda *a, **kw: session_state.get(
+            kw.get("key"), kw.get("options", [None])[kw.get("index", 0)]
+        )
+        monkeypatch.setattr("handoff.pages.system_settings.get_rulebook_settings", lambda: settings)
+        saved: list[RulebookSettings] = []
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.save_rulebook_settings",
+            lambda value: saved.append(value),
+        )
+        _mock_rulebook_preview_counts(monkeypatch)
+
+        _render_rulebook_section()
+
+        assert len(saved) == 1
+        persisted = saved[0]
+        assert [rule.rule_id for rule in persisted.rules] == ["stored_risk", "stored_action"]
+        persisted_deadline = next(
+            condition.days
+            for condition in persisted.rules[0].conditions
+            if isinstance(condition, DeadlineWithinDaysCondition)
+        )
+        assert persisted_deadline == 7
+        assert persisted.rules[0].priority == 42
+
     def test_warns_when_rule_uses_unsupported_check_in_type(self, monkeypatch) -> None:
         """Unsupported saved check-in types trigger warning and default select index."""
         from handoff.rulebook import LatestCheckInTypeIsCondition
