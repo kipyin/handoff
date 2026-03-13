@@ -94,6 +94,14 @@ def _ci_run(extra_args: list[str] | None = None) -> None:
     test(extra_args=extra_args)
 
 
+@app.command("cli")
+def cli_command() -> None:
+    """Run the handoff CLI (stub for future implementation)."""
+    from handoff.interfaces.cli import run_cli
+
+    run_cli()
+
+
 @app.command()
 def run(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
     """Run the Streamlit app (applies Streamlit options from handoff.bootstrap.config)."""
