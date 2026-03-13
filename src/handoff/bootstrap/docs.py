@@ -13,7 +13,7 @@ def read_markdown_from_app_root(name: str) -> str:
     """Return the contents of a markdown file located next to app.py.
 
     Returns file contents as a UTF-8 string, or a short placeholder message if the
-    file cannot be found or read.
+    file is not found or an I/O error occurs while reading.
     """
     app_root = _get_app_root()
     path = app_root / name
