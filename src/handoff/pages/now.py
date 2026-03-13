@@ -50,6 +50,12 @@ def _render_filters(
         Tuple of (project_ids or None, pitchman_names or None, search_text or None).
     """
     project_names = list(project_options)
+    projects_key = f"{key_prefix}_projects"
+    # Normalize stored filters when labels change (e.g. after duplicate-name fix)
+    stored = st.session_state.get(projects_key, [])
+    if stored and not set(stored).issubset(set(project_names)):
+        st.session_state[projects_key] = [p for p in stored if p in project_names]
+
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         search_text = st.text_input(
@@ -62,7 +68,7 @@ def _render_filters(
             "Project",
             options=project_names,
             default=[],
-            key=f"{key_prefix}_projects",
+            key=projects_key,
         )
     with col3:
         pitchman_filters = st.multiselect(
@@ -95,6 +101,11 @@ def _build_project_options(projects: list[Project]) -> dict[str, Project]:
             label = f"{project.name} ({suffix})"
         else:
             label = project.name
+        # Ensure no collisions (e.g. user named project "Work (#1)")
+        while label in options:
+            label = (
+                f"{label} #{project.id}" if project.id is not None else f"{label} ({occurrence})"
+            )
         options[label] = project
     return options
 
@@ -269,11 +280,11 @@ def _save_edit_submission(
         _set_flash_error("Need back is required.")
         return
 
-    project_name = st.session_state.get(project_key)
-    if project_name not in project_options:
+    project_label = st.session_state.get(project_key)
+    if project_label not in project_options:
         _set_flash_error("Select a project.")
         return
-    project_id = project_options[project_name].id
+    project_id = project_options[project_label].id
     if project_id is None:
         _set_flash_error("Select a valid project.")
         return
@@ -317,11 +328,11 @@ def _save_add_submission(
         _set_flash_error("Need back is required.")
         return
 
-    project_name = st.session_state.get(project_key)
-    if project_name not in project_options:
+    project_label = st.session_state.get(project_key)
+    if project_label not in project_options:
         _set_flash_error("Select a project.")
         return
-    project_id = project_options[project_name].id
+    project_id = project_options[project_label].id
     if project_id is None:
         _set_flash_error("Select a valid project.")
         return
@@ -580,6 +591,8 @@ def _render_edit_form(
         return
     project_names = list(project_options)
     project_key = f"{key_prefix}_project"
+    if project_key in st.session_state and st.session_state[project_key] not in project_names:
+        st.session_state.pop(project_key, None)
     who_key = f"{key_prefix}_who"
     need_key = f"{key_prefix}_need"
     next_key = f"{key_prefix}_next"
@@ -668,6 +681,8 @@ def _render_add_form(
     with st.form(key=f"{key_prefix}_add_form", clear_on_submit=True):
         project_names = list(project_options)
         project_key = f"{key_prefix}_add_project"
+        if project_key in st.session_state and st.session_state[project_key] not in project_names:
+            st.session_state.pop(project_key, None)
         who_key = f"{key_prefix}_add_who"
         need_key = f"{key_prefix}_add_need"
         next_key = f"{key_prefix}_add_next"
