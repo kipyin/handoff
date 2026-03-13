@@ -1,7 +1,7 @@
 """Main entrypoint for the Handoff app.
 
 This file intentionally exposes a stable APP_VERSION constant so an updater can
-read it, while delegating UI rendering to handoff.ui and
+read it, while delegating UI rendering to handoff.interfaces.streamlit and
 Streamlit's st.navigation API.
 """
 

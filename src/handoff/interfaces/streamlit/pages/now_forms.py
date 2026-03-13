@@ -8,7 +8,6 @@ import streamlit as st
 
 from handoff.core.models import CheckInType, Handoff, Project
 from handoff.dates import add_business_days, format_date_smart
-from handoff.instrumentation import time_action
 from handoff.interfaces.streamlit.pages.now_helpers import (
     ACTION_MODE_LABELS,
     ACTION_MODES,
@@ -34,12 +33,11 @@ from handoff.services import (
 
 
 def _confirm_delete_handoff(*, handoff_id: int, action_mode_key: str) -> None:
-    with time_action("now_delete"):
-        if delete_handoff(handoff_id):
-            _set_flash_success("Handoff deleted.")
-            st.session_state.pop(action_mode_key, None)
-        else:
-            _set_flash_error("Could not delete handoff.")
+    if delete_handoff(handoff_id):
+        _set_flash_success("Handoff deleted.")
+        st.session_state.pop(action_mode_key, None)
+    else:
+        _set_flash_error("Could not delete handoff.")
 
 
 def _save_check_in_submission(
@@ -55,8 +53,7 @@ def _save_check_in_submission(
     note_value = str(note_raw).strip() or None
 
     if selected_mode == "concluded":
-        with time_action("now_conclude"):
-            conclude_handoff(handoff_id, note=note_value)
+        conclude_handoff(handoff_id, note=note_value)
         _set_flash_success("Checked in today as concluded.")
         st.session_state.pop(mode_key, None)
         return
@@ -70,13 +67,12 @@ def _save_check_in_submission(
         return
 
     check_in_type = CheckInType.ON_TRACK if selected_mode == "on_track" else CheckInType.DELAYED
-    with time_action("now_check_in"):
-        add_check_in(
-            handoff_id,
-            check_in_type=check_in_type,
-            note=note_value,
-            next_check_date=next_check_value,
-        )
+    add_check_in(
+        handoff_id,
+        check_in_type=check_in_type,
+        note=note_value,
+        next_check_date=next_check_value,
+    )
     _set_flash_success(
         f"Checked in today; next check set to {format_date_smart(next_check_value)}."
     )
@@ -98,12 +94,11 @@ def _save_reopen_submission(
         _set_flash_error("Select a valid next check-in date.")
         return
     try:
-        with time_action("now_reopen"):
-            reopen_handoff(
-                handoff_id,
-                note=note_value,
-                next_check_date=next_check_value,
-            )
+        reopen_handoff(
+            handoff_id,
+            note=note_value,
+            next_check_date=next_check_value,
+        )
     except ValueError as exc:
         _set_flash_error(str(exc))
         return
@@ -149,16 +144,15 @@ def _save_edit_submission(
     deadline_value = st.session_state.get(deadline_key)
     context_raw = st.session_state.get(context_key, "")
     who_raw = st.session_state.get(who_key, "")
-    with time_action("now_edit"):
-        update_handoff(
-            handoff_id,
-            project_id=project_id,
-            need_back=need_back,
-            pitchman=str(who_raw).strip() or None,
-            next_check=next_check_value,
-            deadline=deadline_value if isinstance(deadline_value, date) else None,
-            notes=str(context_raw).strip() or None,
-        )
+    update_handoff(
+        handoff_id,
+        project_id=project_id,
+        need_back=need_back,
+        pitchman=str(who_raw).strip() or None,
+        next_check=next_check_value,
+        deadline=deadline_value if isinstance(deadline_value, date) else None,
+        notes=str(context_raw).strip() or None,
+    )
     if action_mode_key:
         st.session_state.pop(action_mode_key, None)
     _set_flash_success("Saved.")
@@ -198,15 +192,14 @@ def _save_add_submission(
     deadline_value = st.session_state.get(deadline_key)
     who_raw = st.session_state.get(who_key, "")
     context_raw = st.session_state.get(context_key, "")
-    with time_action("now_add"):
-        create_handoff(
-            project_id=project_id,
-            need_back=need_back,
-            next_check=next_check_value,
-            deadline=deadline_value if isinstance(deadline_value, date) else None,
-            pitchman=str(who_raw).strip() or None,
-            notes=str(context_raw).strip() or None,
-        )
+    create_handoff(
+        project_id=project_id,
+        need_back=need_back,
+        next_check=next_check_value,
+        deadline=deadline_value if isinstance(deadline_value, date) else None,
+        pitchman=str(who_raw).strip() or None,
+        notes=str(context_raw).strip() or None,
+    )
     _collapse_add_form()
     _set_flash_success("Added.")
 

@@ -127,8 +127,8 @@ The app uses **loguru** for logging, configured to write to:
 - **Rotating log file** under your user data directory (for example on Windows:
   `%APPDATA%\handoff\logs\handoff.log`).
 
-The configuration lives in `src/handoff/logging.py` and is initialised from
-`handoff.ui.setup()`.
+The configuration lives in `src/handoff/bootstrap/logging.py` and is initialised from
+`handoff.interfaces.streamlit.ui.setup()`.
 
 During development, run the app from a terminal to see logs live as you
 interact:
