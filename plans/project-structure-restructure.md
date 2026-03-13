@@ -237,7 +237,7 @@ Each PR is implemented by one agent, reviewed by GitHub Copilot, and optionally 
 | 6  | Data layer cleanup            | 2, 3         | ~10        |
 | 7  | Split `data/queries.py`       | 6            | ~8         |
 
-**Merge order:** 1 → 2 → 3 → (4 and 6 can run in parallel) → 4 → 5 → 6 → 7 (if needed).
+**Merge order:** 1 → 2 → 3 → (4 and 6 in parallel) → (5 and 7 in parallel; 7 only if needed).
 
 ---
 
