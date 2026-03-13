@@ -10,11 +10,30 @@ This module configures loguru to:
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from loguru import logger
 from platformdirs import user_data_dir
 
 _CONFIGURED = False
+
+
+def log_application_action(action: str, **details: Any) -> None:
+    """Log an application-level action for audit (export, import, backup, update).
+
+    Best-effort: never raises. Used by UI and updater so audit logging cannot
+    break core flows.
+    """
+    try:
+        from handoff.db import get_db_path
+
+        db_path = str(get_db_path())
+    except Exception:
+        db_path = "(unknown)"
+    parts = [f"action={action}", f"db_path={db_path}"]
+    for k, v in details.items():
+        parts.append(f"{k}={v}")
+    logger.info("application " + " ".join(parts))
 
 
 def _get_logs_dir() -> Path:
