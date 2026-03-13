@@ -37,6 +37,7 @@ def _make_fake_snapshot(
     action: list | None = None,
     custom_sections: list | None = None,
     upcoming: list | None = None,
+    upcoming_section_id: str = "upcoming",
     concluded: list | None = None,
     projects: list | None = None,
     pitchmen: list | None = None,
@@ -49,6 +50,7 @@ def _make_fake_snapshot(
         action=action or [],
         custom_sections=custom_sections or [],
         upcoming=upcoming or [],
+        upcoming_section_id=upcoming_section_id,
         concluded=concluded or [],
         projects=projects or [mock_project],
         pitchmen=pitchmen or [],
@@ -785,9 +787,9 @@ def test_render_now_page_section_explanations_rendered_for_open_sections(
             action=[action_handoff],
             upcoming=[upcoming_handoff],
             section_explanations={
-                10: "Deadline is near and latest check-in is delayed.",
-                11: "Next check date is due today.",
-                12: "No risk or action rules matched.",
+                "risk": "Deadline is near and latest check-in is delayed.",
+                "action_required": "Next check date is due today.",
+                "upcoming": "No risk or action rules matched.",
             },
         ),
     )
@@ -821,7 +823,7 @@ def test_render_now_page_custom_sections_rendered_between_action_and_upcoming(
             action=[],
             custom_sections=[("blocked", [custom_handoff])],
             upcoming=[],
-            section_explanations={20: "Latest check-in is delayed."},
+            section_explanations={"blocked": "Latest check-in is delayed."},
         ),
     )
 
