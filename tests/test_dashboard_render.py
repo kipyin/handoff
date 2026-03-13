@@ -42,6 +42,7 @@ class TestRenderDashboardPage:
         export_has_data=False,
     ):
         st_mock = MagicMock()
+        st_mock.download_button.return_value = False
 
         class FakeCol:
             def __enter__(self):
@@ -58,8 +59,8 @@ class TestRenderDashboardPage:
 
         default_metrics = DashboardMetrics(
             at_risk_now=0,
-            action_overdue=0,
-            action_due_today=0,
+            missed_check_in=0,
+            check_in_due_today=0,
             open_handoffs=0,
             reopen_rate="—",
             reopen_rate_detail="No closes in window",
@@ -103,8 +104,8 @@ class TestRenderDashboardPage:
     def test_pm_cards_render(self, monkeypatch) -> None:
         metrics = DashboardMetrics(
             at_risk_now=3,
-            action_overdue=2,
-            action_due_today=1,
+            missed_check_in=2,
+            check_in_due_today=1,
             open_handoffs=8,
             reopen_rate="25%",
             reopen_rate_detail="1 of 4 closes reopened",
@@ -113,9 +114,14 @@ class TestRenderDashboardPage:
         render_dashboard_page()
         labels = [call[0][0] for call in st_mock.metric.call_args_list]
         assert "At risk now" in labels
-        assert "Action overdue" in labels
+        assert "Missed check-in" in labels
         assert "Open handoffs" in labels
         assert "Reopen rate (90d)" in labels
+        st_mock.metric.assert_any_call("Missed check-in", 2, delta="1 due today")
+        st_mock.caption.assert_any_call(
+            "Risk uses the System Settings deadline-near window. "
+            "Missed check-in means the scheduled check date has passed."
+        )
 
     def test_reliability_and_flow_sections_render(self, monkeypatch) -> None:
         st_mock = self._patch(monkeypatch, trend_empty=False, aging_empty=False, cycle_empty=False)
@@ -151,3 +157,20 @@ class TestRenderDashboardPage:
         render_dashboard_page()
         st_mock.markdown.assert_any_call("#### Export metrics")
         assert st_mock.download_button.call_count >= 2
+
+    def test_export_downloads_log_application_actions(self, monkeypatch) -> None:
+        st_mock = self._patch(monkeypatch, export_has_data=True)
+        st_mock.download_button.side_effect = [True, True]
+        logged: list[tuple[str, dict[str, str]]] = []
+
+        monkeypatch.setattr(
+            "handoff.pages.dashboard.log_application_action",
+            lambda action, **details: logged.append((action, details)),
+        )
+
+        render_dashboard_page()
+
+        assert logged == [
+            ("metrics_export", {"format": "csv"}),
+            ("metrics_export", {"format": "json"}),
+        ]

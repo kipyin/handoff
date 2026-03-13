@@ -49,3 +49,43 @@ def test_configure_logging_is_idempotent(tmp_path: Path, monkeypatch: pytest.Mon
     log_mod.configure_logging()
 
     assert log_mod._CONFIGURED is True
+
+
+def test_log_application_action_includes_db_path_and_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import handoff.db as db_mod
+    import handoff.logging as log_mod
+
+    db_path = Path("/tmp/handoff.db")
+    monkeypatch.setattr(db_mod, "get_db_path", lambda: db_path)
+    messages: list[str] = []
+    monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
+
+    log_mod.log_application_action("data_export", format="json")
+
+    assert len(messages) == 1
+    message = messages[0]
+    assert message.startswith("application action=data_export")
+    assert f"db_path={db_path}" in message
+    assert "format=json" in message
+
+
+def test_log_application_action_falls_back_to_unknown_db_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import handoff.db as db_mod
+    import handoff.logging as log_mod
+
+    def _raise() -> Path:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(db_mod, "get_db_path", _raise)
+    messages: list[str] = []
+    monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
+
+    log_mod.log_application_action("app_update")
+
+    assert len(messages) == 1
+    assert "action=app_update" in messages[0]
+    assert "db_path=(unknown)" in messages[0]

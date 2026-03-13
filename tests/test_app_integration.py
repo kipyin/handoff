@@ -452,8 +452,8 @@ def test_now_page_archived_toggle_allows_reopen_under_latest_lifecycle(app_test_
     assert len(at.exception) == 0
     assert not [b for b in at.button if getattr(b, "label", None) == "Reopen"]
 
-    assert len(at.checkbox) >= 1
-    at.checkbox[0].check().run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.toggle) >= 1
+    at.toggle[0].set_value(True).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
@@ -569,7 +569,7 @@ def test_dashboard_page_pm_metrics_smoke_with_seed_data(app_test_db: Path) -> No
 
     metric_labels = [getattr(metric, "label", None) for metric in at.metric]
     assert "At risk now" in metric_labels
-    assert "Action overdue" in metric_labels
+    assert "Missed check-in" in metric_labels
     assert "Open handoffs" in metric_labels
     assert "Reopen rate (90d)" in metric_labels
 

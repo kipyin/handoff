@@ -95,6 +95,7 @@ def _build_streamlit_mock() -> MagicMock:
     st_mock.text_input.return_value = ""
     st_mock.text_area.return_value = ""
     st_mock.checkbox.return_value = False
+    st_mock.toggle.return_value = False
     st_mock.button.return_value = False
     st_mock.form_submit_button.return_value = False
     st_mock.date_input.return_value = date(2026, 3, 10)
@@ -210,6 +211,55 @@ def test_render_now_page_archived_only_projects_shows_toggle_hint(
     assert "Include archived projects" in info_msg
 
 
+def test_render_now_page_include_archived_falls_back_to_checkbox(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When st.toggle is unavailable, Now page falls back to checkbox."""
+    st_mock = _build_streamlit_mock()
+    st_mock.toggle = None
+    st_mock.checkbox.return_value = True
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    list_project_calls: list[bool] = []
+
+    def _list_projects(**kwargs):
+        include_archived = kwargs["include_archived"]
+        list_project_calls.append(include_archived)
+        return []
+
+    monkeypatch.setattr("handoff.pages.now.list_projects", _list_projects)
+
+    render_now_page()
+
+    st_mock.checkbox.assert_called_once_with(
+        "Include archived projects",
+        value=False,
+        key="now_include_archived_projects",
+    )
+    assert list_project_calls == [True]
+
+
+def test_render_now_page_include_archived_toggle_value_is_coerced_to_bool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Now page coerces include-archived widget values to bool."""
+    st_mock = _build_streamlit_mock()
+    st_mock.toggle.return_value = "yes"
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    list_project_calls: list[bool] = []
+
+    def _list_projects(**kwargs):
+        include_archived = kwargs["include_archived"]
+        list_project_calls.append(include_archived)
+        return []
+
+    monkeypatch.setattr("handoff.pages.now.list_projects", _list_projects)
+
+    render_now_page()
+
+    assert len(list_project_calls) == 1
+    assert list_project_calls[0] is True
+
+
 def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     """Now page calls get_now_snapshot with filters from the UI."""
     st_mock = _build_streamlit_mock()
@@ -240,28 +290,6 @@ def test_render_now_page_calls_get_now_snapshot(monkeypatch: pytest.MonkeyPatch)
     assert "search_text" in snapshot_calls[0]
     assert snapshot_calls[0]["projects"] is prefetched_projects
     assert snapshot_calls[0]["pitchmen"] is prefetched_pitchmen
-
-
-def test_render_now_page_shows_shortcuts_caption(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Now page shows discoverable shortcuts caption."""
-    st_mock = _build_streamlit_mock()
-    monkeypatch.setattr("handoff.pages.now.st", st_mock)
-    mock_project = SimpleNamespace(id=1, name="Work")
-    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
-    monkeypatch.setattr(
-        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
-    )
-    monkeypatch.setattr(
-        "handoff.pages.now.get_now_snapshot",
-        lambda **kwargs: _make_fake_snapshot(),
-    )
-
-    render_now_page()
-
-    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
-    assert any("Shortcuts" in c and "Add handoff" in c for c in caption_calls)
 
 
 def test_render_now_page_add_button_has_shortcut_when_collapsed(
@@ -324,6 +352,46 @@ def test_render_now_page_add_button_fallback_when_shortcut_unsupported(
     # At least one call succeeded (fallback); it must not have shortcut
     fallback_calls = [c for c in add_btn_calls if "shortcut" not in c.kwargs]
     assert len(fallback_calls) >= 1
+
+
+def test_render_now_page_expanded_add_button_fallback_when_shortcut_unsupported(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Expanded add button retries without shortcut if Streamlit rejects it."""
+    st_mock = _build_streamlit_mock()
+    st_mock.session_state[_NOW_ADD_EXPANDED_KEY] = True
+
+    def button_raising_shortcut(*args, **kwargs):
+        if "shortcut" in kwargs:
+            raise TypeError("got an unexpected keyword argument 'shortcut'")
+        return False
+
+    st_mock.button.side_effect = button_raising_shortcut
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr(
+        "handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: ["Alice"]
+    )
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(),
+    )
+    add_form_called: list[bool] = []
+    monkeypatch.setattr(
+        "handoff.pages.now._render_add_form", lambda *args, **kwargs: add_form_called.append(True)
+    )
+
+    render_now_page()
+
+    collapse_calls = [
+        c
+        for c in st_mock.button.call_args_list
+        if c.kwargs.get("key") == "now_add_handoff_collapse"
+    ]
+    assert len(collapse_calls) >= 1
+    assert any("shortcut" not in call.kwargs for call in collapse_calls)
+    assert add_form_called == [True]
 
 
 def test_expand_add_form_sets_session_state(
@@ -447,7 +515,7 @@ def test_render_now_page_include_archived_projects_passed_to_snapshot(
 ) -> None:
     """Now page passes the include-archived toggle to get_now_snapshot."""
     st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = True
+    st_mock.toggle.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
@@ -474,7 +542,7 @@ def test_render_now_page_include_archived_passed_to_list_pitchmen(
 ) -> None:
     """Now page forwards include-archived toggle to list_pitchmen_with_open_handoffs."""
     st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = True
+    st_mock.toggle.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
@@ -769,7 +837,7 @@ def test_render_now_page_custom_sections_rendered_between_action_and_upcoming(
 def test_render_now_page_empty_custom_section_shows_no_handoffs_caption(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Empty custom sections render with 'No handoffs in X' caption."""
+    """Empty custom sections render with 'No handoffs in X' info message."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -787,8 +855,8 @@ def test_render_now_page_empty_custom_section_shows_no_handoffs_caption(
 
     render_now_page()
 
-    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
-    assert any("No handoffs" in c and "Waiting On Input" in c for c in caption_calls)
+    info_calls = [str(c) for c in st_mock.info.call_args_list]
+    assert any("No handoffs" in c and "Waiting On Input" in c for c in info_calls)
 
 
 def test_render_item_edit_save_validation_sets_flash_error(
@@ -997,6 +1065,32 @@ def test_render_add_form_duplicate_project_label_calls_create_handoff_for_select
 
     assert len(create_calls) == 1
     assert create_calls[0]["project_id"] == 2
+
+
+def test_render_add_form_sets_clear_on_submit_false(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Add form keeps widget values after failed submits by disabling auto-clear."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    st_mock.form.assert_called_once_with(key="now_add_form", clear_on_submit=False)
+
+
+def test_render_add_form_marks_required_field_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Required add-form fields include visual indicators in their labels."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    _render_add_form({"Work": SimpleNamespace(id=7, name="Work")}, [], key_prefix="now")
+
+    selectbox_labels = [call.args[0] for call in st_mock.selectbox.call_args_list if call.args]
+    text_input_labels = [call.args[0] for call in st_mock.text_input.call_args_list if call.args]
+    date_input_labels = [call.args[0] for call in st_mock.date_input.call_args_list if call.args]
+
+    assert "Project *" in selectbox_labels
+    assert "Need back *" in text_input_labels
+    assert "Next check *" in date_input_labels
 
 
 def test_render_add_form_missing_need_back_sets_flash_error(
@@ -1893,7 +1987,7 @@ def test_render_now_page_no_projects_with_include_archived_true_shows_create_inf
 ) -> None:
     """When include_archived=True and truly no projects, shows create info."""
     st_mock = _build_streamlit_mock()
-    st_mock.checkbox.return_value = True
+    st_mock.toggle.return_value = True
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kw: [])
 
@@ -1906,10 +2000,10 @@ def test_render_now_page_no_projects_with_include_archived_true_shows_create_inf
 # --- Regression tests for PR #88: Snooze removal + segmented_control ---
 
 
-def test_render_item_auto_expands_due_action_items(
+def test_render_item_does_not_auto_expand_due_action_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Due action items auto-expand so check-in controls are visible without clicking."""
+    """Due action items start collapsed; user must expand to see check-in controls."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
 
@@ -1920,7 +2014,6 @@ def test_render_item_auto_expands_due_action_items(
 
     monkeypatch.setattr("handoff.pages.now.date", FixedDate)
 
-    # Handoff due today should auto-expand
     due_handoff = _make_fake_handoff(
         handoff_id=100,
         need_back="Due now",
@@ -1936,8 +2029,8 @@ def test_render_item_auto_expands_due_action_items(
         allow_actions=True,
     )
 
-    # Expander should be expanded due to is_due_action logic
-    assert st_mock.expander.call_args.kwargs["expanded"] is True
+    # Expander starts collapsed; user expands manually
+    assert st_mock.expander.call_args.kwargs["expanded"] is False
 
 
 def test_render_item_does_not_auto_expand_future_items(
@@ -1947,7 +2040,6 @@ def test_render_item_does_not_auto_expand_future_items(
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
 
-    # Handoff due in the future should not auto-expand
     future_handoff = _make_fake_handoff(
         handoff_id=101,
         need_back="Future check",
@@ -1963,8 +2055,85 @@ def test_render_item_does_not_auto_expand_future_items(
         allow_actions=True,
     )
 
-    # Expander should not be expanded (no active mode, not due)
+    # Expander starts collapsed (no active mode, not due)
     assert st_mock.expander.call_args.kwargs["expanded"] is False
+
+
+def test_render_item_only_expands_handoff_with_active_check_in_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the handoff with active check-in mode should start expanded."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr("handoff.pages.now.date", FixedDate)
+
+    first_handoff = _make_fake_handoff(
+        handoff_id=201,
+        need_back="First due item",
+        next_check=date(2026, 3, 9),
+    )
+    second_handoff = _make_fake_handoff(
+        handoff_id=202,
+        need_back="Second due item",
+        next_check=date(2026, 3, 9),
+    )
+    project_options = {"Work": SimpleNamespace(id=1, name="Work")}
+    st_mock.session_state["now_action_check_in_mode_202"] = "on_track"
+
+    _render_item(
+        first_handoff,
+        key_prefix="now_action",
+        project_options=project_options,
+        show_check_in_controls=True,
+        allow_actions=True,
+    )
+    _render_item(
+        second_handoff,
+        key_prefix="now_action",
+        project_options=project_options,
+        show_check_in_controls=True,
+        allow_actions=True,
+    )
+
+    expanded_states = [call.kwargs["expanded"] for call in st_mock.expander.call_args_list[-2:]]
+    assert expanded_states == [False, True]
+
+
+def test_render_item_only_expands_handoff_with_active_reopen_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the handoff with active reopen mode should start expanded."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    first_handoff = _make_fake_handoff(handoff_id=301, need_back="Closed first")
+    second_handoff = _make_fake_handoff(handoff_id=302, need_back="Closed second")
+    project_options = {"Work": SimpleNamespace(id=1, name="Work")}
+    st_mock.session_state["now_concluded_reopen_mode_302"] = "reopen"
+
+    _render_item(
+        first_handoff,
+        key_prefix="now_concluded",
+        project_options=project_options,
+        allow_actions=False,
+        allow_reopen=True,
+    )
+    _render_item(
+        second_handoff,
+        key_prefix="now_concluded",
+        project_options=project_options,
+        allow_actions=False,
+        allow_reopen=True,
+    )
+
+    expanded_states = [call.kwargs["expanded"] for call in st_mock.expander.call_args_list[-2:]]
+    assert expanded_states == [False, True]
 
 
 def test_render_check_in_flow_edit_button_visible_with_allow_actions(

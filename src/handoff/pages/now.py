@@ -548,9 +548,10 @@ def _render_item(
     keep_expanded_for_mode = (
         allow_actions and show_check_in_controls and has_active_check_in_mode
     ) or (allow_reopen and has_active_reopen_mode)
-    # Auto-expand for due action items so check-in controls are visible without clicking
-    is_due_action = show_check_in_controls and _is_check_in_due(handoff)
-    with st.expander(header, expanded=editing or keep_expanded_for_mode or is_due_action):
+    # Default collapsed; only expand when editing or form mode is active.
+    # Removed is_due_action so operations on one handoff don't expand others.
+    expanded = editing or keep_expanded_for_mode
+    with st.expander(header, expanded=expanded):
         if match_explanation:
             st.caption(match_explanation)
         if not editing and allow_actions and show_check_in_controls:
@@ -678,7 +679,7 @@ def _render_add_form(
         pitchmen: List of pitchman names (unused but kept for UI symmetry).
         key_prefix: Prefix for Streamlit widget keys.
     """
-    with st.form(key=f"{key_prefix}_add_form", clear_on_submit=True):
+    with st.form(key=f"{key_prefix}_add_form", clear_on_submit=False):
         project_names = list(project_options)
         project_key = f"{key_prefix}_add_project"
         if project_key in st.session_state and st.session_state[project_key] not in project_names:
@@ -688,15 +689,15 @@ def _render_add_form(
         next_key = f"{key_prefix}_add_next"
         deadline_key = f"{key_prefix}_add_deadline"
         context_key = f"{key_prefix}_add_context"
-        st.selectbox("Project", options=project_names, key=project_key)
+        st.selectbox("Project *", options=project_names, key=project_key)
         st.text_input("Who", placeholder="Person you're waiting on", key=who_key)
         st.text_input(
-            "Need back",
+            "Need back *",
             placeholder="Deliverable you need returned",
             key=need_key,
         )
         st.date_input(
-            "Next check",
+            "Next check *",
             value=date.today(),
             key=next_key,
         )
@@ -743,10 +744,13 @@ def render_now_page() -> None:
     if flash_error:
         st.error(flash_error)
 
-    include_archived_projects = st.checkbox(
-        "Include archived projects",
-        value=False,
-        key="now_include_archived_projects",
+    toggle_widget = getattr(st, "toggle", None) or st.checkbox
+    include_archived_projects = bool(
+        toggle_widget(
+            "Include archived projects",
+            value=False,
+            key="now_include_archived_projects",
+        )
     )
     with time_action("now_render"):
         projects = list_projects(include_archived=include_archived_projects)
@@ -784,17 +788,26 @@ def render_now_page() -> None:
 
     add_expanded = st.session_state.get(_NOW_ADD_EXPANDED_KEY, False)
     if add_expanded:
-        st.button(
-            "➕ Add handoff",
-            key="now_add_handoff_collapse",
-            on_click=_collapse_add_form,
-            help="Collapse the add form",
-        )
+        try:
+            st.button(
+                "➕ Add handoff",
+                shortcut="a",
+                key="now_add_handoff_collapse",
+                on_click=_collapse_add_form,
+                help="Collapse the add form",
+            )
+        except TypeError:
+            st.button(
+                "➕ Add handoff",
+                key="now_add_handoff_collapse",
+                on_click=_collapse_add_form,
+                help="Collapse the add form",
+            )
         _render_add_form(project_options, snapshot.pitchmen, "now")
     else:
         try:
             st.button(
-                "➕ Add handoff (a)",
+                "➕ Add handoff",
                 shortcut="a",
                 key="now_add_handoff_trigger",
                 on_click=_expand_add_form,
@@ -803,18 +816,17 @@ def render_now_page() -> None:
         except TypeError:
             # Fallback for in-app updater: old embedded Streamlit lacks shortcut param
             st.button(
-                "➕ Add handoff (a)",
+                "➕ Add handoff",
                 key="now_add_handoff_trigger",
                 on_click=_expand_add_form,
                 help="Open the add form to create a new handoff",
             )
-    st.caption("Shortcuts: **a** Add handoff")
 
     # --- Risk section ---
     st.markdown("---")
     st.markdown("**Risk**")
     if not snapshot.risk:
-        st.caption("No at-risk handoffs.")
+        st.info("No at-risk handoffs.")
     else:
         for handoff in snapshot.risk:
             _render_item(
@@ -856,7 +868,7 @@ def render_now_page() -> None:
         st.markdown("---")
         st.markdown(f"**{section_label}**")
         if not handoffs:
-            st.caption(f"No handoffs in {section_label}.")
+            st.info(f"No handoffs in {section_label}.")
         else:
             for handoff in handoffs:
                 _render_item(
@@ -875,7 +887,7 @@ def render_now_page() -> None:
     st.markdown("---")
     st.markdown("**Upcoming**")
     if not snapshot.upcoming:
-        st.caption("No upcoming handoffs.")
+        st.info("No upcoming handoffs.")
     else:
         for handoff in snapshot.upcoming:
             _render_item(
@@ -894,7 +906,7 @@ def render_now_page() -> None:
     st.markdown("---")
     st.markdown("**Concluded**")
     if not snapshot.concluded:
-        st.caption("No concluded handoffs.")
+        st.info("No concluded handoffs.")
     else:
         for handoff in snapshot.concluded:
             _render_item(
