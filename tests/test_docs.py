@@ -36,7 +36,7 @@ def test_read_markdown_from_app_root_os_error(
 
 def test_cached_markdown_caches_and_calls_read_once(monkeypatch: pytest.MonkeyPatch) -> None:
     """pages.about._cached_markdown caches result and reads each name once."""
-    from handoff.pages.about import _cached_markdown
+    from handoff.interfaces.streamlit.pages.about import _cached_markdown
 
     _cached_markdown.clear()
 
@@ -46,7 +46,9 @@ def test_cached_markdown_caches_and_calls_read_once(monkeypatch: pytest.MonkeyPa
         read_calls.append(name)
         return f"Content of {name}"
 
-    monkeypatch.setattr("handoff.pages.about.read_markdown_from_app_root", track_read)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.about.read_markdown_from_app_root", track_read
+    )
 
     first = _cached_markdown("README.md")
     second = _cached_markdown("README.md")

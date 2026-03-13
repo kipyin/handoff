@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pandas as pd
 
-from handoff.autosave import autosave_editor
-from handoff.pages.projects import _persist_project_edits
+from handoff.interfaces.streamlit.autosave import autosave_editor
+from handoff.interfaces.streamlit.pages.projects import _persist_project_edits
 
 # ---------------------------------------------------------------------------
 # autosave_editor
@@ -18,7 +18,7 @@ class TestAutosaveEditor:
     def test_registers_callback_and_stores_context_copy(self, monkeypatch):
         session: dict = {}
         monkeypatch.setattr("streamlit.session_state", session)
-        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.session_state", session)
 
         captured: dict = {}
         returned_df = pd.DataFrame([{"name": "edited"}])
@@ -30,8 +30,10 @@ class TestAutosaveEditor:
             captured["kwargs"] = kwargs
             return returned_df
 
-        monkeypatch.setattr("handoff.autosave.st.data_editor", fake_data_editor)
-        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.autosave.st.data_editor", fake_data_editor
+        )
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.rerun", lambda: None)
 
         display_df = pd.DataFrame([{"name": "original"}])
         result = autosave_editor(
@@ -59,7 +61,7 @@ class TestAutosaveEditor:
             }
         }
         monkeypatch.setattr("streamlit.session_state", session)
-        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.session_state", session)
 
         captured: dict = {}
 
@@ -67,8 +69,10 @@ class TestAutosaveEditor:
             captured["on_change"] = on_change
             return df
 
-        monkeypatch.setattr("handoff.autosave.st.data_editor", fake_data_editor)
-        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.autosave.st.data_editor", fake_data_editor
+        )
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.rerun", lambda: None)
 
         calls: list[pd.DataFrame] = []
 
@@ -95,7 +99,7 @@ class TestAutosaveEditor:
             }
         }
         monkeypatch.setattr("streamlit.session_state", session)
-        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.session_state", session)
 
         captured: dict = {}
 
@@ -104,10 +108,10 @@ class TestAutosaveEditor:
             return df
 
         monkeypatch.setattr(
-            "handoff.autosave.st.data_editor",
+            "handoff.interfaces.streamlit.autosave.st.data_editor",
             fake_data_editor,
         )
-        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.rerun", lambda: None)
 
         called = {"persist": 0}
 
@@ -123,7 +127,7 @@ class TestAutosaveEditor:
     def test_on_change_skips_when_widget_state_is_missing(self, monkeypatch):
         session: dict = {}
         monkeypatch.setattr("streamlit.session_state", session)
-        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.session_state", session)
 
         captured: dict = {}
 
@@ -131,8 +135,10 @@ class TestAutosaveEditor:
             captured["on_change"] = on_change
             return df
 
-        monkeypatch.setattr("handoff.autosave.st.data_editor", fake_data_editor)
-        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.autosave.st.data_editor", fake_data_editor
+        )
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.rerun", lambda: None)
 
         called = {"persist": 0}
 
@@ -148,7 +154,7 @@ class TestAutosaveEditor:
     def test_on_change_sets_deferred_rerun_flag(self, monkeypatch):
         session = {"todos_table": {"edited_rows": {"0": {"name": "x"}}}}
         monkeypatch.setattr("streamlit.session_state", session)
-        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.session_state", session)
 
         captured: dict = {}
 
@@ -157,10 +163,10 @@ class TestAutosaveEditor:
             return df
 
         monkeypatch.setattr(
-            "handoff.autosave.st.data_editor",
+            "handoff.interfaces.streamlit.autosave.st.data_editor",
             fake_data_editor,
         )
-        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.rerun", lambda: None)
 
         autosave_editor(
             pd.DataFrame([{"name": "x"}]),
@@ -174,14 +180,18 @@ class TestAutosaveEditor:
     def test_next_render_consumes_rerun_flag(self, monkeypatch):
         session = {"__todos_table_needs_rerun": True}
         monkeypatch.setattr("streamlit.session_state", session)
-        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.session_state", session)
 
         def fake_data_editor(df, *, key, on_change, **kwargs):
             return df
 
-        monkeypatch.setattr("handoff.autosave.st.data_editor", fake_data_editor)
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.autosave.st.data_editor", fake_data_editor
+        )
         rerun_calls: list[str] = []
-        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: rerun_calls.append("rerun"))
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.autosave.st.rerun", lambda: rerun_calls.append("rerun")
+        )
 
         autosave_editor(
             pd.DataFrame([{"name": "x"}]),
@@ -195,7 +205,7 @@ class TestAutosaveEditor:
     def test_on_change_with_missing_context_logs_warning(self, monkeypatch):
         session = {"todos_table": {"edited_rows": {"0": {"name": "x"}}}}
         monkeypatch.setattr("streamlit.session_state", session)
-        monkeypatch.setattr("handoff.autosave.st.session_state", session)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.session_state", session)
 
         captured: dict = {}
 
@@ -204,14 +214,14 @@ class TestAutosaveEditor:
             return df
 
         monkeypatch.setattr(
-            "handoff.autosave.st.data_editor",
+            "handoff.interfaces.streamlit.autosave.st.data_editor",
             fake_data_editor,
         )
-        monkeypatch.setattr("handoff.autosave.st.rerun", lambda: None)
+        monkeypatch.setattr("handoff.interfaces.streamlit.autosave.st.rerun", lambda: None)
 
         warnings: list[tuple[str, str]] = []
         monkeypatch.setattr(
-            "handoff.autosave.logger.warning",
+            "handoff.interfaces.streamlit.autosave.logger.warning",
             lambda message, key: warnings.append((message, key)),
         )
 
@@ -247,7 +257,7 @@ class TestPersistProjectEdits:
     def test_rename_is_saved(self, monkeypatch):
         calls: list[tuple[int, str]] = []
         monkeypatch.setattr(
-            "handoff.pages.projects.rename_project",
+            "handoff.interfaces.streamlit.pages.projects.rename_project",
             lambda pid, name: calls.append((pid, name)),
         )
         display_df = self._make_display_df([{"__project_id": 1, "name": "Old"}])
@@ -259,7 +269,7 @@ class TestPersistProjectEdits:
     def test_archive_toggle_is_saved(self, monkeypatch):
         archived_ids: list[int] = []
         monkeypatch.setattr(
-            "handoff.pages.projects.archive_project",
+            "handoff.interfaces.streamlit.pages.projects.archive_project",
             archived_ids.append,
         )
         display_df = self._make_display_df(
@@ -273,7 +283,7 @@ class TestPersistProjectEdits:
     def test_unarchive_toggle_is_saved(self, monkeypatch):
         unarchived_ids: list[int] = []
         monkeypatch.setattr(
-            "handoff.pages.projects.unarchive_project",
+            "handoff.interfaces.streamlit.pages.projects.unarchive_project",
             unarchived_ids.append,
         )
         display_df = self._make_display_df(
@@ -288,7 +298,7 @@ class TestPersistProjectEdits:
         """confirm_delete changes must NOT trigger data mutations."""
         rename_calls: list = []
         monkeypatch.setattr(
-            "handoff.pages.projects.rename_project",
+            "handoff.interfaces.streamlit.pages.projects.rename_project",
             lambda pid, name: rename_calls.append((pid, name)),
         )
         display_df = self._make_display_df([{"__project_id": 1, "name": "Work"}])
@@ -301,7 +311,7 @@ class TestPersistProjectEdits:
         """Blank names should not be persisted."""
         rename_calls: list = []
         monkeypatch.setattr(
-            "handoff.pages.projects.rename_project",
+            "handoff.interfaces.streamlit.pages.projects.rename_project",
             lambda pid, name: rename_calls.append((pid, name)),
         )
         display_df = self._make_display_df([{"__project_id": 1, "name": "Work"}])
@@ -320,7 +330,7 @@ class TestPersistProjectEdits:
         """Row index beyond display_df length should be skipped safely."""
         rename_calls: list = []
         monkeypatch.setattr(
-            "handoff.pages.projects.rename_project",
+            "handoff.interfaces.streamlit.pages.projects.rename_project",
             lambda pid, name: rename_calls.append((pid, name)),
         )
         display_df = self._make_display_df([{"__project_id": 1, "name": "Work"}])
@@ -333,7 +343,7 @@ class TestPersistProjectEdits:
         """Negative row indices must not index from the end."""
         rename_calls: list = []
         monkeypatch.setattr(
-            "handoff.pages.projects.rename_project",
+            "handoff.interfaces.streamlit.pages.projects.rename_project",
             lambda pid, name: rename_calls.append((pid, name)),
         )
         display_df = self._make_display_df([{"__project_id": 1, "name": "Work"}])
@@ -346,7 +356,7 @@ class TestPersistProjectEdits:
         """Non-numeric row index keys are skipped without crashing."""
         rename_calls: list = []
         monkeypatch.setattr(
-            "handoff.pages.projects.rename_project",
+            "handoff.interfaces.streamlit.pages.projects.rename_project",
             lambda pid, name: rename_calls.append((pid, name)),
         )
         display_df = self._make_display_df([{"__project_id": 1, "name": "Work"}])
@@ -359,7 +369,7 @@ class TestPersistProjectEdits:
         """Rows with NaN __project_id are silently skipped."""
         rename_calls: list = []
         monkeypatch.setattr(
-            "handoff.pages.projects.rename_project",
+            "handoff.interfaces.streamlit.pages.projects.rename_project",
             lambda pid, name: rename_calls.append((pid, name)),
         )
         display_df = self._make_display_df([{"__project_id": None, "name": "Ghost"}])
@@ -376,7 +386,9 @@ class TestPersistProjectEdits:
         def bad_rename(pid, name):
             raise RuntimeError("DB locked")
 
-        monkeypatch.setattr("handoff.pages.projects.rename_project", bad_rename)
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.projects.rename_project", bad_rename
+        )
         display_df = self._make_display_df([{"__project_id": 1, "name": "Work"}])
         state = {"edited_rows": {"0": {"name": "Kaboom"}}}
         result = _persist_project_edits(state, display_df)
@@ -393,7 +405,9 @@ class TestPersistProjectEdits:
         def bad_archive(pid):
             raise RuntimeError("DB locked")
 
-        monkeypatch.setattr("handoff.pages.projects.archive_project", bad_archive)
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.projects.archive_project", bad_archive
+        )
         display_df = self._make_display_df(
             [{"__project_id": 2, "name": "Home", "is_archived": False}]
         )
@@ -409,11 +423,11 @@ class TestPersistProjectEdits:
         rename_calls: list[tuple[int, str]] = []
         archive_calls: list[int] = []
         monkeypatch.setattr(
-            "handoff.pages.projects.rename_project",
+            "handoff.interfaces.streamlit.pages.projects.rename_project",
             lambda pid, name: rename_calls.append((pid, name)),
         )
         monkeypatch.setattr(
-            "handoff.pages.projects.archive_project",
+            "handoff.interfaces.streamlit.pages.projects.archive_project",
             archive_calls.append,
         )
         display_df = self._make_display_df(

@@ -1,4 +1,4 @@
-"""Compatibility shim: re-export Streamlit UI from interfaces.streamlit.ui."""
+"""Streamlit UI for the Handoff app."""
 
 from handoff.interfaces.streamlit.ui import (
     render_about_page,

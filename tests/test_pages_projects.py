@@ -4,7 +4,7 @@ import pandas as pd
 import pytest
 
 from handoff.core.models import Project
-from handoff.pages.projects import (
+from handoff.interfaces.streamlit.pages.projects import (
     _apply_project_changes,
     _build_projects_display_rows,
     _execute_changes,
@@ -100,9 +100,9 @@ def test_execute_changes_calls_data_functions(monkeypatch):
         calls.append(("delete", pid))
         return True
 
-    monkeypatch.setattr("handoff.pages.projects.rename_project", mock_rename)
-    monkeypatch.setattr("handoff.pages.projects.archive_project", mock_archive)
-    monkeypatch.setattr("handoff.pages.projects.delete_project", mock_delete)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.rename_project", mock_rename)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.archive_project", mock_archive)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.delete_project", mock_delete)
 
     changes = [
         {"type": "rename", "id": 10, "new_name": "Renamed"},
@@ -124,7 +124,7 @@ def test_execute_changes_handles_exceptions(monkeypatch):
     def mock_rename(pid, name):
         raise Exception("DB Error")
 
-    monkeypatch.setattr("handoff.pages.projects.rename_project", mock_rename)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.rename_project", mock_rename)
 
     changes = [{"type": "rename", "id": 1, "new_name": "Fail"}]
     _deleted, updated, errors = _execute_changes(changes)
@@ -140,7 +140,7 @@ def test_execute_changes_handles_archive_exception(monkeypatch):
     def mock_archive(pid):
         raise RuntimeError("permission denied")
 
-    monkeypatch.setattr("handoff.pages.projects.archive_project", mock_archive)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.archive_project", mock_archive)
 
     deleted, updated, errors = _execute_changes([{"type": "archive", "id": 2, "archive": True}])
 
@@ -155,7 +155,7 @@ def test_execute_changes_records_error_when_delete_returns_false(monkeypatch):
     def mock_delete(pid):
         return False
 
-    monkeypatch.setattr("handoff.pages.projects.delete_project", mock_delete)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.delete_project", mock_delete)
 
     deleted, updated, errors = _execute_changes([{"type": "delete", "id": 7, "name": "Infra"}])
 
@@ -191,7 +191,9 @@ def test_execute_changes_unarchive(monkeypatch):
     def mock_unarchive(pid):
         calls.append(pid)
 
-    monkeypatch.setattr("handoff.pages.projects.unarchive_project", mock_unarchive)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.unarchive_project", mock_unarchive
+    )
 
     changes = [{"type": "archive", "id": 3, "archive": False}]
     _deleted, updated, _errors = _execute_changes(changes)
@@ -202,7 +204,9 @@ def test_execute_changes_unarchive(monkeypatch):
 
 def test_apply_project_changes_orchestration(mock_projects, monkeypatch):
     """Verify the full flow from DataFrame to success result."""
-    monkeypatch.setattr("handoff.pages.projects.rename_project", lambda pid, name: None)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.rename_project", lambda pid, name: None
+    )
 
     df = pd.DataFrame(
         [
@@ -255,8 +259,8 @@ def test_apply_project_changes_returns_deleted_count_on_partial_failure(mock_pro
     def mock_delete(pid):
         return True
 
-    monkeypatch.setattr("handoff.pages.projects.rename_project", mock_rename)
-    monkeypatch.setattr("handoff.pages.projects.delete_project", mock_delete)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.rename_project", mock_rename)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.delete_project", mock_delete)
 
     df = pd.DataFrame(
         [
@@ -327,19 +331,25 @@ def test_render_projects_page_can_include_archived(monkeypatch):
     seen = {}
     info_messages = []
 
-    monkeypatch.setattr("handoff.pages.projects._render_create_project_form", lambda: None)
-    monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
-    monkeypatch.setattr("handoff.pages.projects.st.checkbox", lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects._render_create_project_form", lambda: None
+    )
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.st.subheader", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.st.checkbox", lambda *args, **kwargs: True
+    )
 
     def fake_get_projects_with_handoff_summary(*, include_archived):
         seen["include_archived"] = include_archived
         return []
 
     monkeypatch.setattr(
-        "handoff.pages.projects.get_projects_with_handoff_summary",
+        "handoff.interfaces.streamlit.pages.projects.get_projects_with_handoff_summary",
         fake_get_projects_with_handoff_summary,
     )
-    monkeypatch.setattr("handoff.pages.projects.st.info", info_messages.append)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.st.info", info_messages.append)
 
     render_projects_page()
 
@@ -351,14 +361,20 @@ def test_render_projects_page_empty_state_mentions_archived_toggle(monkeypatch):
     """The empty state hints at archived projects when only active projects are shown."""
     info_messages = []
 
-    monkeypatch.setattr("handoff.pages.projects._render_create_project_form", lambda: None)
-    monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
-    monkeypatch.setattr("handoff.pages.projects.st.checkbox", lambda *args, **kwargs: False)
     monkeypatch.setattr(
-        "handoff.pages.projects.get_projects_with_handoff_summary",
+        "handoff.interfaces.streamlit.pages.projects._render_create_project_form", lambda: None
+    )
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.st.subheader", lambda *args, **kwargs: None
+    )
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.st.checkbox", lambda *args, **kwargs: False
+    )
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.get_projects_with_handoff_summary",
         lambda *, include_archived: [],
     )
-    monkeypatch.setattr("handoff.pages.projects.st.info", info_messages.append)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.st.info", info_messages.append)
 
     render_projects_page()
 
@@ -409,16 +425,20 @@ def test_render_projects_page_uses_toggle_specific_editor_state(
     captured = {}
     project = Project(id=1, name="Work", is_archived=False)
 
-    monkeypatch.setattr("handoff.pages.projects._render_create_project_form", lambda: None)
-    monkeypatch.setattr("handoff.pages.projects.st.subheader", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects._render_create_project_form", lambda: None
+    )
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.st.subheader", lambda *args, **kwargs: None
+    )
 
     def fake_checkbox(*args, **kwargs):
         captured["checkbox_on_change"] = kwargs.get("on_change")
         return show_archived
 
-    monkeypatch.setattr("handoff.pages.projects.st.checkbox", fake_checkbox)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.st.checkbox", fake_checkbox)
     monkeypatch.setattr(
-        "handoff.pages.projects.get_projects_with_handoff_summary",
+        "handoff.interfaces.streamlit.pages.projects.get_projects_with_handoff_summary",
         lambda *, include_archived: [
             {"project": project, "open": 0, "concluded": 0},
         ],
@@ -427,14 +447,18 @@ def test_render_projects_page_uses_toggle_specific_editor_state(
     def fake_caption(message):
         captured["caption"] = message
 
-    monkeypatch.setattr("handoff.pages.projects.st.caption", fake_caption)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.st.caption", fake_caption)
 
     def fake_autosave_editor(df, *, key, **kwargs):
         captured["editor_key"] = key
         return df
 
-    monkeypatch.setattr("handoff.pages.projects.autosave_editor", fake_autosave_editor)
-    monkeypatch.setattr("handoff.pages.projects.st.button", lambda *args, **kwargs: False)
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.autosave_editor", fake_autosave_editor
+    )
+    monkeypatch.setattr(
+        "handoff.interfaces.streamlit.pages.projects.st.button", lambda *args, **kwargs: False
+    )
     monkeypatch.setattr("streamlit.session_state", {})
 
     render_projects_page()
@@ -452,7 +476,7 @@ class TestExecuteChangesErrors:
 
     def test_archive_exception(self, monkeypatch) -> None:
         monkeypatch.setattr(
-            "handoff.pages.projects.archive_project",
+            "handoff.interfaces.streamlit.pages.projects.archive_project",
             lambda pid: (_ for _ in ()).throw(RuntimeError("Lock error")),
         )
         _, updated, errors = _execute_changes([{"type": "archive", "id": 1, "archive": True}])
@@ -461,7 +485,7 @@ class TestExecuteChangesErrors:
 
     def test_unarchive_exception(self, monkeypatch) -> None:
         monkeypatch.setattr(
-            "handoff.pages.projects.unarchive_project",
+            "handoff.interfaces.streamlit.pages.projects.unarchive_project",
             lambda pid: (_ for _ in ()).throw(RuntimeError("Fail")),
         )
         _, updated, errors = _execute_changes([{"type": "archive", "id": 1, "archive": False}])
@@ -470,7 +494,7 @@ class TestExecuteChangesErrors:
 
     def test_delete_exception(self, monkeypatch) -> None:
         monkeypatch.setattr(
-            "handoff.pages.projects.delete_project",
+            "handoff.interfaces.streamlit.pages.projects.delete_project",
             lambda pid: (_ for _ in ()).throw(RuntimeError("DB locked")),
         )
         deleted, _, errors = _execute_changes([{"type": "delete", "id": 1, "name": "Fail"}])
@@ -483,7 +507,7 @@ class TestApplyProjectChangesOrchestration:
 
     def test_execution_errors_propagate(self, mock_projects, monkeypatch) -> None:
         monkeypatch.setattr(
-            "handoff.pages.projects.rename_project",
+            "handoff.interfaces.streamlit.pages.projects.rename_project",
             lambda pid, name: (_ for _ in ()).throw(RuntimeError("nope")),
         )
         df = pd.DataFrame(
@@ -518,14 +542,14 @@ def _make_st_mock(monkeypatch, *, session_state=None):
     st_mock.button.return_value = False
     st_mock.session_state = session_state if session_state is not None else {}
     st_mock.columns.return_value = [FakeCol(), FakeCol(), FakeCol()]
-    monkeypatch.setattr("handoff.pages.projects.st", st_mock)
+    monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.st", st_mock)
     return st_mock
 
 
 def _mock_summary(monkeypatch, projects):
     summary = [{"project": p, "open": 1, "concluded": 0} for p in projects]
     monkeypatch.setattr(
-        "handoff.pages.projects.get_projects_with_handoff_summary",
+        "handoff.interfaces.streamlit.pages.projects.get_projects_with_handoff_summary",
         lambda include_archived: summary,
     )
     return summary
@@ -533,7 +557,7 @@ def _mock_summary(monkeypatch, projects):
 
 def _mock_autosave_editor(monkeypatch, edited_df):
     monkeypatch.setattr(
-        "handoff.pages.projects.autosave_editor",
+        "handoff.interfaces.streamlit.pages.projects.autosave_editor",
         lambda *a, **kw: edited_df,
     )
 
@@ -544,7 +568,7 @@ class TestRenderCreateProjectForm:
         st_mock.text_input.return_value = text_value
         st_mock.form_submit_button.return_value = submitted
         st_mock.form.return_value = FakeForm()
-        monkeypatch.setattr("handoff.pages.projects.st", st_mock)
+        monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.st", st_mock)
         return st_mock
 
     def test_empty_name_shows_error(self, monkeypatch) -> None:
@@ -556,10 +580,10 @@ class TestRenderCreateProjectForm:
         st_mock = self._patch(monkeypatch, text_value="New Project", submitted=True)
         created = {"name": None}
         monkeypatch.setattr(
-            "handoff.pages.projects.create_project",
+            "handoff.interfaces.streamlit.pages.projects.create_project",
             lambda n: created.__setitem__("name", n),
         )
-        monkeypatch.setattr("handoff.pages.projects.st.rerun", lambda: None)
+        monkeypatch.setattr("handoff.interfaces.streamlit.pages.projects.st.rerun", lambda: None)
         _render_create_project_form()
         assert created["name"] == "New Project"
         st_mock.success.assert_called_once_with("Project created.")
@@ -575,7 +599,7 @@ class TestRenderProjectsPage:
     def test_no_projects_shows_info(self, monkeypatch) -> None:
         st_mock = _make_st_mock(monkeypatch)
         monkeypatch.setattr(
-            "handoff.pages.projects.get_projects_with_handoff_summary",
+            "handoff.interfaces.streamlit.pages.projects.get_projects_with_handoff_summary",
             lambda include_archived: [],
         )
         render_projects_page()
@@ -599,7 +623,9 @@ class TestRenderProjectsPage:
             ]
         )
         _mock_autosave_editor(monkeypatch, edited_df)
-        monkeypatch.setattr("handoff.pages.projects._get_projects_to_delete", lambda df, p: [])
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.projects._get_projects_to_delete", lambda df, p: []
+        )
         render_projects_page()
         st_mock.button.assert_not_called()
 
@@ -623,7 +649,8 @@ class TestRenderProjectsPage:
         _mock_autosave_editor(monkeypatch, edited_df)
         st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "projects_delete_button"
         monkeypatch.setattr(
-            "handoff.pages.projects._get_projects_to_delete", lambda df, p: [(1, "Work")]
+            "handoff.interfaces.streamlit.pages.projects._get_projects_to_delete",
+            lambda df, p: [(1, "Work")],
         )
         render_projects_page()
         assert "projects_pending_deletion" in session_state
@@ -649,10 +676,12 @@ class TestRenderProjectsPage:
         _mock_autosave_editor(monkeypatch, edited_df)
         st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "projects_confirm_delete_btn"
         monkeypatch.setattr(
-            "handoff.pages.projects._get_projects_to_delete", lambda df, p: [(1, "Work")]
+            "handoff.interfaces.streamlit.pages.projects._get_projects_to_delete",
+            lambda df, p: [(1, "Work")],
         )
         monkeypatch.setattr(
-            "handoff.pages.projects._apply_project_changes", lambda df, p: (True, [], 1, 0)
+            "handoff.interfaces.streamlit.pages.projects._apply_project_changes",
+            lambda df, p: (True, [], 1, 0),
         )
         render_projects_page()
         st_mock.success.assert_called()
@@ -678,7 +707,9 @@ class TestRenderProjectsPage:
         )
         _mock_autosave_editor(monkeypatch, edited_df)
         st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "projects_cancel_delete_btn"
-        monkeypatch.setattr("handoff.pages.projects._get_projects_to_delete", lambda df, p: [])
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.projects._get_projects_to_delete", lambda df, p: []
+        )
         render_projects_page()
         assert "projects_pending_deletion" not in session_state
         st_mock.rerun.assert_called()
@@ -703,10 +734,11 @@ class TestRenderProjectsPage:
         _mock_autosave_editor(monkeypatch, edited_df)
         st_mock.button.side_effect = lambda *a, **kw: kw.get("key") == "projects_confirm_delete_btn"
         monkeypatch.setattr(
-            "handoff.pages.projects._get_projects_to_delete", lambda df, p: [(1, "Work")]
+            "handoff.interfaces.streamlit.pages.projects._get_projects_to_delete",
+            lambda df, p: [(1, "Work")],
         )
         monkeypatch.setattr(
-            "handoff.pages.projects._apply_project_changes",
+            "handoff.interfaces.streamlit.pages.projects._apply_project_changes",
             lambda df, p: (False, ["Could not delete"], 0, 0),
         )
         render_projects_page()
