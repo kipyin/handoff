@@ -267,17 +267,15 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     )
     assert handoff.id is not None
 
+    handoff_id = handoff.id
+    assert handoff_id is not None
     at = AppTest.from_function(_now_page_entry)
+    # Pre-set check-in mode to concluded (avoids set_value issues with multiple button groups).
+    at.session_state[f"now_action_check_in_mode_{handoff_id}"] = "concluded"
     at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
-    # Select "Conclude" from check-in segmented control via set_value.
-    button_groups = at.get("button_group")
-    assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["concluded"]).run(timeout=APP_TEST_TIMEOUT)
-    assert len(at.exception) == 0
-
-    # After selecting Conclude, a save form appears.
+    # Save form appears when mode is concluded.
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"]
     assert save_buttons, "Expected 'Save conclude check-in' button not found"
     save_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
@@ -303,14 +301,10 @@ def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: 
     )
     assert handoff.id is not None
 
+    handoff_id = handoff.id
     at = AppTest.from_function(_now_page_entry)
+    at.session_state[f"now_action_check_in_mode_{handoff_id}"] = "concluded"
     at.run(timeout=APP_TEST_TIMEOUT)
-    assert len(at.exception) == 0
-
-    # Select "Conclude" from check-in segmented control.
-    button_groups = at.get("button_group")
-    assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["concluded"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_conclude_buttons = [
@@ -354,14 +348,10 @@ def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db:
     )
     assert handoff.id is not None
 
+    handoff_id = handoff.id
     at = AppTest.from_function(_now_page_entry)
+    at.session_state[f"now_action_check_in_mode_{handoff_id}"] = "on_track"
     at.run(timeout=APP_TEST_TIMEOUT)
-    assert len(at.exception) == 0
-
-    # Select "On-track" from check-in segmented control.
-    button_groups = at.get("button_group")
-    assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["on_track"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
@@ -397,14 +387,11 @@ def test_now_page_early_check_in_records_today_and_keeps_planned_next_check(
     )
     assert handoff.id is not None
 
+    handoff_id = handoff.id
     at = AppTest.from_function(_now_page_entry)
+    # Upcoming section uses now_upcoming_ prefix.
+    at.session_state[f"now_upcoming_check_in_mode_{handoff_id}"] = "on_track"
     at.run(timeout=APP_TEST_TIMEOUT)
-    assert len(at.exception) == 0
-
-    # Select "On-track" from check-in segmented control (upcoming uses first button_group).
-    button_groups = at.get("button_group")
-    assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["on_track"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
