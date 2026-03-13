@@ -806,6 +806,78 @@ def test_get_rulebook_section_preview_counts_custom_rulebook(session, monkeypatc
     assert sum(counts.values()) == 1
 
 
+def test_get_rulebook_section_preview_counts_defaults_to_saved_rulebook(monkeypatch) -> None:
+    """Preview counts use saved rulebook when settings are not provided."""
+    from handoff.rulebook import build_default_rulebook_settings
+
+    settings = build_default_rulebook_settings(deadline_near_days=1)
+    get_settings_calls: list[bool] = []
+    monkeypatch.setattr(
+        "handoff.services.handoff_service.get_rulebook_settings",
+        lambda: get_settings_calls.append(True) or settings,
+    )
+    query_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        "handoff.services.handoff_service._query_open_handoffs_for_now",
+        lambda **kwargs: query_calls.append(kwargs) or [],
+    )
+
+    counts = get_rulebook_section_preview_counts()
+
+    assert counts == {}
+    assert get_settings_calls == [True]
+    assert query_calls == [
+        {
+            "project_ids": None,
+            "pitchman_names": None,
+            "search_text": None,
+            "include_archived_projects": False,
+        }
+    ]
+
+
+def test_get_rulebook_section_preview_counts_include_archived_projects(
+    session, monkeypatch
+) -> None:
+    """Preview counts include archived project handoffs only when requested."""
+    _patch_session_context(monkeypatch, session)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    _patch_date(monkeypatch, FixedDate)
+    from handoff.rulebook import BuiltInSection, build_default_rulebook_settings
+
+    settings = build_default_rulebook_settings(deadline_near_days=1)
+
+    active = Project(name="Active")
+    archived = Project(name="Archived", is_archived=True)
+    session.add_all([active, archived])
+    session.commit()
+
+    data.create_handoff(
+        project_id=active.id,
+        need_back="Active due",
+        next_check=date(2026, 3, 9),
+    )
+    data.create_handoff(
+        project_id=archived.id,
+        need_back="Archived due",
+        next_check=date(2026, 3, 9),
+    )
+
+    default_counts = get_rulebook_section_preview_counts(settings)
+    all_counts = get_rulebook_section_preview_counts(settings, include_archived_projects=True)
+
+    action_sid = BuiltInSection.ACTION_REQUIRED.value
+    assert default_counts.get(action_sid, 0) == 1
+    assert sum(default_counts.values()) == 1
+    assert all_counts.get(action_sid, 0) == 2
+    assert sum(all_counts.values()) == 2
+
+
 @pytest.mark.parametrize("deadline_near_days", [1, 2, 5])
 def test_service_get_now_snapshot_rulebook_parity_multiple_deadline_near_days(
     session, monkeypatch, deadline_near_days: int
