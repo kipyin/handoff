@@ -6,7 +6,10 @@ __all__ = ["run_cli"]
 
 
 def run_cli() -> None:
-    """Entrypoint for future handoff CLI subcommand. Stub for now."""
+    """Entrypoint for future handoff CLI subcommand.
+
+    This is a stub and always raises NotImplementedError.
+    """
     raise NotImplementedError(
         "The handoff CLI is not yet implemented. Please use the Streamlit UI entrypoint for now."
     )
