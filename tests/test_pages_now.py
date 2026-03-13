@@ -1939,6 +1939,83 @@ def test_render_item_does_not_auto_expand_future_items(
     assert st_mock.expander.call_args.kwargs["expanded"] is False
 
 
+def test_render_item_only_expands_handoff_with_active_check_in_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the handoff with active check-in mode should start expanded."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return date(2026, 3, 9)
+
+    monkeypatch.setattr("handoff.pages.now.date", FixedDate)
+
+    first_handoff = _make_fake_handoff(
+        handoff_id=201,
+        need_back="First due item",
+        next_check=date(2026, 3, 9),
+    )
+    second_handoff = _make_fake_handoff(
+        handoff_id=202,
+        need_back="Second due item",
+        next_check=date(2026, 3, 9),
+    )
+    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    st_mock.session_state["now_action_check_in_mode_202"] = "on_track"
+
+    _render_item(
+        first_handoff,
+        key_prefix="now_action",
+        project_by_name=project_by_name,
+        show_check_in_controls=True,
+        allow_actions=True,
+    )
+    _render_item(
+        second_handoff,
+        key_prefix="now_action",
+        project_by_name=project_by_name,
+        show_check_in_controls=True,
+        allow_actions=True,
+    )
+
+    expanded_states = [call.kwargs["expanded"] for call in st_mock.expander.call_args_list[-2:]]
+    assert expanded_states == [False, True]
+
+
+def test_render_item_only_expands_handoff_with_active_reopen_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only the handoff with active reopen mode should start expanded."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    first_handoff = _make_fake_handoff(handoff_id=301, need_back="Closed first")
+    second_handoff = _make_fake_handoff(handoff_id=302, need_back="Closed second")
+    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    st_mock.session_state["now_concluded_reopen_mode_302"] = "reopen"
+
+    _render_item(
+        first_handoff,
+        key_prefix="now_concluded",
+        project_by_name=project_by_name,
+        allow_actions=False,
+        allow_reopen=True,
+    )
+    _render_item(
+        second_handoff,
+        key_prefix="now_concluded",
+        project_by_name=project_by_name,
+        allow_actions=False,
+        allow_reopen=True,
+    )
+
+    expanded_states = [call.kwargs["expanded"] for call in st_mock.expander.call_args_list[-2:]]
+    assert expanded_states == [False, True]
+
+
 def test_render_check_in_flow_edit_button_visible_with_allow_actions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
