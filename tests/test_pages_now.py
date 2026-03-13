@@ -762,6 +762,33 @@ def test_render_now_page_section_explanations_rendered_for_open_sections(
     assert any("No risk or action rules matched" in c for c in caption_calls)
 
 
+def test_render_now_page_upcoming_caption_uses_upcoming_section_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Upcoming caption lookup uses snapshot.upcoming_section_id instead of fixed key."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(
+            upcoming_section_id="manual_triage",
+            section_explanations={
+                "upcoming": "Wrong explanation for this test.",
+                "manual_triage": "Manual triage explanation.",
+            },
+        ),
+    )
+
+    render_now_page()
+
+    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
+    assert any("Manual triage explanation." in c for c in caption_calls)
+    assert not any("Wrong explanation for this test." in c for c in caption_calls)
+
+
 def test_render_now_page_custom_sections_rendered_between_action_and_upcoming(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -819,6 +846,29 @@ def test_render_now_page_empty_custom_section_shows_no_handoffs_caption(
 
     info_calls = [str(c) for c in st_mock.info.call_args_list]
     assert any("No handoffs" in c and "Waiting On Input" in c for c in info_calls)
+
+
+def test_render_now_page_empty_custom_section_still_shows_explanation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Custom section explanation is shown even when the section has no handoffs."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    mock_project = SimpleNamespace(id=1, name="Work")
+    monkeypatch.setattr("handoff.pages.now.list_projects", lambda **kwargs: [mock_project])
+    monkeypatch.setattr("handoff.pages.now.list_pitchmen_with_open_handoffs", lambda **kwargs: [])
+    monkeypatch.setattr(
+        "handoff.pages.now.get_now_snapshot",
+        lambda **kwargs: _make_fake_snapshot(
+            custom_sections=[("waiting_on_input", [])],
+            section_explanations={"waiting_on_input": "Waiting on upstream dependency."},
+        ),
+    )
+
+    render_now_page()
+
+    caption_calls = [str(c) for c in st_mock.caption.call_args_list]
+    assert any("Waiting on upstream dependency." in c for c in caption_calls)
 
 
 def test_render_item_edit_save_validation_sets_flash_error(
