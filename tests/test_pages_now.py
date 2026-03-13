@@ -1880,10 +1880,10 @@ def test_render_now_page_no_projects_with_include_archived_true_shows_create_inf
 # --- Regression tests for PR #88: Snooze removal + segmented_control ---
 
 
-def test_render_item_auto_expands_due_action_items(
+def test_render_item_does_not_auto_expand_due_action_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Due action items auto-expand so check-in controls are visible without clicking."""
+    """Due action items start collapsed; user must expand to see check-in controls."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
 
@@ -1894,7 +1894,6 @@ def test_render_item_auto_expands_due_action_items(
 
     monkeypatch.setattr("handoff.pages.now.date", FixedDate)
 
-    # Handoff due today should auto-expand
     due_handoff = _make_fake_handoff(
         handoff_id=100,
         need_back="Due now",
@@ -1910,8 +1909,8 @@ def test_render_item_auto_expands_due_action_items(
         allow_actions=True,
     )
 
-    # Expander should be expanded due to is_due_action logic
-    assert st_mock.expander.call_args.kwargs["expanded"] is True
+    # Expander starts collapsed; user expands manually
+    assert st_mock.expander.call_args.kwargs["expanded"] is False
 
 
 def test_render_item_does_not_auto_expand_future_items(
@@ -1921,7 +1920,6 @@ def test_render_item_does_not_auto_expand_future_items(
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
 
-    # Handoff due in the future should not auto-expand
     future_handoff = _make_fake_handoff(
         handoff_id=101,
         need_back="Future check",
@@ -1937,7 +1935,7 @@ def test_render_item_does_not_auto_expand_future_items(
         allow_actions=True,
     )
 
-    # Expander should not be expanded (no active mode, not due)
+    # Expander starts collapsed (no active mode, not due)
     assert st_mock.expander.call_args.kwargs["expanded"] is False
 
 
