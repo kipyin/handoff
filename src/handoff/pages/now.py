@@ -6,6 +6,7 @@ Goal: minimize risks by clearing actions on time.
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date
 
 import streamlit as st
@@ -38,21 +39,27 @@ _NOW_ADD_EXPANDED_KEY = "now_add_expanded"
 
 def _render_filters(
     *,
-    project_by_name: dict[str, Project],
+    project_options: dict[str, Project],
     pitchmen: list[str],
     key_prefix: str,
 ) -> tuple[list[int] | None, list[str] | None, str | None]:
     """Render Project, Who, and search filters.
 
     Args:
-        project_by_name: Map of project name to Project for id lookup.
+        project_options: Map of unique project labels to Project for id lookup.
         pitchmen: List of pitchman names for the Who filter.
         key_prefix: Prefix for Streamlit widget keys.
 
     Returns:
         Tuple of (project_ids or None, pitchman_names or None, search_text or None).
     """
-    project_names = list(project_by_name)
+    project_names = list(project_options)
+    projects_key = f"{key_prefix}_projects"
+    # Normalize stored filters when labels change (e.g. after duplicate-name fix)
+    stored = st.session_state.get(projects_key, [])
+    if stored and not set(stored).issubset(set(project_names)):
+        st.session_state[projects_key] = [p for p in stored if p in project_names]
+
     col1, col2, col3 = st.columns([2, 1, 1])
     with col1:
         search_text = st.text_input(
@@ -65,7 +72,7 @@ def _render_filters(
             "Project",
             options=project_names,
             default=[],
-            key=f"{key_prefix}_projects",
+            key=projects_key,
         )
     with col3:
         pitchman_filters = st.multiselect(
@@ -76,11 +83,46 @@ def _render_filters(
         )
     project_ids = []
     for n in project_filters:
-        if n in project_by_name:
-            pid = project_by_name[n].id
+        if n in project_options:
+            pid = project_options[n].id
             if pid is not None:
                 project_ids.append(pid)
     return project_ids or None, pitchman_filters or None, search_text or None
+
+
+def _build_project_options(projects: list[Project]) -> dict[str, Project]:
+    """Build unique labels for project widgets keyed to the original project."""
+    name_counts = Counter(project.name for project in projects)
+    seen_name_counts: dict[str, int] = {}
+    options: dict[str, Project] = {}
+
+    for project in projects:
+        occurrence = seen_name_counts.get(project.name, 0) + 1
+        seen_name_counts[project.name] = occurrence
+
+        if name_counts[project.name] > 1:
+            suffix = f"#{project.id}" if project.id is not None else f"duplicate {occurrence}"
+            label = f"{project.name} ({suffix})"
+        else:
+            label = project.name
+        while label in options:
+            label = (
+                f"{label} #{project.id}" if project.id is not None else f"{label} ({occurrence})"
+            )
+        options[label] = project
+    return options
+
+
+def _project_option_label_for_id(
+    project_options: dict[str, Project], project_id: int | None
+) -> str | None:
+    """Return the widget label that maps back to the given project id."""
+    if project_id is None:
+        return None
+    for label, project in project_options.items():
+        if project.id == project_id:
+            return label
+    return None
 
 
 def _check_in_header(check_in: CheckIn) -> str:
@@ -118,37 +160,30 @@ def _is_check_in_due(handoff: Handoff) -> bool:
 
 
 def _set_flash_success(message: str) -> None:
-    """Persist one success message for display after the next rerun."""
     st.session_state[_NOW_FLASH_SUCCESS_KEY] = message
 
 
 def _set_flash_error(message: str) -> None:
-    """Persist one error message for display after the next rerun."""
     st.session_state[_NOW_FLASH_ERROR_KEY] = message
 
 
 def _set_mode(*, mode_key: str, mode: str) -> None:
-    """Set a local interaction mode in session state."""
     st.session_state[mode_key] = mode
 
 
 def _clear_session_key(*, state_key: str) -> None:
-    """Remove a session-state key when it exists."""
     st.session_state.pop(state_key, None)
 
 
 def _expand_add_form() -> None:
-    """Expand the Add handoff form (keyboard shortcut target)."""
     st.session_state[_NOW_ADD_EXPANDED_KEY] = True
 
 
 def _collapse_add_form() -> None:
-    """Collapse the Add handoff form."""
     st.session_state.pop(_NOW_ADD_EXPANDED_KEY, None)
 
 
 def _confirm_delete_handoff(*, handoff_id: int, action_mode_key: str) -> None:
-    """Delete a handoff and clear action mode on success."""
     with time_action("now_delete"):
         if delete_handoff(handoff_id):
             _set_flash_success("Handoff deleted.")
@@ -231,7 +266,7 @@ def _save_reopen_submission(
 def _save_edit_submission(
     *,
     handoff_id: int,
-    project_by_name: dict[str, Project],
+    project_options: dict[str, Project],
     project_key: str,
     who_key: str,
     need_key: str,
@@ -247,11 +282,11 @@ def _save_edit_submission(
         _set_flash_error("Need back is required.")
         return
 
-    project_name = st.session_state.get(project_key)
-    if project_name not in project_by_name:
+    project_label = st.session_state.get(project_key)
+    if project_label not in project_options:
         _set_flash_error("Select a project.")
         return
-    project_id = project_by_name[project_name].id
+    project_id = project_options[project_label].id
     if project_id is None:
         _set_flash_error("Select a valid project.")
         return
@@ -281,7 +316,7 @@ def _save_edit_submission(
 
 def _save_add_submission(
     *,
-    project_by_name: dict[str, Project],
+    project_options: dict[str, Project],
     project_key: str,
     who_key: str,
     need_key: str,
@@ -296,11 +331,11 @@ def _save_add_submission(
         _set_flash_error("Need back is required.")
         return
 
-    project_name = st.session_state.get(project_key)
-    if project_name not in project_by_name:
+    project_label = st.session_state.get(project_key)
+    if project_label not in project_options:
         _set_flash_error("Select a project.")
         return
-    project_id = project_by_name[project_name].id
+    project_id = project_options[project_label].id
     if project_id is None:
         _set_flash_error("Select a valid project.")
         return
@@ -469,7 +504,6 @@ def _render_reopen_flow(handoff: Handoff, *, key_prefix: str) -> None:
 
 
 def _render_delete_confirmation(handoff: Handoff, *, key_prefix: str) -> None:
-    """Render delete confirmation for a handoff."""
     handoff_id = handoff.id
     if handoff_id is None:
         return
@@ -499,7 +533,7 @@ def _render_item(
     handoff: Handoff,
     key_prefix: str,
     *,
-    project_by_name: dict[str, Project],
+    project_options: dict[str, Project],
     is_risk: bool = False,
     show_check_in_controls: bool = False,
     allow_actions: bool = True,
@@ -557,7 +591,7 @@ def _render_item(
         if editing:
             _render_edit_form(
                 handoff=handoff,
-                project_by_name=project_by_name,
+                project_options=project_options,
                 key_prefix=f"{key_prefix}_edit_{handoff_id}",
                 action_mode_key=action_mode_key,
             )
@@ -580,7 +614,7 @@ def _render_item(
 
 def _render_edit_form(
     handoff: Handoff,
-    project_by_name: dict[str, Project],
+    project_options: dict[str, Project],
     key_prefix: str,
     *,
     action_mode_key: str,
@@ -589,24 +623,30 @@ def _render_edit_form(
 
     Args:
         handoff: The handoff item being edited.
-        project_by_name: Map of project name to Project for form lookup.
+        project_options: Map of unique project labels to Project for form lookup.
         key_prefix: Prefix for Streamlit widget keys.
         action_mode_key: Session key for the edit/delete segmented control.
     """
     handoff_id = handoff.id
     if handoff_id is None:
         return
-    project_names = list(project_by_name)
+    project_names = list(project_options)
     project_key = f"{key_prefix}_project"
+    if project_key in st.session_state and st.session_state[project_key] not in project_names:
+        st.session_state.pop(project_key, None)
     who_key = f"{key_prefix}_who"
     need_key = f"{key_prefix}_need"
     next_key = f"{key_prefix}_next"
     deadline_key = f"{key_prefix}_deadline"
     context_key = f"{key_prefix}_context"
     with st.form(key=f"{key_prefix}_form"):
+        current_project_label = _project_option_label_for_id(
+            project_options,
+            handoff.project.id if handoff.project else None,
+        )
         proj_idx = (
-            project_names.index(handoff.project.name)
-            if handoff.project and handoff.project.name in project_names
+            project_names.index(current_project_label)
+            if current_project_label in project_names
             else 0
         )
         st.selectbox(
@@ -650,7 +690,7 @@ def _render_edit_form(
                 on_click=_save_edit_submission,
                 kwargs={
                     "handoff_id": handoff_id,
-                    "project_by_name": project_by_name,
+                    "project_options": project_options,
                     "project_key": project_key,
                     "who_key": who_key,
                     "need_key": need_key,
@@ -669,20 +709,22 @@ def _render_edit_form(
 
 
 def _render_add_form(
-    project_by_name: dict[str, Project],
+    project_options: dict[str, Project],
     pitchmen: list[str],
     key_prefix: str,
 ) -> None:
     """Render form to add a new handoff item.
 
     Args:
-        project_by_name: Map of project name to Project for form lookup.
+        project_options: Map of unique project labels to Project for form lookup.
         pitchmen: List of pitchman names (unused but kept for UI symmetry).
         key_prefix: Prefix for Streamlit widget keys.
     """
     with st.form(key=f"{key_prefix}_add_form", clear_on_submit=False):
-        project_names = list(project_by_name)
+        project_names = list(project_options)
         project_key = f"{key_prefix}_add_project"
+        if project_key in st.session_state and st.session_state[project_key] not in project_names:
+            st.session_state.pop(project_key, None)
         who_key = f"{key_prefix}_add_who"
         need_key = f"{key_prefix}_add_need"
         next_key = f"{key_prefix}_add_next"
@@ -716,7 +758,7 @@ def _render_add_form(
                 "Add",
                 on_click=_save_add_submission,
                 kwargs={
-                    "project_by_name": project_by_name,
+                    "project_options": project_options,
                     "project_key": project_key,
                     "who_key": who_key,
                     "need_key": need_key,
@@ -770,9 +812,9 @@ def render_now_page() -> None:
         pitchmen = list_pitchmen_with_open_handoffs(
             include_archived_projects=include_archived_projects
         )
-        project_by_name = {p.name: p for p in projects}
+        project_options = _build_project_options(projects)
         project_ids, pitchman_names, search_text = _render_filters(
-            project_by_name=project_by_name,
+            project_options=project_options,
             pitchmen=pitchmen,
             key_prefix="now",
         )
@@ -802,7 +844,7 @@ def render_now_page() -> None:
                 on_click=_collapse_add_form,
                 help="Collapse the add form",
             )
-        _render_add_form(project_by_name, snapshot.pitchmen, "now")
+        _render_add_form(project_options, snapshot.pitchmen, "now")
     else:
         try:
             st.button(
@@ -834,7 +876,7 @@ def render_now_page() -> None:
             _render_item(
                 handoff,
                 "now_risk",
-                project_by_name=project_by_name,
+                project_options=project_options,
                 is_risk=True,
                 show_check_in_controls=True,
                 allow_actions=True,
@@ -853,7 +895,7 @@ def render_now_page() -> None:
             _render_item(
                 handoff,
                 "now_action",
-                project_by_name=project_by_name,
+                project_options=project_options,
                 show_check_in_controls=True,
             )
 
@@ -872,7 +914,7 @@ def render_now_page() -> None:
                 _render_item(
                     handoff,
                     f"now_custom_{section_id}",
-                    project_by_name=project_by_name,
+                    project_options=project_options,
                     show_check_in_controls=True,
                 )
 
@@ -889,7 +931,7 @@ def render_now_page() -> None:
             _render_item(
                 handoff,
                 key_prefix="now_upcoming",
-                project_by_name=project_by_name,
+                project_options=project_options,
                 show_check_in_controls=True,
             )
 
@@ -903,7 +945,7 @@ def render_now_page() -> None:
             _render_item(
                 handoff,
                 key_prefix="now_concluded",
-                project_by_name=project_by_name,
+                project_options=project_options,
                 allow_actions=False,
                 allow_reopen=True,
             )
