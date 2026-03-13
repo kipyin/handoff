@@ -10,14 +10,10 @@ massive restructure in PR #179 (Release/2026.3.12). Focuses on:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
-import pandas as pd
-import pytest
-
-from handoff.core.models import CheckInType, Handoff
+from handoff.core.models import CheckInType
 from handoff.services.dashboard_service import (
     ReopenRateSummary,
     compute_cycle_time_by_project,
@@ -132,7 +128,7 @@ def test_compute_cycle_time_stats_ignores_handoffs_without_close_date() -> None:
 
     stats = compute_cycle_time_stats(handoffs)
     assert stats is not None
-    mean, median, p90 = stats
+    _mean, median, _p90 = stats
     assert median == 10.0  # only first handoff counted
 
 
@@ -148,7 +144,7 @@ def test_compute_cycle_time_stats_handles_timezone_aware_created_at() -> None:
 
     stats = compute_cycle_time_stats(handoffs)
     assert stats is not None
-    mean, median, p90 = stats
+    _mean, median, _p90 = stats
     assert median == 10.0
 
 
@@ -164,7 +160,7 @@ def test_compute_cycle_time_stats_negative_delta_clamped_to_zero() -> None:
 
     stats = compute_cycle_time_stats(handoffs)
     assert stats is not None
-    mean, median, p90 = stats
+    _mean, median, _p90 = stats
     assert median == 0.0
 
 

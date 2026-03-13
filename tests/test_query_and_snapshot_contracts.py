@@ -12,13 +12,10 @@ from __future__ import annotations
 
 from datetime import date
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from handoff.core.models import Handoff
 from handoff.core.page_models import HandoffQuery, NowSnapshot
-
 
 # =============================================================================
 # HandoffQuery Contract Tests
