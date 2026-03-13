@@ -40,14 +40,7 @@ def _render_create_project_form() -> None:
 def _build_projects_display_rows(
     summary_list: list[dict],
 ) -> list[ProjectSummaryRow]:
-    """Build typed summary rows for the projects table.
-
-    Args:
-        summary_list: List of dicts with "project" and "open", "concluded" counts.
-
-    Returns:
-        List of :class:`ProjectSummaryRow` values.
-    """
+    """Build typed summary rows for the projects table."""
     rows: list[ProjectSummaryRow] = []
     for item in summary_list:
         p = item["project"]
