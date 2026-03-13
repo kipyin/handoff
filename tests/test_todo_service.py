@@ -606,11 +606,10 @@ def test_service_get_now_snapshot_default_section_counts(session, monkeypatch) -
     assert upcoming_h.id is not None
     assert risk_h.id is not None
     assert concluded_h.id is not None
-    assert set(snapshot.section_explanations) == {action_h.id, upcoming_h.id, risk_h.id}
-    assert concluded_h.id not in snapshot.section_explanations
+    assert set(snapshot.section_explanations) == {"risk", "action_required", "upcoming"}
     assert all(
-        snapshot.section_explanations[handoff_id].strip()
-        for handoff_id in (action_h.id, upcoming_h.id, risk_h.id)
+        snapshot.section_explanations[sid].strip()
+        for sid in ("risk", "action_required", "upcoming")
     )
     assert len(snapshot.projects) >= 1
     assert snapshot.projects[0].name == "Work"
@@ -1347,7 +1346,9 @@ def test_service_get_now_snapshot_custom_fallback_routes_items_to_upcoming(monke
     assert snapshot.action == []
     assert snapshot.custom_sections == [("blocked", [])]
     assert [handoff.need_back for handoff in snapshot.upcoming] == ["Needs manual triage"]
-    assert snapshot.section_explanations == {101: "No custom rules matched."}
+    # section_explanations now derived from rulebook, not handoff evaluation
+    assert "manual_triage" in snapshot.section_explanations
+    assert "No enabled rule matched" in snapshot.section_explanations["manual_triage"]
 
 
 def test_service_query_upcoming_handoffs(session, monkeypatch) -> None:
