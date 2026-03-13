@@ -98,12 +98,14 @@ The PyArmor trial license refuses to obfuscate code objects over ~32KB. The proj
 
 **Files currently near the limit:**
 
-| File                             | Size   | Status  |
-|----------------------------------|--------|---------|
-| `interfaces/streamlit/pages/now.py` | 32 KB | 99% – split |
-| `data/queries.py`                | 26 KB  | Under   |
-| `pages/system_settings.py`       | 23 KB  | Under   |
-| `services/dashboard_service.py`  | 22 KB  | Under   |
+| File                                   | Size   | Status |
+|----------------------------------------|--------|--------|
+| `interfaces/streamlit/pages/now_forms.py` | 20 KB | Under  |
+| `data/queries.py`                      | 26 KB  | Under  |
+| `interfaces/streamlit/pages/system_settings.py` | 23 KB | Under |
+| `services/dashboard_service.py`        | 22 KB  | Under  |
+
+Post-PR7, the Now page is split into `now.py` (8 KB), `now_forms.py` (20 KB), and `now_helpers.py` (4 KB)—all under 90%.
 
 **During restructure:** Do not merge modules if the result would approach 32KB. Prefer splitting large modules. Run `uv run handoff sizecheck` after each PR.
 
@@ -211,17 +213,19 @@ Each PR is implemented by one agent, reviewed by GitHub Copilot, and optionally 
 
 ---
 
-### PR 7: Split `pages/now.py` (90% threshold)
+### PR 7: Split `interfaces/streamlit/pages/now.py` (90% threshold)
 
 **Branch:** `refactor/split-now`  
 **Base:** current (can run in parallel with other PRs)
 
-**Condition:** Implement when `pages/now.py` exceeds 90% of the 32KB limit.
+**Condition:** Implement when `interfaces/streamlit/pages/now.py` exceeds 90% of the 32KB limit.
 
 **Scope:**
-- Split `pages/now.py` into `now_helpers.py`, `now_forms.py`, and slim `now.py` so each stays under 90%
-- Re-export from `now.py` for backward-compatible imports (tests patch module attributes)
-- Ensure `render_now_page`, `_render_add_form`, `_expand_add_form`, `_collapse_add_form` remain importable from `now`
+- Split `now.py` into `now_helpers.py`, `now_forms.py`, and slim `now.py` so each stays under 90%
+- `now_helpers.py`: session state, project options, check-in trail
+- `now_forms.py`: form renderers, submission handlers, `_render_item`
+- `now.py`: `_render_filters`, `render_now_page` orchestration
+- Tests import from `now_forms` and `now_helpers` directly; monkeypatch `st` on all three modules
 
 **Verification:** `uv run handoff ci` and `uv run handoff sizecheck`
 
