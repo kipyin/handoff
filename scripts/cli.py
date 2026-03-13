@@ -94,9 +94,19 @@ def _ci_run(extra_args: list[str] | None = None) -> None:
     test(extra_args=extra_args)
 
 
+@app.command("cli")
+def cli_command() -> None:
+    """Run the handoff CLI (stub for future implementation)."""
+    console.print(
+        "[bold red]handoff cli is not implemented yet.[/bold red]\n"
+        "This subcommand is reserved for a future interactive CLI interface."
+    )
+    raise typer.Exit(code=1)
+
+
 @app.command()
 def run(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
-    """Run the Streamlit app (applies Streamlit options from handoff.config)."""
+    """Run the Streamlit app (applies Streamlit options from handoff.bootstrap.config)."""
     extra_args = list(extra_args) if extra_args else []
     run_cmd(
         ["uv", "run", "python", "-m", "handoff", *extra_args],

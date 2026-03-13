@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from handoff.models import CheckInType
+from handoff.core.models import CheckInType
 from handoff.services.dashboard_service import (
     ReopenRateSummary,
     compute_cycle_time_by_project,
@@ -268,6 +268,7 @@ def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch)
         _make_handoff(id=1, created_at=datetime(2026, 2, 1), next_check=date(2026, 3, 9)),
         _make_handoff(id=2, created_at=datetime(2026, 2, 2), next_check=date(2026, 3, 10)),
         _make_handoff(id=3, created_at=datetime(2026, 2, 3), next_check=date(2026, 3, 12)),
+        _make_handoff(id=5, created_at=datetime(2026, 2, 5), next_check=None),
     ]
     analytics_handoffs = [_make_handoff(id=4, created_at=datetime(2026, 2, 1))]
     query_calls: list[dict[str, object]] = []
@@ -292,9 +293,9 @@ def test_get_dashboard_metrics_returns_pm_cards(monkeypatch: pytest.MonkeyPatch)
 
     metrics = get_dashboard_metrics(today)
     assert metrics.at_risk_now == 2
-    assert metrics.action_overdue == 1
-    assert metrics.action_due_today == 1
-    assert metrics.open_handoffs == 3
+    assert metrics.missed_check_in == 1
+    assert metrics.check_in_due_today == 1
+    assert metrics.open_handoffs == 4
     assert metrics.reopen_rate == "25%"
     assert metrics.reopen_rate_detail == "1 of 4 closes reopened"
     analytics_call = next(call for call in query_calls if call.get("include_concluded"))

@@ -38,7 +38,7 @@ def _run_app_subprocess(
 ) -> tuple[str, bool, bool]:
     """Run the Handoff app as a subprocess and monitor its combined output.
 
-    Uses the same entrypoint as users (python -m handoff) so handoff.config
+    Uses the same entrypoint as users (python -m handoff) so handoff.bootstrap.config
     is loaded before Streamlit starts. stdout and stderr are combined.
 
     Returns:
