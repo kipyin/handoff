@@ -7,7 +7,7 @@ import importlib
 from pathlib import Path
 
 PAGE_FILES = [path for path in Path("src/handoff/pages").glob("*.py") if path.name != "__init__.py"]
-SRC_FILES = [path for path in Path("src/handoff").rglob("*.py")]
+SRC_FILES = list(Path("src/handoff").rglob("*.py"))
 DEPRECATED_IMPORTS = {
     "handoff.page_models",
     "handoff.backup_schema",
