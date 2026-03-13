@@ -1,6 +1,6 @@
 # Cursor Automation: PR Reviewer Detection
 
-Set up at [cursor.com/automations](https://cursor.com/automations). Uses Haiku-4.5-thinking (limited reasoning) — rule-augmented, no API key required.
+Set up at [cursor.com/automations](https://cursor.com/automations). Uses Haiku-4.5-thinking. Acts as an **alert** — flags when a PR needs a closer human look vs when Copilot + second AI reviewer is sufficient. Analyzes the diff, not just paths; format-only changes in critical paths stay reviewer:ai.
 
 ## Setup
 
@@ -13,47 +13,41 @@ Set up at [cursor.com/automations](https://cursor.com/automations). Uses Haiku-4
 ## Prompt (paste into automation)
 
 ```
-You classify whether this PR requires a human reviewer or can rely on AI reviewers (GitHub Copilot + optional second AI like GPT-5.4-high).
+You are an alert bot. Humans will glance at every PR; your job is to flag when one needs a closer human look vs when Copilot + second AI reviewer is sufficient.
 
-You have limited reasoning — use simple, rule-augmented logic.
+**Default to reviewer:ai.** Only flag reviewer:human when absolutely necessary.
 
-**Always reviewer:human** (path-based):
-- Touches src/handoff/models.py
-- Touches src/handoff/migrations/
-- Touches src/handoff/updater.py
-- Touches pyproject.toml
-- Touches .github/workflows/ or .github/CODEOWNERS
+**Analyze what changed, not just paths.** Look at the diff.
 
-**Usually reviewer:ai** (agent-safe paths): data.py, db.py, services, pages, tests, docs, etc.
+**Format-only changes = reviewer:ai** even in critical paths (models.py, migrations, workflows, pyproject.toml). Examples: whitespace, quote style, line length, ruff/black formatting, reordering imports. No substantive logic or schema change = AI reviewers OK.
 
-**Elevate to reviewer:human** if you detect (even with agent-safe paths):
-- Security keywords: security, auth, vulnerability, CVE
-- Breaking change: BREAKING, breaking change, migration required
-- Very large: 500+ lines changed, or 20+ files across many layers
+**Flag reviewer:human only when you see:**
+- Schema or model definition changes (new columns, new tables, type changes)
+- Migration scripts that add/alter/drop schema
+- Dependency additions or removals in pyproject.toml (not just version bumps)
+- Workflow logic changes (new steps, conditionals, secrets usage)
+- Security-sensitive code: auth, permissions, updater/patch logic
+- Explicit breaking-change intent in title/body
+
+**Do NOT flag for:** formatting, docstring tweaks, test additions, refactors that don't touch schema/workflow/deps, typo fixes.
 
 Output exactly one of: reviewer:human or reviewer:ai.
 
 Then use the "Comment on Pull Request" tool to post a single comment:
 
 If reviewer:human:
-## reviewer:human — Manual review required
+## reviewer:human — Needs closer look
 
-This PR requires a human reviewer before merge.
+This PR warrants a closer human review before merge.
 
 If reviewer:ai:
-## reviewer:ai — AI reviewers OK
+## reviewer:ai — AI reviewers sufficient
 
-This PR can rely on GitHub Copilot and optional second AI reviewer. Merge when CI is green.
+Copilot + second AI reviewer is sufficient. Merge when CI is green.
 
-Keep the comment concise. Do not repeat analysis.
+Keep the comment concise.
 ```
 
 ## GitHub Action (optional integration)
 
-The workflow `.github/workflows/pr-reviewer-detection.yml` runs path-based classification and applies `reviewer:human` / `reviewer:ai` labels. No API key. Use it to:
-
-- Apply labels immediately (path rules) before Cursor automation runs
-- Provide a deterministic fallback when Cursor automation doesn't trigger
-- Keep labels in sync when the Cursor automation adds its comment
-
-Cursor automation (Haiku) and GitHub Action (path rules) can run in parallel — labels from the Action, richer comment from Cursor when it runs.
+The workflow `.github/workflows/pr-reviewer-detection.yml` runs path-based classification and applies labels. Coarse: it does not inspect diffs. Use it for quick labels; the Cursor automation comment is the smarter, diff-aware alert.
