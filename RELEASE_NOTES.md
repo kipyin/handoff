@@ -25,13 +25,6 @@ Apply tags in this order. Use the first tag that matches.
   - Ruff/formatting cleanup, pyright fixes
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
 
-## 2026.3.12 [Optional]
-
-- **Internal**
-  - **Project structure restructure:** Pages moved under `interfaces/streamlit/pages/`, services under `services/` for clearer separation of concerns.
-  - **Test coverage:** Comprehensive coverage for `now_forms`, `now_helpers`, CLI interface stub, and interfaces/streamlit restructure.
-  - **Docs:** NowSnapshot Attributes section converted to Google-style docstrings.
-
 ## 2026.3.11 [Breaking]
 
 - **Feature**

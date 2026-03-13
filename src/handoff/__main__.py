@@ -3,7 +3,7 @@
 Run with: python -m handoff
 
 This ensures STREAMLIT_* env vars are set before the Streamlit process starts,
-so options in handoff.bootstrap.config take effect. Used by the embedded build (handoff.bat)
+so options in handoff.config take effect. Used by the embedded build (handoff.bat)
 and can be used for dev: uv run python -m handoff
 """
 
@@ -14,7 +14,7 @@ import subprocess
 import sys
 
 # Apply config before any streamlit process is started.
-import handoff.bootstrap.config  # noqa: F401
+from handoff import config  # noqa: F401
 
 sys.exit(
     subprocess.run(

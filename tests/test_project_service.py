@@ -6,7 +6,7 @@ from contextlib import contextmanager
 
 from sqlmodel import select
 
-from handoff.core.models import Project
+from handoff.models import Project
 from handoff.services import project_service
 
 

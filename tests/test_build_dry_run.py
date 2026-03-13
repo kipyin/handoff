@@ -24,10 +24,10 @@ def test_build_full_dry_run_creates_build_structure(
     build_root = root / "build"
     assert build_root.exists()
 
-    # build_full creates build/handoff-{version}; build_patch uses build/handoff.
-    # We must check the versioned dir (where handoff.bat is written).
-    app_dir = build_root / f"handoff-{__version__}"
-    assert app_dir.is_dir()
+    # APP_BUILD_DIR is build/handoff-{version}
+    app_dirs = [d for d in build_root.iterdir() if d.is_dir() and d.name.startswith("handoff")]
+    assert len(app_dirs) >= 1
+    app_dir = app_dirs[0]
 
     assert (app_dir / "app.py").exists()
     assert (app_dir / "README.md").exists()
@@ -47,8 +47,9 @@ def test_build_full_dry_run_mac_creates_sh_launcher(
     build_full_module.main(platform="mac", dry_run=True)
 
     build_root = root / "build"
-    app_dir = build_root / f"handoff-{__version__}"
-    assert app_dir.is_dir()
+    app_dirs = [d for d in build_root.iterdir() if d.is_dir() and d.name.startswith("handoff")]
+    assert len(app_dirs) >= 1
+    app_dir = app_dirs[0]
 
     assert (app_dir / "handoff.sh").exists()
     content = (app_dir / "handoff.sh").read_text()

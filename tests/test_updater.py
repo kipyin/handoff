@@ -39,9 +39,7 @@ def _build_patch_zip_bytes(
     return buffer.getvalue()
 
 
-def test_apply_patch_zip_applies_allowed_paths_and_creates_backup(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_apply_patch_zip_applies_allowed_paths_and_creates_backup(tmp_path: Path) -> None:
     """Allowed paths are applied and a backup of previous contents is created."""
     app_root = tmp_path
     app_file = app_root / "app.py"
@@ -60,15 +58,9 @@ def test_apply_patch_zip_applies_allowed_paths_and_creates_backup(
         },
         version="2026.2.99",
     )
-    logged: list[tuple[str, dict[str, str]]] = []
-    monkeypatch.setattr(
-        "handoff.updater._log_app_action",
-        lambda action, **details: logged.append((action, details)),
-    )
 
     message = apply_patch_zip(BytesIO(zip_bytes), app_root=app_root)
     assert "Target version: 2026.2.99" in message
-    assert logged == [("app_update", {"target_version": "2026.2.99"})]
 
     # Updated contents are written to the app root.
     assert app_file.read_text(encoding="utf-8") == "new app"
@@ -110,7 +102,6 @@ def test_extract_patch_to_staging_writes_to_update_dir(tmp_path: Path) -> None:
 
 def test_stage_patch_with_backup_creates_backup_and_staging_leaves_app_root_unchanged(
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     """Verify stage_patch_with_backup backup, sentinel, and staging behaviour.
 
@@ -124,11 +115,6 @@ def test_stage_patch_with_backup_creates_backup_and_staging_leaves_app_root_unch
     zip_bytes = _build_patch_zip_bytes(
         {"app.py": b"new app", "src/module.py": b"new src"},
         version="2026.2.99",
-    )
-    logged: list[tuple[str, dict[str, str]]] = []
-    monkeypatch.setattr(
-        "handoff.updater._log_app_action",
-        lambda action, **details: logged.append((action, details)),
     )
     message = stage_patch_with_backup(
         BytesIO(zip_bytes),
@@ -153,10 +139,6 @@ def test_stage_patch_with_backup_creates_backup_and_staging_leaves_app_root_unch
     assert (app_root / "update" / "app.py").read_text(encoding="utf-8") == "new app"
     # App root unchanged (launcher will copy later).
     assert app_file.read_text(encoding="utf-8") == "old app"
-    assert logged
-    assert logged[0][0] == "app_backup"
-    assert logged[0][1]["target_version"] == "2026.2.99"
-    assert logged[0][1]["backup_path"].startswith(str(app_root / "backup"))
 
 
 def test_extract_patch_to_staging_no_applicable_files(tmp_path: Path) -> None:
@@ -223,7 +205,6 @@ def test_format_snapshot_label_supports_legacy_and_versioned_names() -> None:
 
 def test_stage_restore_from_snapshot_populates_update_and_leaves_app_root_unchanged(
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     """stage_restore_from_snapshot copies snapshot into update/; app root unchanged."""
     app_root = tmp_path
@@ -236,11 +217,6 @@ def test_stage_restore_from_snapshot_populates_update_and_leaves_app_root_unchan
     (app_root / "app.py").write_text("current app", encoding="utf-8")
     (app_root / "src").mkdir(exist_ok=True)
     (app_root / "src" / "module.py").write_text("current src", encoding="utf-8")
-    logged: list[tuple[str, dict[str, str]]] = []
-    monkeypatch.setattr(
-        "handoff.updater._log_app_action",
-        lambda action, **details: logged.append((action, details)),
-    )
 
     message = stage_restore_from_snapshot(snapshot, app_root=app_root)
 
@@ -252,14 +228,9 @@ def test_stage_restore_from_snapshot_populates_update_and_leaves_app_root_unchan
     assert (staging / "src" / "module.py").read_text(encoding="utf-8") == "from backup src"
     assert (app_root / "app.py").read_text(encoding="utf-8") == "current app"
     assert (app_root / "src" / "module.py").read_text(encoding="utf-8") == "current src"
-    assert logged == [
-        ("app_restore", {"snapshot": str(snapshot), "staged": "true"}),
-    ]
 
 
-def test_restore_backup_snapshot_copies_files_and_clears_pycache(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_restore_backup_snapshot_copies_files_and_clears_pycache(tmp_path: Path) -> None:
     """Restoring a snapshot copies files back and clears __pycache__."""
     app_root = tmp_path
     snapshot = app_root / "backup" / "20260101-120000"
@@ -280,23 +251,15 @@ def test_restore_backup_snapshot_copies_files_and_clears_pycache(
     pycache_dir = app_root / "__pycache__"
     pycache_dir.mkdir()
     (pycache_dir / "dummy.pyc").write_bytes(b"x")
-    logged: list[tuple[str, dict[str, str]]] = []
-    monkeypatch.setattr(
-        "handoff.updater._log_app_action",
-        lambda action, **details: logged.append((action, details)),
-    )
 
     message = _restore_backup_snapshot(snapshot, app_root=app_root)
     assert "Backup restored" in message
     assert app_file.read_text(encoding="utf-8") == "from backup"
     assert src_file.read_text(encoding="utf-8") == "from backup src"
     assert not pycache_dir.exists()
-    assert logged == [("app_restore", {"snapshot": str(snapshot), "applied": "true"})]
 
 
-def test_apply_staged_update_creates_backup_applies_and_returns_path(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_apply_staged_update_creates_backup_applies_and_returns_path(tmp_path: Path) -> None:
     """apply_staged_update creates backup, applies staged files, removes update/, returns path."""
     app_root = tmp_path
     app_file = app_root / "app.py"
@@ -312,11 +275,6 @@ def test_apply_staged_update_creates_backup_applies_and_returns_path(
     (staging / "app.py").write_text("new app", encoding="utf-8")
     (staging / "src").mkdir()
     (staging / "src" / "module.py").write_text("new src", encoding="utf-8")
-    logged: list[tuple[str, dict[str, str]]] = []
-    monkeypatch.setattr(
-        "handoff.updater._log_app_action",
-        lambda action, **details: logged.append((action, details)),
-    )
 
     result = apply_staged_update(app_root=app_root)
 
@@ -336,7 +294,6 @@ def test_apply_staged_update_creates_backup_applies_and_returns_path(
 
     sentinel = app_root / ".last_update_backup"
     assert sentinel.read_text(encoding="utf-8").strip() == result
-    assert logged == [("app_update", {"backup_path": result})]
 
 
 def test_apply_staged_update_returns_none_when_no_update_dir(tmp_path: Path) -> None:

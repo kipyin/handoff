@@ -10,7 +10,6 @@ This module configures loguru to:
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from loguru import logger
 from platformdirs import user_data_dir
@@ -18,28 +17,12 @@ from platformdirs import user_data_dir
 _CONFIGURED = False
 
 
-def log_application_action(action: str, **details: Any) -> None:
-    """Log an application-level action for audit (export, import, backup, update).
-
-    Best-effort: never raises. Used by UI and updater so audit logging cannot
-    break core flows.
-    """
-    try:
-        from handoff.db import get_db_path
-
-        db_path = str(get_db_path())
-    except Exception:
-        db_path = "(unknown)"
-    parts = [f"action={action}", f"db_path={db_path}"]
-    for k, v in details.items():
-        parts.append(f"{k}={v}")
-    logger.info("application " + " ".join(parts))
-
-
 def _get_logs_dir() -> Path:
     """Return the directory where log files should be written.
 
-    Log files are stored under the user's data directory (e.g. APPDATA on Windows).
+    Returns:
+        Path to the logs directory under user data (e.g. APPDATA on Windows).
+
     """
     data_dir = Path(user_data_dir("handoff", "handoff"))
     logs_dir = data_dir / "logs"

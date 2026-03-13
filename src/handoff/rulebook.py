@@ -17,8 +17,8 @@ from datetime import date, timedelta
 from enum import StrEnum
 from typing import Any
 
-from handoff.core.handoff_lifecycle import _latest_check_in, handoff_is_open
-from handoff.core.models import CheckInType, Handoff
+from handoff.handoff_lifecycle import _latest_check_in, handoff_is_open
+from handoff.models import CheckInType, Handoff
 
 DEFAULT_RULEBOOK_VERSION = 1
 DEFAULT_RISK_RULE_ID = "default_risk_deadline_near_and_delayed"
@@ -306,26 +306,6 @@ def get_open_section_display_order(settings: RulebookSettings) -> list[str]:
     return ordered
 
 
-def get_section_explanations(settings: RulebookSettings) -> dict[str, str]:
-    """Return section_id -> explanation for all open-item sections.
-
-    Explanations are derived from the rulebook: each section gets the
-    highest-priority enabled rule's match_reason. The fallback section
-    gets a stable generic message. Captions are stable and present even
-    when a section has no matching handoffs.
-    """
-    result: dict[str, str] = {}
-    for rule in _ordered_enabled_rules(settings):
-        if rule.section_id not in result:
-            result[rule.section_id] = _match_explanation(rule)
-    fallback = settings.open_items_fallback_section
-    if fallback not in result:
-        result[fallback] = (
-            f"No enabled rule matched; item falls back to {_section_label(fallback)}."
-        )
-    return result
-
-
 def _matches_condition(condition: RuleCondition, handoff: Handoff, *, today: date) -> bool:
     """Return True when the handoff satisfies the given condition."""
     if isinstance(condition, DeadlineWithinDaysCondition):
@@ -454,7 +434,6 @@ __all__ = [
     "build_default_rulebook_settings",
     "evaluate_open_handoff",
     "get_open_section_display_order",
-    "get_section_explanations",
     "is_built_in_rule",
     "rule_condition_from_dict",
     "rule_condition_to_dict",

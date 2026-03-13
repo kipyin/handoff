@@ -8,10 +8,10 @@ from datetime import date
 from loguru import logger
 from sqlmodel import select
 
-from handoff.core import handoff_lifecycle
-from handoff.core.models import CheckIn, CheckInType, Handoff
+from handoff import handoff_lifecycle
 from handoff.data.activity import log_activity
 from handoff.db import session_context
+from handoff.models import CheckIn, CheckInType, Handoff
 
 
 class _Unset(enum.Enum):
@@ -257,6 +257,11 @@ def conclude_handoff(handoff_id: int, note: str | None = None) -> CheckIn:
     )
     log_activity("handoff", handoff_id, "concluded", {"note": note})
     return check_in
+
+
+def _latest_check_in(handoff: Handoff) -> CheckIn | None:
+    """Return the latest check-in on a handoff trail, or None."""
+    return handoff_lifecycle._latest_check_in(handoff)
 
 
 def handoff_is_open(handoff: Handoff) -> bool:

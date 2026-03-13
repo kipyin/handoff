@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-from handoff.core.models import CheckInType, Handoff, Project
-from handoff.core.rulebook import (
+from handoff.models import CheckInType, Handoff, Project
+from handoff.rulebook import (
     DEFAULT_ACTION_RULE_ID,
     DEFAULT_RISK_RULE_ID,
     BuiltInSection,
@@ -115,19 +115,6 @@ def test_import_payload_via_service(session, monkeypatch) -> None:
     assert projects[0].name == "Imported"
     assert len(handoffs) == 1
     assert handoffs[0].need_back == "Imported todo"
-
-
-def test_log_application_action_delegates_to_bootstrap_logging(monkeypatch) -> None:
-    """Service logger helper forwards action and details to bootstrap logging."""
-    logged: list[tuple[str, dict[str, object]]] = []
-    monkeypatch.setattr(
-        "handoff.bootstrap.logging.log_application_action",
-        lambda action, **details: logged.append((action, details)),
-    )
-
-    settings_service.log_application_action("data_export", format="json", source="settings")
-
-    assert logged == [("data_export", {"format": "json", "source": "settings"})]
 
 
 # --- deadline_near_days persistence ---
@@ -567,7 +554,7 @@ def test_custom_section_rule_matches_and_persists(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Custom section rules match handoffs and persist across load/save."""
-    from handoff.core.rulebook import (
+    from handoff.rulebook import (
         LatestCheckInTypeIsCondition,
         get_open_section_display_order,
         is_built_in_rule,
@@ -609,7 +596,7 @@ def test_risk_rule_syncs_with_deadline_near_days_after_custom_section(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Changing deadline_near_days updates Risk rule when loading, even after custom sections."""
-    from handoff.core.rulebook import DEFAULT_RISK_RULE_ID, DeadlineWithinDaysCondition
+    from handoff.rulebook import DEFAULT_RISK_RULE_ID, DeadlineWithinDaysCondition
 
     _patch_settings_path(monkeypatch, tmp_path)
 

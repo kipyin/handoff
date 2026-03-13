@@ -192,17 +192,11 @@ class TestExtractPatchToStaging:
 
 
 class TestApplyPatchZip:
-    def test_without_version_marker(self, tmp_path: Path, monkeypatch) -> None:
-        logged: list[tuple[str, dict[str, str]]] = []
-        monkeypatch.setattr(
-            "handoff.updater._log_app_action",
-            lambda action, **details: logged.append((action, details)),
-        )
+    def test_without_version_marker(self, tmp_path: Path) -> None:
         data = _make_zip({"app.py": b"new app"})
         msg = apply_patch_zip(BytesIO(data), app_root=tmp_path)
         assert "Update applied" in msg
         assert (tmp_path / "app.py").read_bytes() == b"new app"
-        assert logged == [("app_update", {})]
 
 
 class TestFormatSnapshotLabel:
