@@ -12,11 +12,11 @@ from typing import Any
 
 import pandas as pd
 
+from handoff.core.models import CheckIn, CheckInType, Handoff
 from handoff.data import count_open_handoffs as _count_open_handoffs
 from handoff.data import get_handoff_close_date, query_handoffs, query_risk_handoffs
 from handoff.data import get_recent_activity as _get_recent_activity
 from handoff.dates import week_bounds
-from handoff.models import CheckIn, CheckInType, Handoff
 from handoff.services.settings_service import get_deadline_near_days
 
 

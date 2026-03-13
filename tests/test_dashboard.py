@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from handoff.models import CheckInType
+from handoff.core.models import CheckInType
 from handoff.services.dashboard_service import (
     ReopenRateSummary,
     compute_cycle_time_by_project,

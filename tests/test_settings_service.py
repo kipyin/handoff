@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-from handoff.models import CheckInType, Handoff, Project
+from handoff.core.models import CheckInType, Handoff, Project
 from handoff.rulebook import (
     DEFAULT_ACTION_RULE_ID,
     DEFAULT_RISK_RULE_ID,

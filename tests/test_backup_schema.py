@@ -13,7 +13,7 @@ from handoff.backup_schema import (
     BackupProjectRecord,
     _require_model_id,
 )
-from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.core.models import CheckIn, CheckInType, Handoff, Project
 
 
 def test_require_model_id_returns_value_when_present() -> None:

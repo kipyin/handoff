@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from handoff.models import CheckIn, CheckInType, Handoff
+from handoff.core.models import CheckIn, CheckInType, Handoff
 
 
 def _latest_check_in(handoff: Handoff) -> CheckIn | None:

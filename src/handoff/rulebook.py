@@ -17,8 +17,8 @@ from datetime import date, timedelta
 from enum import StrEnum
 from typing import Any
 
-from handoff.handoff_lifecycle import _latest_check_in, handoff_is_open
-from handoff.models import CheckInType, Handoff
+from handoff.core.handoff_lifecycle import _latest_check_in, handoff_is_open
+from handoff.core.models import CheckInType, Handoff
 
 DEFAULT_RULEBOOK_VERSION = 1
 DEFAULT_RISK_RULE_ID = "default_risk_deadline_near_and_delayed"

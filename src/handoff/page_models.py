@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
-from handoff.models import Handoff, Project
+from handoff.core.models import Handoff, Project
 
 
 @dataclass(slots=True)

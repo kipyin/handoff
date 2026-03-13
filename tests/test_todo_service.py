@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 import handoff.data as data
-from handoff.models import CheckInType, Handoff, Project
+from handoff.core.models import CheckInType, Handoff, Project
 from handoff.services import (
     add_check_in,
     conclude_handoff,

@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 import pandas as pd
 import pytest
 
-from handoff.models import Project
+from handoff.core.models import Project
 from handoff.pages.projects import (
     _apply_project_changes,
     _build_projects_display_rows,
