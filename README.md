@@ -83,7 +83,7 @@ To keep the app simple and robust, some things are intentionally out of scope:
    when due, conclude, and reopen from Concluded (append-only history). Filters:
    Project, Who, Search, and "Include archived projects".
 4. **Dashboard** - PM-operational metrics focused on execution reliability:
-   at-risk now, action overdue, open aging profile, on-time close trend, cycle
+   at-risk now, missed check-in, open aging profile, on-time close trend, cycle
    time by project (p50/p90), and reopen rate.
 5. **Updates and backups** - System Settings lets you apply code-only patch zips
    and restore from backups created before each update.

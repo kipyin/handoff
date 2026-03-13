@@ -21,7 +21,6 @@ from handoff.pages.system_settings import (
     _render_about_section,
     _render_data_export_section,
     _render_data_import_section,
-    _render_now_settings_section,
     _render_rulebook_section,
     _render_send_log_section,
     render_system_settings_page,
@@ -743,6 +742,10 @@ class TestRenderDataImportSection:
             imported["called"] = True
 
         monkeypatch.setattr("handoff.pages.system_settings.import_payload", mock_import)
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.log_application_action",
+            lambda *a, **k: None,
+        )
 
         _render_data_import_section()
 
@@ -790,24 +793,6 @@ class TestRenderDataImportSection:
         st_mock.info.assert_not_called()
 
 
-class TestRenderNowSettingsSection:
-    def test_changed_deadline_window_persists_and_shows_success(self, monkeypatch) -> None:
-        """Changing deadline-at-risk days persists through service and confirms to user."""
-        st_mock = _patch_streamlit(monkeypatch)
-        monkeypatch.setattr("handoff.pages.system_settings.get_deadline_near_days", lambda: 3)
-        st_mock.number_input.return_value = 5
-        saved: list[int] = []
-        monkeypatch.setattr(
-            "handoff.pages.system_settings.set_deadline_near_days",
-            lambda value: saved.append(value),
-        )
-
-        _render_now_settings_section()
-
-        assert saved == [5]
-        st_mock.success.assert_called_once()
-
-
 class TestRenderSystemSettingsPage:
     def test_render_calls_update_and_all_sections_in_order(self, monkeypatch) -> None:
         """System Settings page renders update panel and all sections in stable order."""
@@ -816,10 +801,6 @@ class TestRenderSystemSettingsPage:
         monkeypatch.setattr(
             "handoff.pages.system_settings.render_update_panel",
             lambda version: calls.append(("update", version)),
-        )
-        monkeypatch.setattr(
-            "handoff.pages.system_settings._render_now_settings_section",
-            lambda: calls.append("now"),
         )
         monkeypatch.setattr(
             "handoff.pages.system_settings._render_rulebook_section",
@@ -846,11 +827,10 @@ class TestRenderSystemSettingsPage:
 
         assert calls == [
             ("update", APP_VERSION),
-            "now",
             "rulebook",
             "export",
             "import",
             "send_log",
             "about",
         ]
-        assert st_mock.divider.call_count == 6
+        assert st_mock.divider.call_count == 5
