@@ -178,8 +178,10 @@ def test_pages_import_services_not_data_directly(monkeypatch: pytest.MonkeyPatch
 
         # Look for direct imports of handoff.data
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith(
-                "handoff.data"
+            if (
+                isinstance(node, ast.ImportFrom)
+                and node.module
+                and node.module.startswith("handoff.data")
             ):
                 pytest.fail(
                     f"{page_file.name} imports directly from {node.module}, "
