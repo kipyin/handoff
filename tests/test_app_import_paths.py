@@ -55,7 +55,7 @@ def test_app_py_load_without_error() -> None:
     # Compile and execute app.py to verify no import errors at module level
     with open(app_py) as f:
         code = f.read()
-    
+
     # Ensure it parses without syntax errors
     compile(code, str(app_py), "exec")
 
@@ -98,7 +98,7 @@ def test_all_page_files_exist_in_new_location() -> None:
         "projects.py",
         "system_settings.py",
     ]
-    
+
     for page_file in required_pages:
         page_path = pages_dir / page_file
         assert page_path.exists(), f"Missing page file: {page_file}"
@@ -107,7 +107,7 @@ def test_all_page_files_exist_in_new_location() -> None:
 def test_old_pages_directory_no_longer_contains_pages() -> None:
     """The old src/handoff/pages directory no longer contains page implementations."""
     old_pages_dir = Path("/workspace/src/handoff/pages")
-    
+
     # Directory may exist (for __init__.py placeholder) but should not have page modules
     if old_pages_dir.exists():
         page_files = list(old_pages_dir.glob("*.py"))
@@ -123,7 +123,7 @@ def test_streamlit_ui_module_exports_public_interface() -> None:
     # Verify all public functions are exported in __all__
     assert hasattr(ui, "__all__")
     public_exports = ui.__all__
-    
+
     # Each exported name should be callable
     for name in public_exports:
         obj = getattr(ui, name)
@@ -146,7 +146,7 @@ def test_autosave_importable_from_new_path() -> None:
 
 def test_module_reload_safety() -> None:
     """Reloading handoff.db and UI modules doesn't cause import errors.
-    
+
     This is important for integration tests that point to different DBs.
     """
     import handoff.db as db
@@ -154,7 +154,7 @@ def test_module_reload_safety() -> None:
 
     importlib.reload(db)
     importlib.reload(ui_module)
-    
+
     # Both should still be functional
     assert hasattr(ui_module, "setup")
     assert callable(ui_module.setup)
@@ -162,21 +162,21 @@ def test_module_reload_safety() -> None:
 
 def test_pages_import_services_not_data_directly(monkeypatch: pytest.MonkeyPatch) -> None:
     """Verify that pages use the service layer rather than importing data directly.
-    
+
     This is an architectural guard that checks the actual imports.
     """
     import ast
     from pathlib import Path
-    
+
     pages_dir = Path("src/handoff/interfaces/streamlit/pages")
-    
+
     # Check each page file
     for page_file in pages_dir.glob("*.py"):
         if page_file.name == "__init__.py":
             continue
-        
+
         tree = ast.parse(page_file.read_text(encoding="utf-8"))
-        
+
         # Look for direct imports of handoff.data
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom):
