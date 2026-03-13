@@ -7,7 +7,7 @@ from datetime import UTC, date, datetime
 import pytest
 from sqlmodel import Session, SQLModel, create_engine
 
-from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.core.models import CheckIn, CheckInType, Handoff, Project
 
 # Patch Streamlit ButtonGroup.indices for AppTest compatibility with segmented_control.
 # See https://github.com/streamlit/streamlit/issues/11338

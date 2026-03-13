@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 from sqlmodel import select
 
-from handoff.models import CheckInType, Handoff, Project
-from handoff.rulebook import (
+from handoff.core.models import CheckInType, Handoff, Project
+from handoff.core.rulebook import (
     DEFAULT_ACTION_RULE_ID,
     DEFAULT_RISK_RULE_ID,
     BuiltInSection,
@@ -115,6 +115,19 @@ def test_import_payload_via_service(session, monkeypatch) -> None:
     assert projects[0].name == "Imported"
     assert len(handoffs) == 1
     assert handoffs[0].need_back == "Imported todo"
+
+
+def test_log_application_action_delegates_to_bootstrap_logging(monkeypatch) -> None:
+    """Service logger helper forwards action and details to bootstrap logging."""
+    logged: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        "handoff.bootstrap.logging.log_application_action",
+        lambda action, **details: logged.append((action, details)),
+    )
+
+    settings_service.log_application_action("data_export", format="json", source="settings")
+
+    assert logged == [("data_export", {"format": "json", "source": "settings"})]
 
 
 # --- deadline_near_days persistence ---
@@ -337,6 +350,35 @@ def test_save_rulebook_settings_preserves_deadline_near_days_when_no_risk_rule(
     assert settings_service.get_deadline_near_days() == 5
 
 
+def test_save_rulebook_settings_preserves_deadline_when_risk_rule_has_no_deadline_condition(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Risk rule without deadline condition must not overwrite deadline_near_days."""
+    _patch_settings_path(monkeypatch, tmp_path)
+    settings_service.set_deadline_near_days(5)
+
+    defaults = build_default_rulebook_settings(deadline_near_days=2)
+    risk_without_deadline = RuleDefinition(
+        rule_id=DEFAULT_RISK_RULE_ID,
+        name=defaults.rules[0].name,
+        section_id=defaults.rules[0].section_id,
+        priority=defaults.rules[0].priority,
+        enabled=defaults.rules[0].enabled,
+        match_reason=defaults.rules[0].match_reason,
+        conditions=(LatestCheckInTypeIsCondition(check_in_type=CheckInType.DELAYED),),
+    )
+    edited = RulebookSettings(
+        version=defaults.version,
+        rules=(risk_without_deadline, defaults.rules[1]),
+        first_match_wins=defaults.first_match_wins,
+        open_items_fallback_section=defaults.open_items_fallback_section,
+        concluded_section=defaults.concluded_section,
+    )
+    settings_service.save_rulebook_settings(edited)
+
+    assert settings_service.get_deadline_near_days() == 5
+
+
 def test_get_rulebook_settings_valid_returns_persisted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -525,7 +567,7 @@ def test_custom_section_rule_matches_and_persists(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Custom section rules match handoffs and persist across load/save."""
-    from handoff.rulebook import (
+    from handoff.core.rulebook import (
         LatestCheckInTypeIsCondition,
         get_open_section_display_order,
         is_built_in_rule,
@@ -567,7 +609,7 @@ def test_risk_rule_syncs_with_deadline_near_days_after_custom_section(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Changing deadline_near_days updates Risk rule when loading, even after custom sections."""
-    from handoff.rulebook import DEFAULT_RISK_RULE_ID, DeadlineWithinDaysCondition
+    from handoff.core.rulebook import DEFAULT_RISK_RULE_ID, DeadlineWithinDaysCondition
 
     _patch_settings_path(monkeypatch, tmp_path)
 

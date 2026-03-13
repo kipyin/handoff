@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from loguru import logger
 from sqlmodel import select
 
-from handoff.backup_schema import BackupPayload
+from handoff.bootstrap.logging import log_application_action
+from handoff.core.backup_schema import BackupPayload
+from handoff.core.models import CheckIn, Handoff, Project
 from handoff.db import session_context
-from handoff.models import CheckIn, Handoff, Project
 
 
 def import_payload(data_payload: dict[str, Any]) -> None:
@@ -68,9 +68,8 @@ def import_payload(data_payload: dict[str, Any]) -> None:
             session.add(check_in)
 
         session.commit()
-        logger.info(
-            "Imported {project_count} projects, {handoff_count} handoffs, "
-            "{check_in_count} check-ins",
+        log_application_action(
+            "data_import",
             project_count=len(payload.projects),
             handoff_count=len(payload.handoffs),
             check_in_count=len(payload.check_ins),
