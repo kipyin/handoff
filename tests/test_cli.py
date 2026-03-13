@@ -243,3 +243,26 @@ def test_ci_runs_sizecheck_with_fixed_src_settings(monkeypatch) -> None:
             "warn_threshold": 0.9,
         }
     ]
+
+
+def test_cli_command_stub_prints_not_implemented_message() -> None:
+    """`handoff cli` should print a clear "not implemented" message to stderr."""
+    result = RUNNER.invoke(cli.app, ["cli"])
+
+    assert result.exit_code == 1
+    assert "handoff cli is not implemented yet" in result.stdout
+    assert "future interactive CLI interface" in result.stdout
+
+
+def test_cli_command_stub_exits_with_code_1() -> None:
+    """`handoff cli` should exit with non-zero code to signal failure."""
+    result = RUNNER.invoke(cli.app, ["cli"])
+
+    assert result.exit_code == 1
+
+
+def test_cli_command_stub_does_not_accept_subcommands() -> None:
+    """`handoff cli` should not accept arbitrary subcommands (reserved for future)."""
+    result = RUNNER.invoke(cli.app, ["cli", "subcommand"])
+
+    assert result.exit_code != 0
