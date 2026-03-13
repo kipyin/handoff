@@ -27,6 +27,13 @@ def _get_default_db_path() -> Path:
     return data_dir / "todo.db"
 
 
+def get_demo_db_path() -> Path:
+    """Return the default path for the demo SQLite database."""
+    data_dir = Path(user_data_dir("handoff", "handoff"))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir / "handoff-demo.db"
+
+
 def _resolve_db_path() -> Path:
     """Resolve the database path, allowing an override via environment variable.
 
