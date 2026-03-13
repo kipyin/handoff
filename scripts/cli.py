@@ -97,9 +97,11 @@ def _ci_run(extra_args: list[str] | None = None) -> None:
 @app.command("cli")
 def cli_command() -> None:
     """Run the handoff CLI (stub for future implementation)."""
-    from handoff.interfaces.cli import run_cli
-
-    run_cli()
+    console.print(
+        "[bold red]handoff cli is not implemented yet.[/bold red]\n"
+        "This subcommand is reserved for a future interactive CLI interface."
+    )
+    raise typer.Exit(code=1)
 
 
 @app.command()
