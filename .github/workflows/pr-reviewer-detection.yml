@@ -1,0 +1,173 @@
+# Classify PRs as reviewer:human or reviewer:ai.
+#
+# - reviewer:human — Requires manual review before merge (aligned with risk:high paths
+#   or Haiku override for security/breaking signals).
+# - reviewer:ai — Can rely on AI reviewers (GitHub Copilot + optional second AI); merge
+#   when CI is green.
+#
+# Uses path-based rules first. If ANTHROPIC_API_KEY is set and paths are agent-safe,
+# Haiku-4.5-thinking may elevate to reviewer:human when it detects security keywords,
+# breaking-change signals, or very large diffs.
+#
+# Haiku has limited reasoning — keep the prompt simple and rule-augmented.
+
+name: PR Reviewer Detection
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  detect:
+    name: Classify reviewer type
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install anthropic (optional, for Haiku override)
+        run: pip install anthropic
+        continue-on-error: true
+
+      - name: Fetch PR metadata and run detection
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_ADDITIONS: ${{ github.event.pull_request.additions }}
+          PR_DELETIONS: ${{ github.event.pull_request.deletions }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        id: detect
+        run: |
+          python3 - <<'PYEOF'
+          import json
+          import os
+          import subprocess
+          import sys
+          import urllib.error
+          import urllib.request
+
+          TOKEN = os.environ["GITHUB_TOKEN"]
+          REPO = os.environ["REPO"]
+          PR_NUMBER = os.environ["PR_NUMBER"]
+
+          def api(method, path, data=None, *, ignore_404=False):
+              url = f"https://api.github.com{path}"
+              body = json.dumps(data).encode() if data else None
+              req = urllib.request.Request(
+                  url,
+                  data=body,
+                  method=method,
+                  headers={
+                      "Authorization": f"Bearer {TOKEN}",
+                      "Accept": "application/vnd.github+json",
+                      "X-GitHub-Api-Version": "2022-11-28",
+                      "Content-Type": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req) as resp:
+                      raw = resp.read()
+                      if resp.getcode() in (204, 205) or not raw:
+                          return None
+                      return json.loads(raw)
+              except urllib.error.HTTPError as exc:
+                  if ignore_404 and exc.code == 404:
+                      return None
+                  raise
+
+          files = []
+          page = 1
+          while True:
+              batch = api("GET", f"/repos/{REPO}/pulls/{PR_NUMBER}/files?per_page=100&page={page}")
+              if not batch:
+                  break
+              files.extend(f["filename"] for f in batch)
+              if len(batch) < 100:
+                  break
+              page += 1
+
+          env = os.environ.copy()
+          env["PR_TITLE"] = os.environ.get("PR_TITLE", "")
+          env["PR_BODY"] = os.environ.get("PR_BODY", "") or ""
+          env["PR_FILES"] = "\n".join(files)
+          env["PR_ADDITIONS"] = os.environ.get("PR_ADDITIONS", "0")
+          env["PR_DELETIONS"] = os.environ.get("PR_DELETIONS", "0")
+
+          script_path = os.path.join(os.environ.get("GITHUB_WORKSPACE", "."), ".github/scripts/pr_reviewer_detect.py")
+          result = subprocess.run(
+              [sys.executable, script_path],
+              env=env,
+              capture_output=True,
+              text=True,
+              cwd=os.environ.get("GITHUB_WORKSPACE", "."),
+          )
+          output = (result.stdout + result.stderr).strip()
+          if result.returncode != 0:
+              print(output, file=sys.stderr)
+              sys.exit(1)
+
+          reviewer = "human" if "reviewer:human" in output else "ai"
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"reviewer={reviewer}\n")
+          print(f"PR #{PR_NUMBER} classified as reviewer:{reviewer}")
+          PYEOF
+
+      - name: Apply reviewer label and comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const reviewer = '${{ steps.detect.outputs.reviewer }}';
+            if (!reviewer) return;
+
+            const label = reviewer === 'human' ? 'reviewer:human' : 'reviewer:ai';
+            const color = reviewer === 'human' ? 'b60205' : '0e8a16';
+            const desc = reviewer === 'human'
+              ? 'Requires manual review before merge'
+              : 'AI reviewers OK — Copilot + optional second AI';
+
+            // Ensure label exists
+            try {
+              await github.rest.issues.getLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label });
+            } catch (e) {
+              if (e.status === 404) {
+                await github.rest.issues.createLabel({ owner: context.repo.owner, repo: context.repo.repo, name: label, color, description: desc });
+              }
+            }
+
+            // Remove the other label
+            const other = reviewer === 'human' ? 'reviewer:ai' : 'reviewer:human';
+            try {
+              await github.rest.issues.removeLabel({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, name: other });
+            } catch (e) { /* ignore */ }
+
+            // Add our label
+            await github.rest.issues.addLabels({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, labels: [label] });
+
+            // Post/update comment
+            const marker = '<!-- pr-reviewer-detection -->';
+            const body = reviewer === 'human'
+              ? `## reviewer:human — Manual review required\n\nThis PR is classified as requiring a human reviewer. Merge only after manual approval.`
+              : `## reviewer:ai — AI reviewers OK\n\nThis PR can rely on GitHub Copilot and optional second AI reviewer. Merge when CI is green.`;
+            const fullBody = marker + '\n' + body;
+
+            const { data: comments } = await github.rest.issues.listComments({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body: fullBody });
+            } else {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: fullBody });
+            }
