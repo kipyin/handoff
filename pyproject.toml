@@ -67,7 +67,7 @@ handoff = "scripts.cli:main"
 include = ["src", "scripts"]
 exclude = [
     "src/handoff/data/",
-    "src/handoff/pages/dashboard.py",
+    "src/handoff/interfaces/streamlit/pages/dashboard.py",
     "src/handoff/services/dashboard_service.py",
 ]
 venvPath = "."

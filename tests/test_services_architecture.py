@@ -6,7 +6,11 @@ import ast
 import importlib
 from pathlib import Path
 
-PAGE_FILES = [path for path in Path("src/handoff/pages").glob("*.py") if path.name != "__init__.py"]
+PAGE_FILES = [
+    path
+    for path in Path("src/handoff/interfaces/streamlit/pages").glob("*.py")
+    if path.name != "__init__.py"
+]
 SRC_FILES = list(Path("src/handoff").rglob("*.py"))
 DEPRECATED_IMPORTS = {
     "handoff.page_models",
@@ -16,9 +20,9 @@ DEPRECATED_IMPORTS = {
 RELOCATED_DEPENDENT_MODULES = (
     "handoff.data.io",
     "handoff.data.queries",
-    "handoff.pages.now",
-    "handoff.pages.projects",
-    "handoff.pages.system_settings",
+    "handoff.interfaces.streamlit.pages.now",
+    "handoff.interfaces.streamlit.pages.projects",
+    "handoff.interfaces.streamlit.pages.system_settings",
     "handoff.services.handoff_service",
     "handoff.services.settings_service",
 )

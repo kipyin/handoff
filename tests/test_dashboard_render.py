@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pandas as pd
 
-from handoff.pages.dashboard import render_dashboard_page
+from handoff.interfaces.streamlit.pages.dashboard import render_dashboard_page
 from handoff.services.dashboard_service import DashboardMetrics
 
 
@@ -55,7 +55,7 @@ class TestRenderDashboardPage:
             return [FakeCol() for _ in range(n)]
 
         st_mock.columns.side_effect = _columns
-        monkeypatch.setattr("handoff.pages.dashboard.st", st_mock)
+        monkeypatch.setattr("handoff.interfaces.streamlit.pages.dashboard.st", st_mock)
 
         default_metrics = DashboardMetrics(
             at_risk_now=0,
@@ -66,29 +66,29 @@ class TestRenderDashboardPage:
             reopen_rate_detail="No closes in window",
         )
         monkeypatch.setattr(
-            "handoff.pages.dashboard.get_dashboard_metrics",
+            "handoff.interfaces.streamlit.pages.dashboard.get_dashboard_metrics",
             lambda _: metrics or default_metrics,
         )
         monkeypatch.setattr(
-            "handoff.pages.dashboard.get_on_time_close_rate_trend",
+            "handoff.interfaces.streamlit.pages.dashboard.get_on_time_close_rate_trend",
             lambda *a, **kw: pd.DataFrame() if trend_empty else _nonempty_trend(),
         )
         monkeypatch.setattr(
-            "handoff.pages.dashboard.get_open_aging_profile",
+            "handoff.interfaces.streamlit.pages.dashboard.get_open_aging_profile",
             lambda *a, **kw: pd.DataFrame() if aging_empty else _nonempty_aging(),
         )
         monkeypatch.setattr(
-            "handoff.pages.dashboard.get_cycle_time_by_project",
+            "handoff.interfaces.streamlit.pages.dashboard.get_cycle_time_by_project",
             lambda *a, **kw: pd.DataFrame() if cycle_empty else _nonempty_cycle(),
         )
         monkeypatch.setattr(
-            "handoff.pages.dashboard.get_exportable_metrics",
+            "handoff.interfaces.streamlit.pages.dashboard.get_exportable_metrics",
             lambda *a, **kw: (
                 {"csv": "x", "json": "{}"} if export_has_data else {"csv": "", "json": ""}
             ),
         )
         monkeypatch.setattr(
-            "handoff.pages.dashboard.get_recent_activity",
+            "handoff.interfaces.streamlit.pages.dashboard.get_recent_activity",
             lambda *a, **kw: recent_activity if recent_activity is not None else [],
         )
         return st_mock
@@ -164,7 +164,7 @@ class TestRenderDashboardPage:
         logged: list[tuple[str, dict[str, str]]] = []
 
         monkeypatch.setattr(
-            "handoff.pages.dashboard.log_application_action",
+            "handoff.interfaces.streamlit.pages.dashboard.log_application_action",
             lambda action, **details: logged.append((action, details)),
         )
 

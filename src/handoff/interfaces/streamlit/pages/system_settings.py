@@ -41,8 +41,9 @@ from handoff.services.settings_service import (
     reset_rulebook_settings,
     save_rulebook_settings,
 )
-from handoff.update_ui import render_update_panel
 from handoff.version import __version__ as APP_VERSION
+
+from ..update_ui import render_update_panel
 
 CSV_HANDOFF_COLUMNS = [
     "id",
