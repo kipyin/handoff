@@ -246,7 +246,7 @@ def test_ci_runs_sizecheck_with_fixed_src_settings(monkeypatch) -> None:
 
 
 def test_cli_command_stub_prints_not_implemented_message() -> None:
-    """`handoff cli` should print a clear "not implemented" message to stderr."""
+    """`handoff cli` should print a clear "not implemented" message to stdout."""
     result = RUNNER.invoke(cli.app, ["cli"])
 
     assert result.exit_code == 1

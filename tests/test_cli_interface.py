@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+
 import pytest
 
 import handoff.interfaces.cli as cli_module
