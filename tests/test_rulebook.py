@@ -768,3 +768,73 @@ def test_default_rules_mirror_current_section_semantics(session, monkeypatch) ->
     assert predicted[BuiltInSection.ACTION_REQUIRED.value] == action_names
     assert predicted[BuiltInSection.UPCOMING.value] == upcoming_names
     assert predicted[BuiltInSection.CONCLUDED.value] == concluded_names
+
+
+# ============================================================================
+# REGRESSION TESTS: Rulebook deserialization edge cases (Issue #PR175)
+# ============================================================================
+
+
+def test_rule_condition_from_dict_missing_required_fields() -> None:
+    """Test rule condition deserialization handles missing required fields gracefully.
+    
+    Risky behavior: If condition payload is incomplete (missing deadline_days, etc),
+    the deserializer will fail with unclear error. Should validate required fields.
+    """
+    # Missing 'deadline_days' field for DeadlineWithinDaysCondition
+    payload_missing_field = {
+        "type": "deadline_within_days",
+        # Missing: "deadline_days": int
+    }
+
+    # Should raise or return None gracefully, not AttributeError
+    with pytest.raises((KeyError, ValueError, TypeError)):
+        rule_condition_from_dict(payload_missing_field)
+
+
+def test_rule_condition_from_dict_with_malformed_type() -> None:
+    """Test deserialization rejects unknown condition type."""
+    payload_bad_type = {
+        "type": "unknown_condition_type_xyz",
+    }
+
+    # Should fail gracefully, not return a partial object
+    with pytest.raises((ValueError, KeyError)):
+        rule_condition_from_dict(payload_bad_type)
+
+
+def test_evaluate_open_handoff_with_none_settings_uses_default() -> None:
+    """Test evaluate_open_handoff handles None settings by using default.
+    
+    Risky behavior: If rulebook loading fails upstream, None is passed,
+    and function silently uses DEFAULT_RULEBOOK_SETTINGS. Should either
+    raise or log clearly that fallback occurred.
+    """
+    project = Project(name="Test")
+    handoff = Handoff(
+        project_id=1,
+        need_back="Test",
+        next_check=date(2026, 3, 9),
+    )
+
+    # This should not raise; it will use defaults
+    result = evaluate_open_handoff(handoff, settings=None, today=date(2026, 3, 13))
+
+    # Result should be valid (section_id set)
+    assert result.section_id is not None
+
+
+def test_rule_condition_from_dict_with_null_values() -> None:
+    """Test rule condition deserialization handles unexpected null values.
+    
+    Risky behavior: Condition fields unexpectedly None could cause
+    downstream NoneType errors during evaluation.
+    """
+    payload_with_nulls = {
+        "type": "deadline_within_days",
+        "deadline_days": None,  # Should be int
+    }
+
+    # Should fail gracefully, not pass through None values
+    with pytest.raises((TypeError, ValueError)):
+        rule_condition_from_dict(payload_with_nulls)
