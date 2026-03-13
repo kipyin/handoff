@@ -678,6 +678,42 @@ class TestRenderDataExportSection:
 
         assert st_mock.download_button.call_count == 2
 
+    def test_json_export_logs_application_action(self, monkeypatch) -> None:
+        """Clicking JSON export writes an application audit event."""
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.download_button.side_effect = [True, False]
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_export_payload",
+            lambda: {"projects": [], "handoffs": [], "check_ins": []},
+        )
+        logged: list[tuple[str, dict[str, str]]] = []
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.log_application_action",
+            lambda action, **details: logged.append((action, details)),
+        )
+
+        _render_data_export_section()
+
+        assert logged == [("data_export", {"format": "json"})]
+
+    def test_csv_export_logs_application_action(self, monkeypatch) -> None:
+        """Clicking CSV export writes an application audit event."""
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.download_button.side_effect = [False, True]
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.get_export_payload",
+            lambda: {"projects": [], "handoffs": [], "check_ins": []},
+        )
+        logged: list[tuple[str, dict[str, str]]] = []
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.log_application_action",
+            lambda action, **details: logged.append((action, details)),
+        )
+
+        _render_data_export_section()
+
+        assert logged == [("data_export", {"format": "csv"})]
+
     def test_csv_download_uses_handoff_rows(self, monkeypatch) -> None:
         """CSV export should include current handoff rows instead of legacy todos."""
         st_mock = _patch_streamlit(monkeypatch)
@@ -730,7 +766,10 @@ class TestRenderDataImportSection:
                 }
             ],
         }
-        uploaded = SimpleNamespace(getvalue=lambda: json.dumps(payload).encode("utf-8"))
+        uploaded = SimpleNamespace(
+            getvalue=lambda: json.dumps(payload).encode("utf-8"),
+            name="backup.json",
+        )
         st_mock = _patch_streamlit(monkeypatch)
         st_mock.file_uploader.return_value = uploaded
         st_mock.checkbox.return_value = True
@@ -751,6 +790,39 @@ class TestRenderDataImportSection:
 
         assert imported["called"]
         st_mock.success.assert_called_once()
+
+    def test_import_logs_application_action(self, monkeypatch) -> None:
+        """Successful import logs an audit event with the uploaded file name."""
+        payload = {
+            "projects": [{"id": 1, "name": "P", "created_at": "2026-01-01T00:00:00"}],
+            "todos": [
+                {
+                    "id": 1,
+                    "project_id": 1,
+                    "name": "T",
+                    "status": "handoff",
+                    "created_at": "2026-01-01T00:00:00",
+                }
+            ],
+        }
+        uploaded = SimpleNamespace(
+            getvalue=lambda: json.dumps(payload).encode("utf-8"),
+            name="seed.json",
+        )
+        st_mock = _patch_streamlit(monkeypatch)
+        st_mock.file_uploader.return_value = uploaded
+        st_mock.checkbox.return_value = True
+        st_mock.button.return_value = True
+        monkeypatch.setattr("handoff.pages.system_settings.import_payload", lambda p: None)
+        logged: list[tuple[str, dict[str, str]]] = []
+        monkeypatch.setattr(
+            "handoff.pages.system_settings.log_application_action",
+            lambda action, **details: logged.append((action, details)),
+        )
+
+        _render_data_import_section()
+
+        assert logged == [("data_import", {"source_file": "seed.json"})]
 
     def test_import_exception_shows_error(self, monkeypatch) -> None:
         """When import_payload raises, error message is shown."""
