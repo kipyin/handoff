@@ -333,6 +333,38 @@ def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: 
     assert "Conclude and reopen this handoff" not in concluded_names
 
 
+def test_now_page_delete_confirmation_removes_handoff(app_test_db: Path) -> None:
+    """Delete confirmation flow removes the handoff from persistence."""
+    db.init_db()
+    project = data.create_project("Now Delete Test")
+    assert project.id is not None
+    handoff = data.create_handoff(
+        project_id=project.id,
+        need_back="Delete this handoff",
+        next_check=date(2000, 1, 1),
+        pitchman="Casey",
+    )
+    assert handoff.id is not None
+
+    handoff_id = handoff.id
+    at = AppTest.from_function(_now_page_entry)
+    at.session_state[f"now_action_action_mode_{handoff_id}"] = "delete"
+    at.run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.exception) == 0
+
+    confirm_delete_buttons = [b for b in at.button if getattr(b, "label", None) == "Confirm delete"]
+    assert confirm_delete_buttons, "Expected 'Confirm delete' button not found"
+    confirm_delete_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.exception) == 0
+
+    remaining = [
+        h
+        for h in data.query_handoffs(project_ids=[project.id], include_concluded=True)
+        if h.id == handoff_id
+    ]
+    assert remaining == []
+
+
 def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db: Path) -> None:
     """Late (due) check-in records today's check-in date."""
     today = date.today()
