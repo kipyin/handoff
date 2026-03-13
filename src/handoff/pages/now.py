@@ -629,7 +629,7 @@ def _render_add_form(
         pitchmen: List of pitchman names (unused but kept for UI symmetry).
         key_prefix: Prefix for Streamlit widget keys.
     """
-    with st.form(key=f"{key_prefix}_add_form", clear_on_submit=True):
+    with st.form(key=f"{key_prefix}_add_form", clear_on_submit=False):
         project_names = list(project_by_name)
         project_key = f"{key_prefix}_add_project"
         who_key = f"{key_prefix}_add_who"
@@ -637,15 +637,15 @@ def _render_add_form(
         next_key = f"{key_prefix}_add_next"
         deadline_key = f"{key_prefix}_add_deadline"
         context_key = f"{key_prefix}_add_context"
-        st.selectbox("Project", options=project_names, key=project_key)
+        st.selectbox("Project *", options=project_names, key=project_key)
         st.text_input("Who", placeholder="Person you're waiting on", key=who_key)
         st.text_input(
-            "Need back",
+            "Need back *",
             placeholder="Deliverable you need returned",
             key=need_key,
         )
         st.date_input(
-            "Next check",
+            "Next check *",
             value=date.today(),
             key=next_key,
         )
