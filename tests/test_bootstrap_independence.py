@@ -14,13 +14,12 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-
 BOOTSTRAP_FILES = list(Path("src/handoff/bootstrap").glob("*.py"))
 
 
 def _get_imports_from_file(path: Path, scope: str = "module") -> set[str]:
     """Extract module imports from a Python file.
-    
+
     Args:
         path: Path to Python file.
         scope: 'module' for top-level imports only (executed on import),
@@ -54,7 +53,7 @@ def _get_imports_from_file(path: Path, scope: str = "module") -> set[str]:
 
 
 def test_bootstrap_does_not_import_db() -> None:
-    """Bootstrap modules must not import db at module level (lazy imports inside functions are OK)."""
+    """Bootstrap: no db import at module level (lazy imports in functions OK)."""
     offenders: list[tuple[Path, str]] = []
 
     for path in BOOTSTRAP_FILES:
@@ -128,7 +127,7 @@ def test_bootstrap_does_not_import_interfaces() -> None:
 
 
 def test_bootstrap_does_not_import_streamlit_at_module_level() -> None:
-    """Bootstrap modules must not import streamlit (except in config, which is interface-specific)."""
+    """Bootstrap: no streamlit import at module level (except config)."""
     offenders: list[Path] = []
 
     for path in BOOTSTRAP_FILES:
@@ -143,7 +142,7 @@ def test_bootstrap_does_not_import_streamlit_at_module_level() -> None:
 
 
 def test_bootstrap_logging_can_import_without_db() -> None:
-    """Import bootstrap.logging without triggering db import (until log_application_action is called)."""
+    """bootstrap.logging importable without triggering db import at call time."""
     import handoff.bootstrap.logging
 
     # Verify the module is importable

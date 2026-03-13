@@ -145,7 +145,9 @@ def test_log_application_action_message_format(
     monkeypatch.setattr("handoff.bootstrap.logging.logger.info", mock_logger_info)
 
     mock_db_module = MagicMock()
-    mock_db_module.get_db_path = MagicMock(return_value=Path("/home/user/.local/share/handoff/handoff.db"))
+    mock_db_module.get_db_path = MagicMock(
+        return_value=Path("/home/user/.local/share/handoff/handoff.db")
+    )
     monkeypatch.setitem(sys.modules, "handoff.db", mock_db_module)
 
     log_application_action("app_update", version="2026.3.13", status="success")
