@@ -13,6 +13,7 @@ import streamlit as st
 from handoff.dates import add_business_days, format_date_smart, format_risk_reason
 from handoff.instrumentation import time_action
 from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.rulebook import BuiltInSection
 from handoff.services import (
     add_check_in,
     conclude_handoff,
@@ -463,7 +464,6 @@ def _render_item(
     show_check_in_controls: bool = False,
     allow_actions: bool = True,
     allow_reopen: bool = False,
-    match_explanation: str | None = None,
 ) -> None:
     """Render one handoff item in an expander."""
     handoff_id = handoff.id
@@ -509,8 +509,6 @@ def _render_item(
     # Removed is_due_action so operations on one handoff don't expand others.
     expanded = editing or keep_expanded_for_mode
     with st.expander(header, expanded=expanded):
-        if match_explanation:
-            st.caption(match_explanation)
         if not editing and allow_actions and show_check_in_controls:
             _render_check_in_flow(handoff, key_prefix=key_prefix, allow_actions=allow_actions)
         elif not editing and allow_reopen:
@@ -774,6 +772,9 @@ def render_now_page() -> None:
     # --- Risk section ---
     st.markdown("---")
     st.markdown("**Risk**")
+    risk_explanation = snapshot.section_explanations.get(BuiltInSection.RISK.value)
+    if risk_explanation:
+        st.caption(risk_explanation)
     if not snapshot.risk:
         st.info("No at-risk handoffs.")
     else:
@@ -785,16 +786,14 @@ def render_now_page() -> None:
                 is_risk=True,
                 show_check_in_controls=True,
                 allow_actions=True,
-                match_explanation=(
-                    snapshot.section_explanations.get(handoff.id, "") or None
-                    if handoff.id is not None
-                    else None
-                ),
             )
 
     # --- Action section ---
     st.markdown("---")
     st.markdown("**Action required**")
+    action_explanation = snapshot.section_explanations.get(BuiltInSection.ACTION_REQUIRED.value)
+    if action_explanation:
+        st.caption(action_explanation)
     if not snapshot.action:
         st.info("Nothing needs attention right now. Add handoffs or check back later.")
     else:
@@ -804,11 +803,6 @@ def render_now_page() -> None:
                 "now_action",
                 project_by_name=project_by_name,
                 show_check_in_controls=True,
-                match_explanation=(
-                    snapshot.section_explanations.get(handoff.id, "") or None
-                    if handoff.id is not None
-                    else None
-                ),
             )
 
     # --- Custom sections ---
@@ -816,6 +810,9 @@ def render_now_page() -> None:
         section_label = section_id.replace("_", " ").title()
         st.markdown("---")
         st.markdown(f"**{section_label}**")
+        custom_explanation = snapshot.section_explanations.get(section_id)
+        if custom_explanation:
+            st.caption(custom_explanation)
         if not handoffs:
             st.info(f"No handoffs in {section_label}.")
         else:
@@ -825,16 +822,14 @@ def render_now_page() -> None:
                     f"now_custom_{section_id}",
                     project_by_name=project_by_name,
                     show_check_in_controls=True,
-                    match_explanation=(
-                        snapshot.section_explanations.get(handoff.id, "") or None
-                        if handoff.id is not None
-                        else None
-                    ),
                 )
 
     # --- Upcoming section ---
     st.markdown("---")
     st.markdown("**Upcoming**")
+    upcoming_explanation = snapshot.section_explanations.get(snapshot.upcoming_section_id)
+    if upcoming_explanation:
+        st.caption(upcoming_explanation)
     if not snapshot.upcoming:
         st.info("No upcoming handoffs.")
     else:
@@ -844,11 +839,6 @@ def render_now_page() -> None:
                 key_prefix="now_upcoming",
                 project_by_name=project_by_name,
                 show_check_in_controls=True,
-                match_explanation=(
-                    snapshot.section_explanations.get(handoff.id, "") or None
-                    if handoff.id is not None
-                    else None
-                ),
             )
 
     # --- Concluded section ---
