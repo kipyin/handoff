@@ -51,7 +51,9 @@ def test_configure_logging_is_idempotent(tmp_path: Path, monkeypatch: pytest.Mon
     assert log_mod._CONFIGURED is True
 
 
-def test_log_application_action_includes_db_path_and_details(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_log_application_action_includes_db_path_and_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import handoff.db as db_mod
     import handoff.logging as log_mod
 
