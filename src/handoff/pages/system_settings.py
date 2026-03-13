@@ -18,11 +18,11 @@ import pandas as pd
 import streamlit as st
 from loguru import logger
 
-from handoff.bootstrap.docs import get_readme_intro
-from handoff.bootstrap.logging import _get_logs_dir
-from handoff.core.backup_schema import BackupPayload
-from handoff.core.models import CheckInType
-from handoff.core.rulebook import (
+from handoff.backup_schema import BackupPayload
+from handoff.docs import get_readme_intro
+from handoff.logging import _get_logs_dir
+from handoff.models import CheckInType
+from handoff.rulebook import (
     DeadlineWithinDaysCondition,
     LatestCheckInTypeIsCondition,
     NextCheckDueCondition,
@@ -31,19 +31,19 @@ from handoff.core.rulebook import (
     RuleDefinition,
     is_built_in_rule,
 )
-from handoff.services.handoff_service import get_rulebook_section_preview_counts
 from handoff.services.settings_service import (
     DEADLINE_NEAR_DAYS_MAX,
+    DEADLINE_NEAR_DAYS_MIN,
+    get_deadline_near_days,
     get_export_payload,
     get_rulebook_settings,
     import_payload,
-    log_application_action,
     reset_rulebook_settings,
     save_rulebook_settings,
+    set_deadline_near_days,
 )
+from handoff.update_ui import render_update_panel
 from handoff.version import __version__ as APP_VERSION
-
-from ..update_ui import render_update_panel
 
 CSV_HANDOFF_COLUMNS = [
     "id",
@@ -251,24 +251,19 @@ def _render_rulebook_section() -> None:
 
     Displays all rules in expandable sections sorted by priority, allowing users
     to toggle enabled status, adjust priority, and edit condition parameters.
-    Shows preview counts for each section. Provides Save and Reset buttons to
-    persist or revert changes.
+    Provides Save and Reset buttons to persist or revert changes.
     """
     flash = st.session_state.pop("settings_rulebook_flash", None)
     if flash:
         st.success(flash)
     st.markdown("### Open-item rules")
     settings = get_rulebook_settings()
-    preview_counts = get_rulebook_section_preview_counts(settings)
     section_labels = sorted({rule.section_id.replace("_", " ").title() for rule in settings.rules})
     sections_str = ", ".join(section_labels) if section_labels else "configured Now-page sections"
     fallback_label = settings.open_items_fallback_section.replace("_", " ").title()
-    fallback_count = preview_counts.get(settings.open_items_fallback_section, 0)
-    fallback_note = f" ({fallback_count} item{'s' if fallback_count != 1 else ''})"
     st.caption(
         f"Rules that group open handoffs into Now-page sections ({sections_str}). "
-        f"First matching enabled rule wins. Unmatched items fall back to "
-        f"{fallback_label}{fallback_note}."
+        f"First matching enabled rule wins. Unmatched items fall back to {fallback_label}."
     )
 
     ordered_rules = sorted(
@@ -278,11 +273,8 @@ def _render_rulebook_section() -> None:
     edited_rules: list[tuple[int, bool, int]] = []
 
     for rule_idx, rule in ordered_rules:
-        count = preview_counts.get(rule.section_id, 0)
-        count_suffix = f" · {count}"
         with st.expander(
-            f"**{rule.name}** — {rule.section_id.replace('_', ' ').title()}{count_suffix}",
-            expanded=False,
+            f"**{rule.name}** — {rule.section_id.replace('_', ' ').title()}", expanded=False
         ):
             enabled = st.checkbox(
                 "Enabled",
@@ -468,6 +460,27 @@ def _render_rulebook_section() -> None:
             st.rerun()
 
 
+def _render_now_settings_section() -> None:
+    """Render Now page / risk-window setting (deadline at risk days)."""
+    st.markdown("### Now page")
+    st.caption(
+        "Control how many days before a deadline an item is shown as at risk on the Now page. "
+        "Default is 1 (items overdue, due today, or due tomorrow)."
+    )
+    current = get_deadline_near_days()
+    new_value = st.number_input(
+        "Deadline at risk (days)",
+        min_value=DEADLINE_NEAR_DAYS_MIN,
+        max_value=DEADLINE_NEAR_DAYS_MAX,
+        value=current,
+        step=1,
+        key="settings_deadline_near_days",
+    )
+    if new_value != current:
+        set_deadline_near_days(new_value)
+        st.success("Saved. The Now page will use this from the next refresh.")
+
+
 def _render_data_export_section() -> None:
     """Render JSON and CSV export controls for projects and handoffs."""
     st.markdown("### Data export")
@@ -479,23 +492,21 @@ def _render_data_export_section() -> None:
     payload: dict[str, Any] = get_export_payload()
 
     json_text = json.dumps(payload, indent=2)
-    if st.download_button(
+    st.download_button(
         "Download JSON backup",
         data=json_text,
         file_name="todo_backup.json",
         mime="application/json",
         key="settings_download_json_backup",
-    ):
-        log_application_action("data_export", format="json")
+    )
 
-    if st.download_button(
+    st.download_button(
         "Download CSV (handoffs)",
         data=_handoffs_csv_text(payload),
         file_name="handoff_handoffs.csv",
         mime="text/csv",
         key="settings_download_csv_backup",
-    ):
-        log_application_action("data_export", format="csv")
+    )
 
 
 def _render_send_log_section() -> None:
@@ -575,7 +586,6 @@ def _render_data_import_section() -> None:
         try:
             import_payload(payload.to_dict())
             st.success("Import complete — all data has been replaced.")
-            log_application_action("data_import", source_file=uploaded.name or "upload")
         except Exception as exc:
             st.error(f"Import failed: {exc}")
 
@@ -609,6 +619,9 @@ def render_system_settings_page() -> None:
 
     # App updates and code backups (panel from handoff.updater).
     render_update_panel(APP_VERSION)
+
+    st.divider()
+    _render_now_settings_section()
 
     st.divider()
     _render_rulebook_section()

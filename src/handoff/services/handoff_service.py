@@ -4,15 +4,6 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from handoff.core.models import CheckIn, CheckInType, Handoff, Project
-from handoff.core.page_models import HandoffQuery, NowSnapshot
-from handoff.core.rulebook import (
-    BuiltInSection,
-    RulebookSettings,
-    evaluate_open_handoff,
-    get_open_section_display_order,
-    get_section_explanations,
-)
 from handoff.data import conclude_handoff as _conclude_handoff
 from handoff.data import create_check_in as _create_check_in
 from handoff.data import create_handoff as _create_handoff
@@ -29,6 +20,13 @@ from handoff.data import query_risk_handoffs as _query_risk_handoffs
 from handoff.data import query_upcoming_handoffs as _query_upcoming_handoffs
 from handoff.data import reopen_handoff as _reopen_handoff
 from handoff.data import update_handoff as _update_handoff
+from handoff.models import CheckIn, CheckInType, Handoff, Project
+from handoff.page_models import HandoffQuery, NowSnapshot
+from handoff.rulebook import (
+    BuiltInSection,
+    evaluate_open_handoff,
+    get_open_section_display_order,
+)
 from handoff.search_parse import parse_search_query
 from handoff.services.project_service import list_projects
 from handoff.services.settings_service import get_rulebook_settings
@@ -58,41 +56,6 @@ def _sort_action_or_upcoming_handoffs(handoffs: list[Handoff]) -> list[Handoff]:
             h.created_at or datetime.max,
         ),
     )
-
-
-def get_rulebook_section_preview_counts(
-    settings: RulebookSettings | None = None,
-    *,
-    include_archived_projects: bool = False,
-) -> dict[str, int]:
-    """Return per-section counts for open handoffs under the given rulebook.
-
-    Uses the same evaluation semantics as the Now page: enabled rules only,
-    first-match-wins, fallback to Upcoming. Counts reflect the current
-    persisted handoffs evaluated against the rulebook.
-
-    Args:
-        settings: Rulebook to evaluate. Defaults to get_rulebook_settings().
-        include_archived_projects: When True, include handoffs from archived
-            projects. Defaults to False to match Now page behaviour.
-
-    Returns:
-        Mapping of section_id to count of open handoffs that would land there.
-    """
-    rulebook = settings or get_rulebook_settings()
-    open_handoffs = _query_open_handoffs_for_now(
-        project_ids=None,
-        pitchman_names=None,
-        search_text=None,
-        include_archived_projects=include_archived_projects,
-    )
-    today = date.today()
-    buckets: dict[str, int] = {}
-    for handoff in open_handoffs:
-        match_result = evaluate_open_handoff(handoff, settings=rulebook, today=today)
-        sid = match_result.section_id
-        buckets[sid] = buckets.get(sid, 0) + 1
-    return buckets
 
 
 def get_now_snapshot(
@@ -127,10 +90,13 @@ def get_now_snapshot(
     today = date.today()
 
     buckets: dict[str, list[Handoff]] = {}
-    section_explanations = get_section_explanations(rulebook)
+    section_explanations: dict[int, str] = {}
 
     for handoff in open_handoffs:
         match_result = evaluate_open_handoff(handoff, settings=rulebook, today=today)
+        h_id = handoff.id
+        if h_id is not None:
+            section_explanations[h_id] = match_result.explanation
         sid = match_result.section_id
         if sid not in buckets:
             buckets[sid] = []
@@ -173,7 +139,6 @@ def get_now_snapshot(
         action=action,
         custom_sections=custom_sections,
         upcoming=upcoming,
-        upcoming_section_id=fallback_section,
         concluded=concluded,
         projects=projects,
         pitchmen=pitchmen,

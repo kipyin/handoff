@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
-from handoff.bootstrap.docs import read_markdown_from_app_root
+from handoff.docs import read_markdown_from_app_root
 from handoff.version import __version__ as APP_VERSION
 
 

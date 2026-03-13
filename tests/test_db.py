@@ -9,8 +9,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from handoff.core.models import CheckInType
 from handoff.db import DatabaseInitializationError
+from handoff.models import CheckInType
 
 
 def _reload_db_module(db_path: Path, monkeypatch: pytest.MonkeyPatch):

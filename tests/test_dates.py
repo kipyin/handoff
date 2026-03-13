@@ -106,32 +106,6 @@ def test_format_date_smart_past(monkeypatch) -> None:
     assert format_date_smart(date(2026, 2, 21)) == "Sat, Feb 21st"
 
 
-def test_format_date_smart_past_teen_day_uses_th_suffix(monkeypatch) -> None:
-    """Teen day ordinals should always use 'th' suffix in absolute formatting."""
-
-    class _FixedDate(date):
-        @classmethod
-        def today(cls) -> date:
-            return cls(2026, 3, 20)
-
-    monkeypatch.setattr("handoff.dates.date", _FixedDate)
-    assert format_date_smart(date(2026, 3, 11)) == "Wed, Mar 11th"
-    assert format_date_smart(date(2026, 3, 12)) == "Thu, Mar 12th"
-    assert format_date_smart(date(2026, 3, 13)) == "Fri, Mar 13th"
-
-
-def test_format_date_smart_next_week_within_six_days(monkeypatch) -> None:
-    """Dates 2-6 days away in the next calendar week should render as 'next {day}'."""
-
-    class _FixedDate(date):
-        @classmethod
-        def today(cls) -> date:
-            return cls(2026, 3, 12)  # Thu
-
-    monkeypatch.setattr("handoff.dates.date", _FixedDate)
-    assert format_date_smart(date(2026, 3, 16)) == "next Mon"
-
-
 def test_week_bounds_midweek() -> None:
     """week_bounds returns Monday-Sunday for a midweek date."""
     mon, sun = week_bounds(date(2026, 2, 25))  # Wednesday

@@ -100,7 +100,7 @@ Handoff ships as a self-contained Windows zip (or macOS tar.gz) that bundles an 
 
 Version sync: `src/handoff/version.py` and `pyproject.toml` must match; `tests/test_version_sync.py` enforces this.
 
-Project layout: `app.py` (entrypoint), `src/handoff/` (package), `interfaces/streamlit/pages/`, `services/`, `tests/`. Pages import from `handoff.services`, never from `handoff.data` directly; the architecture test enforces this.
+Project layout: `app.py` (entrypoint), `src/handoff/` (package), `pages/`, `services/`, `tests/`. Pages import from `handoff.services`, never from `handoff.data` directly; the architecture test enforces this.
 
 ### Branching, commits, and releases
 
@@ -156,11 +156,11 @@ The navigation in `app.py` exposes five pages: Now and Dashboard in the first (u
 
 | Page | Icon | Module |
 |------|------|--------|
-| Now | 🎯 | `interfaces/streamlit/pages/now.py` (`render_now_page`) |
-| Projects | 📁 | `interfaces/streamlit/pages/projects.py` |
-| Dashboard | 📊 | `interfaces/streamlit/pages/dashboard.py` (`render_dashboard_page`) |
-| About | 📖 | `interfaces/streamlit/pages/about.py` (`render_about_page`) |
-| System Settings | ⚙️ | `interfaces/streamlit/pages/system_settings.py` (`render_system_settings_page`) |
+| Now | 🎯 | `pages/now.py` (`render_now_page`) |
+| Projects | 📁 | `pages/projects.py` |
+| Dashboard | 📊 | `pages/dashboard.py` (`render_dashboard_page`) |
+| About | 📖 | `pages/about.py` (`render_about_page`) |
+| System Settings | ⚙️ | `pages/system_settings.py` (`render_system_settings_page`) |
 
 There is no Calendar page.
 
@@ -192,7 +192,7 @@ uv run handoff typecheck   # pyright only
 uv run handoff test        # pytest only
 ```
 
-**pyright exclusions:** `data/`, `interfaces/streamlit/pages/dashboard.py`, `services/dashboard_service.py` — do not remove without understanding the consequences.
+**pyright exclusions:** `data.py`, `pages/dashboard.py`, `services/dashboard_service.py` — do not remove without understanding the consequences.
 
 ---
 

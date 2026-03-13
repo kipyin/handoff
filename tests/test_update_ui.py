@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from handoff.interfaces.streamlit.update_ui import _schedule_shutdown, render_update_panel
+from handoff.update_ui import _schedule_shutdown, render_update_panel
 
 
 def test_schedule_shutdown_starts_daemon_timer() -> None:
@@ -47,8 +47,8 @@ class TestRenderUpdatePanel:
     def test_no_patch_uploaded(self, monkeypatch: MagicMock, tmp_path: Path) -> None:
         """When no file is uploaded, basic UI is rendered without errors."""
         st_mock = self._make_st_mock()
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.update_ui.get_app_root", lambda: tmp_path)
 
         render_update_panel("2026.3.1")
 
@@ -63,18 +63,13 @@ class TestRenderUpdatePanel:
         st_mock.file_uploader.return_value = patch_file
         st_mock.button.return_value = False
 
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.get_patch_version", lambda f: "2026.4.0")
         monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui.get_patch_version", lambda f: "2026.4.0"
+            "handoff.update_ui._parse_version", lambda v: tuple(int(x) for x in v.split("."))
         )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui._parse_version",
-            lambda v: tuple(int(x) for x in v.split(".")),
-        )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui._can_apply_patch", lambda pv, av, aa: True
-        )
+        monkeypatch.setattr("handoff.update_ui._can_apply_patch", lambda pv, av, aa: True)
 
         render_update_panel("2026.3.1")
 
@@ -87,18 +82,14 @@ class TestRenderUpdatePanel:
         st_mock.file_uploader.return_value = patch_file
         st_mock.button.return_value = False
 
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.get_patch_version", lambda f: "2026.2.0")
         monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui.get_patch_version", lambda f: "2026.2.0"
-        )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui._parse_version",
+            "handoff.update_ui._parse_version",
             lambda v: tuple(int(x) for x in v.split(".")),
         )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui._can_apply_patch", lambda pv, av, aa: False
-        )
+        monkeypatch.setattr("handoff.update_ui._can_apply_patch", lambda pv, av, aa: False)
 
         render_update_panel("2026.3.1")
 
@@ -113,14 +104,10 @@ class TestRenderUpdatePanel:
         st_mock.file_uploader.return_value = patch_file
         st_mock.button.return_value = False
 
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui.get_patch_version", lambda f: None
-        )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui._can_apply_patch", lambda pv, av, aa: True
-        )
+        monkeypatch.setattr("handoff.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.get_patch_version", lambda f: None)
+        monkeypatch.setattr("handoff.update_ui._can_apply_patch", lambda pv, av, aa: True)
 
         render_update_panel("2026.3.1")
 
@@ -143,24 +130,16 @@ class TestRenderUpdatePanel:
         def mock_shutdown(delay):
             shutdown["called"] = True
 
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.get_patch_version", lambda f: "2026.4.0")
         monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui.get_patch_version", lambda f: "2026.4.0"
-        )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui._parse_version",
+            "handoff.update_ui._parse_version",
             lambda v: tuple(int(x) for x in v.split(".")),
         )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui._can_apply_patch", lambda pv, av, aa: True
-        )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui.stage_patch_with_backup", mock_stage
-        )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui._schedule_shutdown", mock_shutdown
-        )
+        monkeypatch.setattr("handoff.update_ui._can_apply_patch", lambda pv, av, aa: True)
+        monkeypatch.setattr("handoff.update_ui.stage_patch_with_backup", mock_stage)
+        monkeypatch.setattr("handoff.update_ui._schedule_shutdown", mock_shutdown)
 
         render_update_panel("2026.3.1")
 
@@ -176,8 +155,8 @@ class TestRenderUpdatePanel:
         st_mock = self._make_st_mock()
         st_mock.file_uploader.return_value = None
 
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.update_ui.get_app_root", lambda: tmp_path)
 
         render_update_panel("2026.3.1")
 
@@ -197,8 +176,8 @@ class TestRenderUpdatePanel:
         st_mock.selectbox.return_value = 0
         st_mock.button.return_value = False
 
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.update_ui.get_app_root", lambda: tmp_path)
 
         render_update_panel("2026.3.1")
 
@@ -227,14 +206,10 @@ class TestRenderUpdatePanel:
         def mock_shutdown(*args):
             shutdown["called"] = True
 
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
-        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui.stage_restore_from_snapshot", mock_restore
-        )
-        monkeypatch.setattr(
-            "handoff.interfaces.streamlit.update_ui._schedule_shutdown", mock_shutdown
-        )
+        monkeypatch.setattr("handoff.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr("handoff.update_ui.stage_restore_from_snapshot", mock_restore)
+        monkeypatch.setattr("handoff.update_ui._schedule_shutdown", mock_shutdown)
 
         render_update_panel("2026.3.1")
 

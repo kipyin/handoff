@@ -6,7 +6,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from handoff.interfaces.streamlit.pages.system_settings import _render_data_import_section
+from handoff.pages.system_settings import _render_data_import_section
 
 
 def _patch_streamlit(monkeypatch, uploaded) -> MagicMock:
@@ -15,7 +15,7 @@ def _patch_streamlit(monkeypatch, uploaded) -> MagicMock:
     st_mock.file_uploader.return_value = uploaded
     st_mock.checkbox.return_value = False
     st_mock.button.return_value = False
-    monkeypatch.setattr("handoff.interfaces.streamlit.pages.system_settings.st", st_mock)
+    monkeypatch.setattr("handoff.pages.system_settings.st", st_mock)
     return st_mock
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from handoff.core.page_models import HandoffQuery
+from handoff.page_models import HandoffQuery
 
 
 def test_handoff_query_defaults() -> None:

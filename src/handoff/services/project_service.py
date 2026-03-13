@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from handoff.core.models import Project
 from handoff.data import archive_project as _archive_project
 from handoff.data import create_project as _create_project
 from handoff.data import delete_project as _delete_project
@@ -10,6 +9,7 @@ from handoff.data import get_projects_with_handoff_summary as _get_projects_with
 from handoff.data import list_projects as _list_projects
 from handoff.data import rename_project as _rename_project
 from handoff.data import unarchive_project as _unarchive_project
+from handoff.models import Project
 
 
 def create_project(name: str) -> Project:
