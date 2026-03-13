@@ -48,8 +48,14 @@ def test_src_does_not_import_deprecated_top_level_core_modules() -> None:
     for path in SRC_FILES:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module in DEPRECATED_IMPORTS:
-                offenders.append(f"{path}:{node.lineno} imports {node.module}")
+            if isinstance(node, ast.ImportFrom):
+                if node.module in DEPRECATED_IMPORTS:
+                    offenders.append(f"{path}:{node.lineno} imports {node.module}")
+                if node.module == "handoff":
+                    for alias in node.names:
+                        full_name = f"handoff.{alias.name}"
+                        if full_name in DEPRECATED_IMPORTS:
+                            offenders.append(f"{path}:{node.lineno} imports {full_name}")
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name in DEPRECATED_IMPORTS:
