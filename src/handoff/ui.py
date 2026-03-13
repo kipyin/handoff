@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import streamlit as st
 
+from handoff.bootstrap.logging import configure_logging
+
 from .db import DatabaseInitializationError, init_db
-from .logging import configure_logging
 from .pages.about import render_about_page as _render_about_page_impl
 from .pages.dashboard import render_dashboard_page as _render_dashboard_page_impl
 from .pages.projects import render_projects_page as _render_projects_page_impl

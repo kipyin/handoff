@@ -96,7 +96,7 @@ def _ci_run(extra_args: list[str] | None = None) -> None:
 
 @app.command()
 def run(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
-    """Run the Streamlit app (applies Streamlit options from handoff.config)."""
+    """Run the Streamlit app (applies Streamlit options from handoff.bootstrap.config)."""
     extra_args = list(extra_args) if extra_args else []
     run_cmd(
         ["uv", "run", "python", "-m", "handoff", *extra_args],

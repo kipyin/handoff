@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from handoff.docs import get_readme_intro, read_markdown_from_app_root
+from handoff.bootstrap.docs import get_readme_intro, read_markdown_from_app_root
 
 
 def test_read_markdown_from_app_root_file_not_found(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """read_markdown_from_app_root returns a message when the file does not exist."""
-    monkeypatch.setattr("handoff.docs._get_app_root", lambda: tmp_path)
+    monkeypatch.setattr("handoff.bootstrap.docs._get_app_root", lambda: tmp_path)
     result = read_markdown_from_app_root("Nonexistent.md")
     assert "not found" in result
     assert "Nonexistent.md" in result
@@ -76,7 +76,7 @@ def test_get_readme_intro_extracts_first_section(
     """get_readme_intro returns text between the first and second ## headings."""
     readme = "## MyApp\n\nFirst paragraph.\n\nSecond paragraph.\n\n## Next Section\n\nMore."
     (tmp_path / "README.md").write_text(readme, encoding="utf-8")
-    monkeypatch.setattr("handoff.docs._get_app_root", lambda: tmp_path)
+    monkeypatch.setattr("handoff.bootstrap.docs._get_app_root", lambda: tmp_path)
     result = get_readme_intro()
     assert "First paragraph." in result
     assert "Second paragraph." in result

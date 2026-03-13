@@ -19,8 +19,8 @@ import streamlit as st
 from loguru import logger
 
 from handoff.backup_schema import BackupPayload
-from handoff.docs import get_readme_intro
-from handoff.logging import _get_logs_dir
+from handoff.bootstrap.docs import get_readme_intro
+from handoff.bootstrap.logging import _get_logs_dir
 from handoff.models import CheckInType
 from handoff.rulebook import (
     DeadlineWithinDaysCondition,

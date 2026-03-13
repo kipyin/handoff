@@ -13,12 +13,12 @@ from typing import Any, BinaryIO
 
 from loguru import logger
 
-from .paths import get_app_root
+from handoff.bootstrap.paths import get_app_root
 
 
 def _log_app_action(action: str, **details: Any) -> None:
-    """Log an application-level action (backup, update, restore). Delegates to handoff.logging."""
-    import handoff.logging as _logging
+    """Log an application-level action (backup, update, restore). Delegates to bootstrap.logging."""
+    import handoff.bootstrap.logging as _logging
 
     _logging.log_application_action(action, **details)
 
