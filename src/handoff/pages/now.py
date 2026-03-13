@@ -505,9 +505,10 @@ def _render_item(
     keep_expanded_for_mode = (
         allow_actions and show_check_in_controls and has_active_check_in_mode
     ) or (allow_reopen and has_active_reopen_mode)
-    # Auto-expand for due action items so check-in controls are visible without clicking
-    is_due_action = show_check_in_controls and _is_check_in_due(handoff)
-    with st.expander(header, expanded=editing or keep_expanded_for_mode or is_due_action):
+    # Default collapsed; only expand when editing or form mode is active.
+    # Removed is_due_action so operations on one handoff don't expand others.
+    expanded = editing or keep_expanded_for_mode
+    with st.expander(header, expanded=expanded):
         if match_explanation:
             st.caption(match_explanation)
         if not editing and allow_actions and show_check_in_controls:
@@ -629,7 +630,7 @@ def _render_add_form(
         pitchmen: List of pitchman names (unused but kept for UI symmetry).
         key_prefix: Prefix for Streamlit widget keys.
     """
-    with st.form(key=f"{key_prefix}_add_form", clear_on_submit=True):
+    with st.form(key=f"{key_prefix}_add_form", clear_on_submit=False):
         project_names = list(project_by_name)
         project_key = f"{key_prefix}_add_project"
         who_key = f"{key_prefix}_add_who"
@@ -637,15 +638,15 @@ def _render_add_form(
         next_key = f"{key_prefix}_add_next"
         deadline_key = f"{key_prefix}_add_deadline"
         context_key = f"{key_prefix}_add_context"
-        st.selectbox("Project", options=project_names, key=project_key)
+        st.selectbox("Project *", options=project_names, key=project_key)
         st.text_input("Who", placeholder="Person you're waiting on", key=who_key)
         st.text_input(
-            "Need back",
+            "Need back *",
             placeholder="Deliverable you need returned",
             key=need_key,
         )
         st.date_input(
-            "Next check",
+            "Next check *",
             value=date.today(),
             key=next_key,
         )
