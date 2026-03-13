@@ -951,6 +951,72 @@ def test_render_delete_confirmation_confirm_calls_delete_handoff(
     assert st_mock.session_state["now_flash_success"] == "Handoff deleted."
 
 
+def test_render_delete_confirmation_cancel_clears_action_mode_without_delete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cancel in delete confirmation clears mode and does not call delete service."""
+    st_mock = _build_streamlit_mock()
+
+    def _simulate_cancel_click(*args, **kwargs):
+        if args and args[0] == "Cancel":
+            on_click = kwargs.get("on_click")
+            if callable(on_click):
+                on_click(**kwargs.get("kwargs", {}))
+        return False
+
+    st_mock.button.side_effect = _simulate_cancel_click
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    delete_calls: list[int] = []
+    monkeypatch.setattr(
+        "handoff.pages.now.delete_handoff",
+        lambda handoff_id: delete_calls.append(handoff_id) or True,
+    )
+    handoff = _make_fake_handoff(handoff_id=96, need_back="Keep me")
+    st_mock.session_state["now_action_action_mode_96"] = "delete"
+
+    _render_delete_confirmation(handoff, key_prefix="now_action")
+
+    assert delete_calls == []
+    assert "now_action_action_mode_96" not in st_mock.session_state
+    assert "now_flash_success" not in st_mock.session_state
+    assert "now_flash_error" not in st_mock.session_state
+
+
+def test_render_delete_confirmation_confirm_failure_sets_flash_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Failed delete keeps mode active and sets an actionable error message."""
+    st_mock = _build_streamlit_mock()
+
+    def _simulate_confirm_click(*args, **kwargs):
+        if args and args[0] == "Confirm delete":
+            on_click = kwargs.get("on_click")
+            if callable(on_click):
+                on_click(**kwargs.get("kwargs", {}))
+        return False
+
+    st_mock.button.side_effect = _simulate_confirm_click
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    delete_calls: list[int] = []
+
+    def _fake_delete(handoff_id: int) -> bool:
+        delete_calls.append(handoff_id)
+        return False
+
+    monkeypatch.setattr("handoff.pages.now.delete_handoff", _fake_delete)
+    handoff = _make_fake_handoff(handoff_id=97, need_back="Delete fails")
+    st_mock.session_state["now_action_action_mode_97"] = "delete"
+
+    _render_delete_confirmation(handoff, key_prefix="now_action")
+
+    assert delete_calls == [97]
+    assert st_mock.session_state["now_action_action_mode_97"] == "delete"
+    assert st_mock.session_state["now_flash_error"] == "Could not delete handoff."
+    assert "now_flash_success" not in st_mock.session_state
+
+
 def test_render_item_keeps_expander_open_when_check_in_mode_active(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
