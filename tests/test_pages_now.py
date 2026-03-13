@@ -17,6 +17,7 @@ from handoff.pages.now import (
     _render_add_form,
     _render_check_in_flow,
     _render_check_in_trail,
+    _render_delete_confirmation,
     _render_item,
     _render_reopen_flow,
     _save_add_submission,
@@ -526,7 +527,7 @@ def test_render_now_page_include_archived_passed_to_list_pitchmen(
 def test_render_now_page_action_item_shows_check_in_segmented_control(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Action items render On-track/Delayed/Conclude via segmented_control and Edit."""
+    """Action items render On-track/Delayed/Conclude and Edit|Delete via segmented_control."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
 
@@ -555,22 +556,22 @@ def test_render_now_page_action_item_shows_check_in_segmented_control(
     render_now_page()
 
     assert st_mock.segmented_control.called
-    seg_call = next(c for c in st_mock.segmented_control.call_args_list if c[0])
-    assert list(
-        seg_call.kwargs.get("options", seg_call.args[1] if len(seg_call.args) > 1 else [])
-    ) == [
-        "on_track",
-        "delayed",
-        "concluded",
-    ]
-    labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
-    assert "Edit" in labels
+    seg_calls = [c for c in st_mock.segmented_control.call_args_list if c[0]]
+    assert len(seg_calls) >= 2
+    check_in_options = seg_calls[0].kwargs.get(
+        "options", seg_calls[0].args[1] if len(seg_calls[0].args) > 1 else []
+    )
+    assert list(check_in_options) == ["on_track", "delayed", "concluded"]
+    action_options = seg_calls[1].kwargs.get(
+        "options", seg_calls[1].args[1] if len(seg_calls[1].args) > 1 else []
+    )
+    assert list(action_options) == ["edit", "delete"]
 
 
 def test_render_now_page_risk_item_shows_check_in_segmented_control(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Risk items also render On-track/Delayed/Conclude via segmented_control."""
+    """Risk items also render On-track/Delayed/Conclude and Edit|Delete via segmented_control."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -590,16 +591,16 @@ def test_render_now_page_risk_item_shows_check_in_segmented_control(
     render_now_page()
 
     assert st_mock.segmented_control.called
-    seg_call = next(c for c in st_mock.segmented_control.call_args_list if c[0])
-    assert list(seg_call.kwargs.get("options", [])) == ["on_track", "delayed", "concluded"]
-    labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
-    assert "Edit" in labels
+    seg_calls = [c for c in st_mock.segmented_control.call_args_list if c[0]]
+    assert len(seg_calls) >= 2
+    assert list(seg_calls[0].kwargs.get("options", [])) == ["on_track", "delayed", "concluded"]
+    assert list(seg_calls[1].kwargs.get("options", [])) == ["edit", "delete"]
 
 
 def test_render_now_page_upcoming_item_shows_check_in_segmented_control(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Upcoming items also render On-track/Delayed/Conclude via segmented_control."""
+    """Upcoming items render check-in and Edit|Delete via segmented_control."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -618,10 +619,10 @@ def test_render_now_page_upcoming_item_shows_check_in_segmented_control(
     render_now_page()
 
     assert st_mock.segmented_control.called
-    seg_call = next(c for c in st_mock.segmented_control.call_args_list if c[0])
-    assert list(seg_call.kwargs.get("options", [])) == ["on_track", "delayed", "concluded"]
-    labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
-    assert "Edit" in labels
+    seg_calls = [c for c in st_mock.segmented_control.call_args_list if c[0]]
+    assert len(seg_calls) >= 2
+    assert list(seg_calls[0].kwargs.get("options", [])) == ["on_track", "delayed", "concluded"]
+    assert list(seg_calls[1].kwargs.get("options", [])) == ["edit", "delete"]
 
 
 def test_render_now_page_concluded_section_renders_items(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -885,7 +886,7 @@ def test_render_item_edit_save_validation_sets_flash_error(
 
     monkeypatch.setattr("handoff.pages.now.update_handoff", _fake_update_handoff)
     handoff = _make_fake_handoff(handoff_id=92, need_back="Original")
-    st_mock.session_state["now_editing_handoff_id"] = 92
+    st_mock.session_state["now_action_action_mode_92"] = "edit"
     edit_prefix = "now_action_edit_92"
     st_mock.session_state[f"{edit_prefix}_project"] = "Work"
     st_mock.session_state[f"{edit_prefix}_who"] = "Alice"
@@ -904,7 +905,7 @@ def test_render_item_edit_save_validation_sets_flash_error(
 
     assert update_calls == []
     assert st_mock.session_state["now_flash_error"] == "Need back is required."
-    assert st_mock.session_state["now_editing_handoff_id"] == 92
+    assert st_mock.session_state["now_action_action_mode_92"] == "edit"
 
 
 def test_render_item_edit_save_success_clears_editing_and_sets_flash(
@@ -922,7 +923,7 @@ def test_render_item_edit_save_success_clears_editing_and_sets_flash(
 
     monkeypatch.setattr("handoff.pages.now.update_handoff", _fake_update_handoff)
     handoff = _make_fake_handoff(handoff_id=93, need_back="Original")
-    st_mock.session_state["now_editing_handoff_id"] = 93
+    st_mock.session_state["now_action_action_mode_93"] = "edit"
     edit_prefix = "now_action_edit_93"
     st_mock.session_state[f"{edit_prefix}_project"] = "Work"
     st_mock.session_state[f"{edit_prefix}_who"] = "Alex"
@@ -947,8 +948,57 @@ def test_render_item_edit_save_success_clears_editing_and_sets_flash(
     assert update_calls[0][1]["next_check"] == date(2026, 3, 22)
     assert update_calls[0][1]["deadline"] == date(2026, 3, 30)
     assert update_calls[0][1]["notes"] == "context note"
-    assert "now_editing_handoff_id" not in st_mock.session_state
+    assert "now_action_action_mode_93" not in st_mock.session_state
     assert st_mock.session_state["now_flash_success"] == "Saved."
+
+
+def test_render_delete_confirmation_shows_irreversible_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Delete mode shows irreversible warning and Confirm delete button."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+    handoff = _make_fake_handoff(handoff_id=94, need_back="Item to delete")
+
+    _render_delete_confirmation(handoff, key_prefix="now_action")
+
+    st_mock.warning.assert_called_once_with("This action is irreversible.")
+    labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
+    assert "Confirm delete" in labels
+    assert "Cancel" in labels
+
+
+def test_render_delete_confirmation_confirm_calls_delete_handoff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Confirm delete button calls delete_handoff and clears action mode."""
+    st_mock = _build_streamlit_mock()
+
+    def _simulate_confirm_click(*args, **kwargs):
+        if args and args[0] == "Confirm delete":
+            on_click = kwargs.get("on_click")
+            if callable(on_click):
+                on_click(**kwargs.get("kwargs", {}))
+        return False
+
+    st_mock.button.side_effect = _simulate_confirm_click
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    delete_calls: list[int] = []
+
+    def _fake_delete(handoff_id: int) -> bool:
+        delete_calls.append(handoff_id)
+        return True
+
+    monkeypatch.setattr("handoff.pages.now.delete_handoff", _fake_delete)
+    handoff = _make_fake_handoff(handoff_id=95, need_back="Delete me")
+    st_mock.session_state["now_action_action_mode_95"] = "delete"
+
+    _render_delete_confirmation(handoff, key_prefix="now_action")
+
+    assert delete_calls == [95]
+    assert "now_action_action_mode_95" not in st_mock.session_state
+    assert st_mock.session_state["now_flash_success"] == "Handoff deleted."
 
 
 def test_render_item_keeps_expander_open_when_check_in_mode_active(
@@ -2097,7 +2147,7 @@ def test_render_item_only_expands_handoff_with_active_reopen_mode(
 def test_render_check_in_flow_edit_button_visible_with_allow_actions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Edit button is visible in check-in flow when allow_actions is True."""
+    """Edit|Delete segmented control is visible in check-in flow when allow_actions is True."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     handoff = _make_fake_handoff(handoff_id=102, next_check=date(2026, 3, 20))
@@ -2108,16 +2158,18 @@ def test_render_check_in_flow_edit_button_visible_with_allow_actions(
         allow_actions=True,
     )
 
-    edit_buttons = [
-        call[0][0] for call in st_mock.button.call_args_list if call[0] and call[0][0] == "Edit"
-    ]
-    assert len(edit_buttons) == 1
+    seg_calls = st_mock.segmented_control.call_args_list
+    action_seg = next(
+        (c for c in seg_calls if c.kwargs.get("options") == ["edit", "delete"]),
+        None,
+    )
+    assert action_seg is not None
 
 
 def test_render_check_in_flow_edit_button_hidden_without_allow_actions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Edit button is not rendered when allow_actions is False."""
+    """Edit|Delete segmented control is not rendered when allow_actions is False."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     handoff = _make_fake_handoff(handoff_id=103, next_check=date(2026, 3, 20))
@@ -2128,10 +2180,8 @@ def test_render_check_in_flow_edit_button_hidden_without_allow_actions(
         allow_actions=False,
     )
 
-    edit_buttons = [
-        call[0][0] for call in st_mock.button.call_args_list if call[0] and call[0][0] == "Edit"
-    ]
-    assert len(edit_buttons) == 0
+    seg_calls = st_mock.segmented_control.call_args_list
+    assert len(seg_calls) == 1  # Only check-in control, no action control
 
 
 def test_render_check_in_flow_segmented_control_options_correct(
@@ -2225,7 +2275,7 @@ def test_render_check_in_flow_note_label_delayed_changed_from_why_delayed(
 def test_render_item_columns_layout_for_check_in_controls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Check-in flow uses [3, 1] column layout for segmented control + Edit button."""
+    """Check-in flow uses [3, 1] column layout for check-in and Edit|Delete segmented controls."""
     st_mock = _build_streamlit_mock()
     columns_calls: list = []
 
@@ -2246,7 +2296,7 @@ def test_render_item_columns_layout_for_check_in_controls(
 def test_render_check_in_flow_upcoming_shows_controls_and_edit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Upcoming items render check-in segmented control with Edit button."""
+    """Upcoming items render check-in segmented control with Edit|Delete control."""
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     mock_project = SimpleNamespace(id=1, name="Work")
@@ -2264,11 +2314,13 @@ def test_render_check_in_flow_upcoming_shows_controls_and_edit(
 
     render_now_page()
 
-    # Verify segmented control is rendered
     assert st_mock.segmented_control.called
-    # Verify Edit button is visible in upcoming items
-    labels = [call[0][0] for call in st_mock.button.call_args_list if call[0]]
-    assert "Edit" in labels
+    seg_calls = [c for c in st_mock.segmented_control.call_args_list if c[0]]
+    action_seg = next(
+        (c for c in seg_calls if list(c.kwargs.get("options", [])) == ["edit", "delete"]),
+        None,
+    )
+    assert action_seg is not None
 
 
 def test_render_check_in_flow_save_clears_mode_and_shows_success(
