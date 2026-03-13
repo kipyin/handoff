@@ -42,6 +42,7 @@ class TestRenderDashboardPage:
         export_has_data=False,
     ):
         st_mock = MagicMock()
+        st_mock.download_button.return_value = False
 
         class FakeCol:
             def __enter__(self):
@@ -156,3 +157,20 @@ class TestRenderDashboardPage:
         render_dashboard_page()
         st_mock.markdown.assert_any_call("#### Export metrics")
         assert st_mock.download_button.call_count >= 2
+
+    def test_export_downloads_log_application_actions(self, monkeypatch) -> None:
+        st_mock = self._patch(monkeypatch, export_has_data=True)
+        st_mock.download_button.side_effect = [True, True]
+        logged: list[tuple[str, dict[str, str]]] = []
+
+        monkeypatch.setattr(
+            "handoff.pages.dashboard.log_application_action",
+            lambda action, **details: logged.append((action, details)),
+        )
+
+        render_dashboard_page()
+
+        assert logged == [
+            ("metrics_export", {"format": "csv"}),
+            ("metrics_export", {"format": "json"}),
+        ]
