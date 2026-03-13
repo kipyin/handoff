@@ -31,7 +31,11 @@ def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _patch_uat_date(monkeypatch: pytest.MonkeyPatch, fixed_date_class: type[date]) -> None:
-    """Patch date.today() in the modules that drive seeded UAT behaviour."""
+    """Patch date.today() in the modules that drive seeded UAT behaviour.
+
+    Keep this list in sync with any new Now-page or supporting modules that call
+    ``date.today()`` directly; seeded UAT tests rely on a fixed reference date.
+    """
     import handoff.data.handoffs as data_handoffs
     import handoff.data.queries as data_queries
     import handoff.dates as handoff_dates
@@ -78,7 +82,7 @@ def _now_page_entry() -> None:
 
 def test_now_page_renders_with_seeded_uat_db(seeded_uat_db: Path) -> None:
     """Seeded demo data should render the Now page without errors."""
-    del seeded_uat_db
+    _ = seeded_uat_db
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=APP_TEST_TIMEOUT)
 

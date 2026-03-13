@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Any
+from types import ModuleType
 
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import close_all_sessions
@@ -16,7 +16,8 @@ from handoff.dates import add_business_days
 
 def _build_engine(db_path: Path) -> Engine:
     """Create and initialize an engine for the requested SQLite path."""
-    from handoff.core import models as _models  # noqa: F401
+    # Import models so SQLModel metadata is populated before create_all() runs.
+    import handoff.core.models  # noqa: F401
     from handoff.migrations import run_pending_migrations
 
     engine = create_engine(f"sqlite:///{db_path}", echo=False)
@@ -35,7 +36,7 @@ def _patch_data_session_context(engine: Engine):
     import handoff.data.projects as data_projects
     import handoff.data.queries as data_queries
 
-    modules: tuple[Any, ...] = (
+    modules: tuple[ModuleType, ...] = (
         data_activity,
         data_handoffs,
         data_io,
@@ -50,14 +51,14 @@ def _patch_data_session_context(engine: Engine):
             yield session
 
     for module in modules:
-        module.session_context = session_context
+        module.session_context = session_context  # type: ignore[attr-defined]
 
     try:
         yield data
     finally:
         close_all_sessions()
         for module, original_context in original_contexts.items():
-            module.session_context = original_context
+            module.session_context = original_context  # type: ignore[attr-defined]
 
 
 def _seed_projects(data) -> dict[str, int]:

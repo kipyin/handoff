@@ -115,7 +115,8 @@ def _db_has_projects(db_path: Path) -> bool:
     try:
         with sqlite3.connect(db_path) as conn:
             table_exists = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='project'"
+                "SELECT 1 FROM sqlite_master WHERE type=? AND name=?",
+                ("table", "project"),
             ).fetchone()
             if table_exists is None:
                 return False

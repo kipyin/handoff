@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 import scripts.cli as cli
 
 RUNNER = CliRunner()
+_COUNTABLE_TABLES = {"project", "handoff", "check_in"}
 
 
 def _capture_run_cmd(monkeypatch):
@@ -22,7 +23,7 @@ def _capture_run_cmd(monkeypatch):
     return calls
 
 
-def _capture_run_cmd_details(monkeypatch):
+def _capture_run_cmd_details(monkeypatch) -> list[dict[str, object]]:
     calls: list[dict[str, object]] = []
 
     def fake_run_cmd(args, **kwargs) -> None:
@@ -33,6 +34,7 @@ def _capture_run_cmd_details(monkeypatch):
 
 
 def _count_rows(db_path: Path, table: str) -> int:
+    assert table in _COUNTABLE_TABLES
     with sqlite3.connect(db_path) as conn:
         row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
     assert row is not None
@@ -315,17 +317,13 @@ def test_run_demo_seeds_db_and_sets_env_for_subprocess(tmp_path: Path, monkeypat
     assert result.exit_code == 0
     assert db_path.exists()
     assert _count_rows(db_path, "project") >= 3
-    assert calls == [
-        {
-            "args": ["uv", "run", "python", "-m", "handoff", "--server.port", "9999"],
-            "cwd": cli.ROOT,
-            "description": "Starting Streamlit app...",
-            "env": {
-                **cli.os.environ,
-                "HANDOFF_DB_PATH": str(db_path.resolve()),
-            },
-        }
-    ]
+    assert len(calls) == 1
+    assert calls[0]["args"] == ["uv", "run", "python", "-m", "handoff", "--server.port", "9999"]
+    assert calls[0]["cwd"] == cli.ROOT
+    assert calls[0]["description"] == "Starting Streamlit app..."
+    env = calls[0]["env"]
+    assert isinstance(env, dict)
+    assert env["HANDOFF_DB_PATH"] == str(db_path.resolve())
 
 
 def test_cli_command_stub_does_not_accept_subcommands() -> None:

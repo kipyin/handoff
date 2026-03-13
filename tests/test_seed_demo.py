@@ -8,8 +8,11 @@ from pathlib import Path
 
 from scripts.seed_demo import seed_demo_db
 
+_COUNTABLE_TABLES = {"project", "handoff", "check_in"}
+
 
 def _count_rows(db_path: Path, table: str) -> int:
+    assert table in _COUNTABLE_TABLES
     with sqlite3.connect(db_path) as conn:
         row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
     assert row is not None
