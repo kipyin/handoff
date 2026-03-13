@@ -12,12 +12,16 @@ from handoff.models import CheckIn, CheckInType
 from handoff.page_models import NowSnapshot
 from handoff.pages.now import (
     _NOW_ADD_EXPANDED_KEY,
+    _build_project_options,
     _check_in_header,
     _is_check_in_due,
     _render_add_form,
     _render_check_in_flow,
     _render_check_in_trail,
+    _render_edit_form,
     _render_item,
+    _render_filters,
+    _project_option_label_for_id,
     _render_reopen_flow,
     _save_add_submission,
     _save_check_in_submission,
@@ -117,6 +121,43 @@ def _simulate_widget_submit(label_to_click: str):
         return False
 
     return _side_effect
+
+
+def test_build_project_options_disambiguates_duplicate_names() -> None:
+    """Duplicate project names gain stable labels so widgets stay unambiguous."""
+    projects = [
+        SimpleNamespace(id=1, name="Work"),
+        SimpleNamespace(id=2, name="Work"),
+        SimpleNamespace(id=3, name="Ops"),
+    ]
+
+    project_options = _build_project_options(projects)
+
+    assert list(project_options) == ["Work (#1)", "Work (#2)", "Ops"]
+    assert project_options["Work (#2)"].id == 2
+    assert _project_option_label_for_id(project_options, 2) == "Work (#2)"
+
+
+def test_render_filters_duplicate_project_label_returns_selected_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Project filters keep duplicate names distinct by mapping labels back to ids."""
+    st_mock = _build_streamlit_mock()
+    st_mock.multiselect.side_effect = [["Work (#2)"], []]
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    project_ids, pitchman_names, search_text = _render_filters(
+        project_options={
+            "Work (#1)": SimpleNamespace(id=1, name="Work"),
+            "Work (#2)": SimpleNamespace(id=2, name="Work"),
+        },
+        pitchmen=["Alice"],
+        key_prefix="now",
+    )
+
+    assert project_ids == [2]
+    assert pitchman_names is None
+    assert search_text is None
 
 
 def test_render_now_page_no_projects_shows_info(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -383,10 +424,10 @@ def test_render_now_page_add_form_uses_snapshot_pitchmen(
     )
     add_form_calls: list[dict] = []
 
-    def _capture_add_form(project_by_name, pitchmen, key_prefix):
+    def _capture_add_form(project_options, pitchmen, key_prefix):
         add_form_calls.append(
             {
-                "project_by_name": project_by_name,
+                "project_options": project_options,
                 "pitchmen": pitchmen,
                 "key_prefix": key_prefix,
             }
@@ -777,7 +818,7 @@ def test_render_item_edit_save_validation_sets_flash_error(
     _render_item(
         handoff,
         key_prefix="now_action",
-        project_by_name={"Work": SimpleNamespace(id=1, name="Work")},
+        project_options={"Work": SimpleNamespace(id=1, name="Work")},
         allow_actions=True,
         show_check_in_controls=True,
     )
@@ -814,7 +855,7 @@ def test_render_item_edit_save_success_clears_editing_and_sets_flash(
     _render_item(
         handoff,
         key_prefix="now_action",
-        project_by_name={"Work": SimpleNamespace(id=1, name="Work")},
+        project_options={"Work": SimpleNamespace(id=1, name="Work")},
         allow_actions=True,
         show_check_in_controls=True,
     )
@@ -831,6 +872,29 @@ def test_render_item_edit_save_success_clears_editing_and_sets_flash(
     assert st_mock.session_state["now_flash_success"] == "Saved."
 
 
+def test_render_edit_form_defaults_to_current_duplicate_project(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Edit form keeps the handoff on its current duplicate-named project by default."""
+    st_mock = _build_streamlit_mock()
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    handoff = _make_fake_handoff(handoff_id=94, project_name="Work")
+    handoff.project = SimpleNamespace(id=2, name="Work")
+
+    _render_edit_form(
+        handoff,
+        {
+            "Work (#1)": SimpleNamespace(id=1, name="Work"),
+            "Work (#2)": SimpleNamespace(id=2, name="Work"),
+        },
+        key_prefix="now_action_edit_94",
+    )
+
+    assert st_mock.selectbox.call_args.kwargs["options"] == ["Work (#1)", "Work (#2)"]
+    assert st_mock.selectbox.call_args.kwargs["index"] == 1
+
+
 def test_render_item_keeps_expander_open_when_check_in_mode_active(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -838,13 +902,13 @@ def test_render_item_keeps_expander_open_when_check_in_mode_active(
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     handoff = _make_fake_handoff(handoff_id=88, need_back="Needs check-in")
-    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    project_options = {"Work": SimpleNamespace(id=1, name="Work")}
     st_mock.session_state["now_action_check_in_mode_88"] = "on_track"
 
     _render_item(
         handoff,
         key_prefix="now_action",
-        project_by_name=project_by_name,
+        project_options=project_options,
         show_check_in_controls=True,
         allow_actions=True,
     )
@@ -859,13 +923,13 @@ def test_render_item_keeps_expander_open_when_reopen_mode_active(
     st_mock = _build_streamlit_mock()
     monkeypatch.setattr("handoff.pages.now.st", st_mock)
     handoff = _make_fake_handoff(handoff_id=89, need_back="Closed")
-    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    project_options = {"Work": SimpleNamespace(id=1, name="Work")}
     st_mock.session_state["now_concluded_reopen_mode_89"] = "reopen"
 
     _render_item(
         handoff,
         key_prefix="now_concluded",
-        project_by_name=project_by_name,
+        project_options=project_options,
         allow_actions=False,
         allow_reopen=True,
     )
@@ -903,6 +967,36 @@ def test_render_add_form_submit_calls_create_handoff(monkeypatch: pytest.MonkeyP
     assert create_calls[0]["notes"] == "include PR links"
     assert st_mock.session_state["now_flash_success"] == "Added."
     assert _NOW_ADD_EXPANDED_KEY not in st_mock.session_state
+
+
+def test_render_add_form_duplicate_project_label_calls_create_handoff_for_selected_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Add form uses the selected duplicate-name label's project id."""
+    st_mock = _build_streamlit_mock()
+    st_mock.form_submit_button.side_effect = _simulate_widget_submit("Add")
+    monkeypatch.setattr("handoff.pages.now.st", st_mock)
+
+    create_calls: list[dict[str, object]] = []
+    monkeypatch.setattr("handoff.pages.now.create_handoff", lambda **kw: create_calls.append(kw))
+    st_mock.session_state["now_add_project"] = "Work (#2)"
+    st_mock.session_state["now_add_who"] = "Alex"
+    st_mock.session_state["now_add_need"] = "Ship release notes"
+    st_mock.session_state["now_add_next"] = date(2026, 3, 25)
+    st_mock.session_state["now_add_deadline"] = None
+    st_mock.session_state["now_add_context"] = ""
+
+    _render_add_form(
+        {
+            "Work (#1)": SimpleNamespace(id=1, name="Work"),
+            "Work (#2)": SimpleNamespace(id=2, name="Work"),
+        },
+        [],
+        key_prefix="now",
+    )
+
+    assert len(create_calls) == 1
+    assert create_calls[0]["project_id"] == 2
 
 
 def test_render_add_form_missing_need_back_sets_flash_error(
@@ -1730,7 +1824,7 @@ def test_save_edit_submission_logs_instrumentation(
 
     _save_edit_submission(
         handoff_id=1,
-        project_by_name={"Work": SimpleNamespace(id=1)},
+        project_options={"Work": SimpleNamespace(id=1)},
         project_key="test_project",
         who_key="test_who",
         need_key="test_need",
@@ -1766,7 +1860,7 @@ def test_save_add_submission_logs_instrumentation(
     st_mock.session_state["test_context"] = "New context"
 
     _save_add_submission(
-        project_by_name={"Work": SimpleNamespace(id=1)},
+        project_options={"Work": SimpleNamespace(id=1)},
         project_key="test_project",
         who_key="test_who",
         need_key="test_need",
@@ -1832,12 +1926,12 @@ def test_render_item_auto_expands_due_action_items(
         need_back="Due now",
         next_check=date(2026, 3, 9),
     )
-    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    project_options = {"Work": SimpleNamespace(id=1, name="Work")}
 
     _render_item(
         due_handoff,
         key_prefix="now_action",
-        project_by_name=project_by_name,
+        project_options=project_options,
         show_check_in_controls=True,
         allow_actions=True,
     )
@@ -1859,12 +1953,12 @@ def test_render_item_does_not_auto_expand_future_items(
         need_back="Future check",
         next_check=date(2099, 1, 1),
     )
-    project_by_name = {"Work": SimpleNamespace(id=1, name="Work")}
+    project_options = {"Work": SimpleNamespace(id=1, name="Work")}
 
     _render_item(
         future_handoff,
         key_prefix="now_action",
-        project_by_name=project_by_name,
+        project_options=project_options,
         show_check_in_controls=True,
         allow_actions=True,
     )
