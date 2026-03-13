@@ -10,9 +10,9 @@ from sqlalchemy import exists, func
 from sqlalchemy.orm import selectinload
 from sqlmodel import or_, select
 
+from handoff.core.handoff_lifecycle import _latest_check_in, handoff_is_open
 from handoff.core.models import CheckIn, CheckInType, Handoff, Project
 from handoff.core.page_models import HandoffQuery
-from handoff.data.handoffs import _latest_check_in, handoff_is_open
 from handoff.db import session_context
 
 
