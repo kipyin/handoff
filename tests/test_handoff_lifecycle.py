@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-from handoff.handoff_lifecycle import (
+from handoff.core.handoff_lifecycle import (
     _latest_check_in,
     get_handoff_close_date,
     handoff_is_closed,
     handoff_is_open,
 )
-from handoff.models import CheckIn, CheckInType, Handoff
+from handoff.core.models import CheckIn, CheckInType, Handoff
 
 
 def test_latest_check_in_returns_none_for_empty_check_in_trail() -> None:

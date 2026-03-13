@@ -9,11 +9,19 @@ import shutil
 import zipfile
 from datetime import datetime
 from pathlib import Path
-from typing import BinaryIO
+from typing import Any, BinaryIO
 
 from loguru import logger
 
-from .paths import get_app_root
+from handoff.bootstrap.paths import get_app_root
+
+
+def _log_app_action(action: str, **details: Any) -> None:
+    """Log an application-level action (backup, update, restore). Delegates to bootstrap.logging."""
+    import handoff.bootstrap.logging as _logging
+
+    _logging.log_application_action(action, **details)
+
 
 ALLOWED_PREFIXES = ("app.py", "src/", "README.md", "RELEASE_NOTES.md")
 UPDATE_STAGING_DIR = "update"
@@ -196,6 +204,11 @@ def stage_patch_with_backup(
     backup_root.mkdir(parents=True, exist_ok=True)
     backed_up = _backup_existing_files(paths_to_backup, app_root, backup_root)
     logger.info("Backup of {} created at {}", backed_up, backup_root)
+    _log_app_action(
+        "app_backup",
+        backup_path=str(backup_root),
+        target_version=target_version or "(none)",
+    )
 
     sentinel = app_root / LAST_UPDATE_BACKUP_FILE
     try:
@@ -310,9 +323,11 @@ def apply_patch_zip(file_like: BinaryIO, app_root: Path | None = None) -> str:
 
     if target_version:
         logger.info("Applied patch to update app to version {}", target_version)
+        _log_app_action("app_update", target_version=target_version)
         msg = f"Update applied. Target version: {target_version}."
     else:
         logger.info("Applied patch without explicit VERSION marker.")
+        _log_app_action("app_update")
         msg = "Update applied."
 
     if skipped:
@@ -398,6 +413,7 @@ def apply_staged_update(app_root: Path | None = None) -> str | None:
         logger.warning("Could not write {}: {}", sentinel, e)
 
     logger.info("Applied staged update; backup at {}", backup_path_str)
+    _log_app_action("app_update", backup_path=backup_path_str)
     return backup_path_str
 
 
@@ -492,6 +508,7 @@ def stage_restore_from_snapshot(
         raise FileNotFoundError(f"Backup snapshot not found: {snapshot}")
 
     logger.info("Restore from snapshot: {}", snapshot)
+    _log_app_action("app_restore", snapshot=str(snapshot), staged="true")
 
     staging = app_root / UPDATE_STAGING_DIR
     if staging.exists():
@@ -546,6 +563,7 @@ def _restore_backup_snapshot(snapshot: Path, app_root: Path) -> str:
 
     _clear_pycache(app_root)
     logger.info("Restored backup snapshot from {}", snapshot)
+    _log_app_action("app_restore", snapshot=str(snapshot), applied="true")
     return "Backup restored."
 
 

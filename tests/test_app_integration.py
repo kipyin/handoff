@@ -35,6 +35,9 @@ def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     db.dispose_db()  # close any existing engine before reload
     importlib.reload(db)
+    import handoff.interfaces.streamlit.ui as streamlit_ui
+
+    importlib.reload(streamlit_ui)
     import handoff.ui as ui
 
     importlib.reload(ui)
@@ -51,7 +54,7 @@ def app_test_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def _projects_page_entry() -> None:
     """Single-page entrypoint for Projects: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.projects import render_projects_page
+    from handoff.interfaces.streamlit.pages.projects import render_projects_page
 
     ui.setup("2026.2.24")
     render_projects_page()
@@ -60,7 +63,7 @@ def _projects_page_entry() -> None:
 def _system_settings_page_entry() -> None:
     """Single-page entrypoint for System Settings: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.system_settings import render_system_settings_page
+    from handoff.interfaces.streamlit.pages.system_settings import render_system_settings_page
 
     ui.setup("2026.2.24")
     render_system_settings_page()
@@ -69,7 +72,7 @@ def _system_settings_page_entry() -> None:
 def _dashboard_page_entry() -> None:
     """Single-page entrypoint for Dashboard: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.dashboard import render_dashboard_page
+    from handoff.interfaces.streamlit.pages.dashboard import render_dashboard_page
 
     ui.setup("2026.2.24")
     render_dashboard_page()
@@ -78,7 +81,7 @@ def _dashboard_page_entry() -> None:
 def _about_page_entry() -> None:
     """Single-page entrypoint for About: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.about import render_about_page
+    from handoff.interfaces.streamlit.pages.about import render_about_page
 
     ui.setup("2026.2.24")
     render_about_page()
@@ -87,7 +90,7 @@ def _about_page_entry() -> None:
 def _now_page_entry() -> None:
     """Single-page entrypoint for Now: setup + render."""
     import handoff.ui as ui
-    from handoff.pages.now import render_now_page
+    from handoff.interfaces.streamlit.pages.now import render_now_page
 
     ui.setup("2026.2.24")
     render_now_page()
@@ -102,12 +105,12 @@ def test_projects_page_renders_with_app_test(app_test_db: Path) -> None:
 
 
 def test_projects_page_archived_toggle_survives_models_reload(app_test_db: Path) -> None:
-    """Toggling archived projects survives a hot reload of handoff.models."""
+    """Toggling archived projects survives a hot reload of handoff.core.models."""
     import importlib
 
+    import handoff.core.models as models
     import handoff.data as data
     import handoff.db as db
-    import handoff.models as models
 
     db.init_db()
     active = data.create_project("Active")
@@ -267,17 +270,15 @@ def test_now_page_conclude_button_closes_handoff(app_test_db: Path) -> None:
     )
     assert handoff.id is not None
 
+    handoff_id = handoff.id
+    assert handoff_id is not None
     at = AppTest.from_function(_now_page_entry)
+    # Pre-set check-in mode to concluded (avoids set_value issues with multiple button groups).
+    at.session_state[f"now_action_check_in_mode_{handoff_id}"] = "concluded"
     at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
-    # Select "Conclude" from check-in segmented control via set_value.
-    button_groups = at.get("button_group")
-    assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["concluded"]).run(timeout=APP_TEST_TIMEOUT)
-    assert len(at.exception) == 0
-
-    # After selecting Conclude, a save form appears.
+    # Save form appears when mode is concluded.
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"]
     assert save_buttons, "Expected 'Save conclude check-in' button not found"
     save_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
@@ -303,14 +304,10 @@ def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: 
     )
     assert handoff.id is not None
 
+    handoff_id = handoff.id
     at = AppTest.from_function(_now_page_entry)
+    at.session_state[f"now_action_check_in_mode_{handoff_id}"] = "concluded"
     at.run(timeout=APP_TEST_TIMEOUT)
-    assert len(at.exception) == 0
-
-    # Select "Conclude" from check-in segmented control.
-    button_groups = at.get("button_group")
-    assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["concluded"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_conclude_buttons = [
@@ -339,6 +336,38 @@ def test_now_page_conclude_then_reopen_moves_item_out_of_concluded(app_test_db: 
     assert "Conclude and reopen this handoff" not in concluded_names
 
 
+def test_now_page_delete_confirmation_removes_handoff(app_test_db: Path) -> None:
+    """Delete confirmation flow removes the handoff from persistence."""
+    db.init_db()
+    project = data.create_project("Now Delete Test")
+    assert project.id is not None
+    handoff = data.create_handoff(
+        project_id=project.id,
+        need_back="Delete this handoff",
+        next_check=date(2000, 1, 1),
+        pitchman="Casey",
+    )
+    assert handoff.id is not None
+
+    handoff_id = handoff.id
+    at = AppTest.from_function(_now_page_entry)
+    at.session_state[f"now_action_action_mode_{handoff_id}"] = "delete"
+    at.run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.exception) == 0
+
+    confirm_delete_buttons = [b for b in at.button if getattr(b, "label", None) == "Confirm delete"]
+    assert confirm_delete_buttons, "Expected 'Confirm delete' button not found"
+    confirm_delete_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.exception) == 0
+
+    remaining = [
+        h
+        for h in data.query_handoffs(project_ids=[project.id], include_concluded=True)
+        if h.id == handoff_id
+    ]
+    assert remaining == []
+
+
 def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db: Path) -> None:
     """Late (due) check-in records today's check-in date."""
     today = date.today()
@@ -354,14 +383,10 @@ def test_now_page_due_check_in_records_today_and_updates_next_check(app_test_db:
     )
     assert handoff.id is not None
 
+    handoff_id = handoff.id
     at = AppTest.from_function(_now_page_entry)
+    at.session_state[f"now_action_check_in_mode_{handoff_id}"] = "on_track"
     at.run(timeout=APP_TEST_TIMEOUT)
-    assert len(at.exception) == 0
-
-    # Select "On-track" from check-in segmented control.
-    button_groups = at.get("button_group")
-    assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["on_track"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
@@ -397,14 +422,11 @@ def test_now_page_early_check_in_records_today_and_keeps_planned_next_check(
     )
     assert handoff.id is not None
 
+    handoff_id = handoff.id
     at = AppTest.from_function(_now_page_entry)
+    # Upcoming section uses now_upcoming_ prefix.
+    at.session_state[f"now_upcoming_check_in_mode_{handoff_id}"] = "on_track"
     at.run(timeout=APP_TEST_TIMEOUT)
-    assert len(at.exception) == 0
-
-    # Select "On-track" from check-in segmented control (upcoming uses first button_group).
-    button_groups = at.get("button_group")
-    assert button_groups, "Expected check-in segmented control not found"
-    button_groups[0].set_value(["on_track"]).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save check-in"]
@@ -452,8 +474,8 @@ def test_now_page_archived_toggle_allows_reopen_under_latest_lifecycle(app_test_
     assert len(at.exception) == 0
     assert not [b for b in at.button if getattr(b, "label", None) == "Reopen"]
 
-    assert len(at.checkbox) >= 1
-    at.checkbox[0].check().run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.toggle) >= 1
+    at.toggle[0].set_value(True).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
@@ -569,7 +591,7 @@ def test_dashboard_page_pm_metrics_smoke_with_seed_data(app_test_db: Path) -> No
 
     metric_labels = [getattr(metric, "label", None) for metric in at.metric]
     assert "At risk now" in metric_labels
-    assert "Action overdue" in metric_labels
+    assert "Missed check-in" in metric_labels
     assert "Open handoffs" in metric_labels
     assert "Reopen rate (90d)" in metric_labels
 

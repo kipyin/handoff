@@ -8,8 +8,8 @@ from contextlib import suppress
 
 import streamlit as st
 
-from .paths import get_app_root
-from .updater import (
+from handoff.bootstrap.paths import get_app_root
+from handoff.updater import (
     LAST_UPDATE_BACKUP_FILE,
     _can_apply_patch,
     _format_snapshot_label,

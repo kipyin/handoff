@@ -8,8 +8,8 @@ from datetime import date
 import pytest
 
 import handoff.data as data
-from handoff.models import CheckIn, CheckInType, Handoff, Project
-from handoff.rulebook import (
+from handoff.core.models import CheckIn, CheckInType, Handoff, Project
+from handoff.core.rulebook import (
     BuiltInSection,
     DeadlineWithinDaysCondition,
     LatestCheckInTypeIsCondition,
@@ -21,6 +21,7 @@ from handoff.rulebook import (
     build_default_rulebook_settings,
     evaluate_open_handoff,
     get_open_section_display_order,
+    get_section_explanations,
     is_built_in_rule,
     rule_condition_from_dict,
     rule_condition_to_dict,
@@ -152,6 +153,85 @@ def test_get_open_section_display_order_does_not_duplicate_fallback_section() ->
     )
 
     assert get_open_section_display_order(settings) == ["manual_triage"]
+
+
+def test_get_section_explanations_use_first_enabled_rule_and_add_fallback() -> None:
+    """Section explanations use first enabled rule per section and include fallback text."""
+    settings = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="disabled_custom",
+                name="Disabled custom",
+                section_id="blocked",
+                priority=5,
+                enabled=False,
+                match_reason="Disabled reason should never appear.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="blocked_primary",
+                name="Blocked primary",
+                section_id="blocked",
+                priority=10,
+                enabled=True,
+                match_reason="Primary blocked reason.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="blocked_secondary",
+                name="Blocked secondary",
+                section_id="blocked",
+                priority=20,
+                enabled=True,
+                match_reason="Secondary blocked reason.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+            RuleDefinition(
+                rule_id="risk_rule",
+                name="Risk rule",
+                section_id=BuiltInSection.RISK.value,
+                priority=30,
+                enabled=True,
+                match_reason="Risk reason.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+        ),
+        open_items_fallback_section="manual_triage",
+    )
+
+    explanations = get_section_explanations(settings)
+
+    assert explanations["blocked"] == "Primary blocked reason."
+    assert explanations["risk"] == "Risk reason."
+    assert explanations["manual_triage"] == (
+        "No enabled rule matched; item falls back to Manual Triage."
+    )
+    assert "Disabled reason should never appear." not in explanations.values()
+    assert "Secondary blocked reason." not in explanations.values()
+
+
+def test_get_section_explanations_uses_fallback_rule_reason_when_present() -> None:
+    """Fallback section uses its rule reason when an enabled fallback rule exists."""
+    settings = RulebookSettings(
+        version=1,
+        rules=(
+            RuleDefinition(
+                rule_id="manual_triage_rule",
+                name="Manual triage rule",
+                section_id="manual_triage",
+                priority=10,
+                enabled=True,
+                match_reason="Needs manual triage.",
+                conditions=(NextCheckDueCondition(),),
+            ),
+        ),
+        open_items_fallback_section="manual_triage",
+    )
+
+    explanations = get_section_explanations(settings)
+
+    assert explanations == {"manual_triage": "Needs manual triage."}
 
 
 def test_rulebook_validation_and_roundtrip() -> None:

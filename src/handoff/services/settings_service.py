@@ -6,15 +6,15 @@ import json
 from pathlib import Path
 from typing import Any
 
-from handoff.data import get_export_payload as _get_export_payload
-from handoff.data import import_payload as _import_payload
-from handoff.rulebook import (
+from handoff.core.rulebook import (
     DEFAULT_RISK_RULE_ID,
     DeadlineWithinDaysCondition,
     RulebookSettings,
     RuleDefinition,
     build_default_rulebook_settings,
 )
+from handoff.data import get_export_payload as _get_export_payload
+from handoff.data import import_payload as _import_payload
 
 DEFAULT_DEADLINE_NEAR_DAYS = 1
 DEADLINE_NEAR_DAYS_MIN = 1
@@ -186,3 +186,9 @@ def get_export_payload() -> dict[str, Any]:
 def import_payload(payload: dict[str, Any]) -> None:
     """Replace persisted data from a validated backup payload."""
     _import_payload(payload)
+
+
+def log_application_action(action: str, **details: Any) -> None:
+    import handoff.bootstrap.logging as _logging
+
+    _logging.log_application_action(action, **details)

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any
 
-from .models import CheckIn, CheckInType, Handoff, Project
+from handoff.core.models import CheckIn, CheckInType, Handoff, Project
 
 
 def _require_model_id(value: int | None, *, label: str) -> int:
