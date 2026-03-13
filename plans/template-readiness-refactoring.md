@@ -251,177 +251,107 @@ After refactoring:
 
 ## 8. PR Breakdown (AI-Agent Implementation)
 
-These PRs are designed for implementation by a medium-intelligence AI agent (e.g. Composer 1.5). Each PR is scoped to one concept, has concrete steps, and includes verification. PRs should be merged in order; some can be parallelized as noted.
-
-### PR 1: Remove handoff.ui compatibility shim
-
-**Branch:** `refactor/remove-handoff-ui`  
-**Depends on:** —  
-**Effort:** Small (~15 min)
-
-**Goal:** Remove the `handoff.ui` shim; all imports use `handoff.interfaces.streamlit.ui` directly.
-
-**Steps:**
-1. Update `app.py`: change docstring if it mentions `handoff.ui`; imports already use `handoff.interfaces.streamlit`.
-2. Update `tests/test_app_integration.py`: change `import handoff.ui as ui` to `import handoff.interfaces.streamlit.ui as ui` (all occurrences).
-3. Update `tests/test_app_import_paths.py`: `test_integration_entry_functions_use_streamlit_ui` — use `handoff.interfaces.streamlit.ui`; remove any test that asserts on `handoff.ui`.
-4. Update `tests/test_interfaces_shim.py`: remove all tests that import or assert on `handoff.ui`. Keep only tests for `handoff.interfaces.streamlit`.
-5. Update `README.md`: replace `handoff.ui.setup()` with `handoff.interfaces.streamlit.ui.setup()`.
-6. Delete `src/handoff/ui.py`.
-
-**Verification:**
-- `uv run handoff ci` passes.
-- `rg "handoff\.ui" --type py` returns no matches (except in RELEASE_NOTES, plans).
+Three PRs for implementation by a medium-intelligence AI agent (e.g. Composer 1.5). Each is scoped to a coherent goal, with concrete steps and verification. PRs must be merged in order.
 
 ---
 
-### PR 2: Remove instrumentation.py
+### PR 1: Cleanup removals (handoff.ui + instrumentation)
 
-**Branch:** `refactor/remove-instrumentation`  
-**Depends on:** —  
-**Effort:** Small (~10 min)
+**Branch:** `refactor/cleanup-removals`  
+**Effort:** ~25 min
 
-**Goal:** Remove `instrumentation.py` and all `time_action` usages. Simplifies codebase.
+**Goal:** Remove `handoff.ui` shim and `instrumentation.py`; simplify codebase.
 
 **Steps:**
-1. In `src/handoff/interfaces/streamlit/pages/now.py`: remove `from handoff.instrumentation import time_action`; remove `with time_action("now_render"):` and unindent the block inside it by one level.
-2. In `src/handoff/interfaces/streamlit/pages/now_forms.py`: remove `from handoff.instrumentation import time_action`; replace each `with time_action("...")` block with its inner body (unindent).
-3. Delete `src/handoff/instrumentation.py`.
-4. Delete `tests/test_instrumentation.py`.
-5. In `tests/test_pages_now.py`: remove or simplify tests that mock `handoff.instrumentation.logger` or assert on instrumentation logging (e.g. `test_save_check_in_submission_conclude_logs_instrumentation` and similar). Either delete those tests or remove the instrumentation-specific assertions.
+
+*Handoff.ui:*
+1. Update `app.py` docstring if it mentions `handoff.ui`. Imports already use `handoff.interfaces.streamlit`.
+2. Update `tests/test_app_integration.py`: `import handoff.ui as ui` → `import handoff.interfaces.streamlit.ui as ui` (all occurrences).
+3. Update `tests/test_app_import_paths.py` and `tests/test_interfaces_shim.py`: remove tests that import/assert on `handoff.ui`; keep tests for `handoff.interfaces.streamlit`.
+4. Update `README.md`: `handoff.ui.setup()` → `handoff.interfaces.streamlit.ui.setup()`.
+5. Delete `src/handoff/ui.py`.
+
+*Instrumentation:*
+6. In `src/handoff/interfaces/streamlit/pages/now.py`: remove `from handoff.instrumentation import time_action`; remove `with time_action("now_render"):` and unindent its block.
+7. In `src/handoff/interfaces/streamlit/pages/now_forms.py`: remove instrumentation import; replace each `with time_action("...")` block with its inner body (unindent).
+8. Delete `src/handoff/instrumentation.py` and `tests/test_instrumentation.py`.
+9. In `tests/test_pages_now.py`: remove or simplify tests that mock/assert on instrumentation logging.
 
 **Verification:**
 - `uv run handoff ci` passes.
-- `rg "instrumentation|time_action" --type py src/` returns no matches.
+- `rg "handoff\.ui|instrumentation|time_action" --type py src/` returns no matches.
 
 ---
 
-### PR 3: Decouple bootstrap.logging from handoff.db
+### PR 2: Bootstrap decoupling (logging, Streamlit config, log re-export)
 
-**Branch:** `refactor/bootstrap-logging-no-db`  
-**Depends on:** —  
-**Effort:** Small–medium (~20 min)
+**Branch:** `refactor/bootstrap-decoupling`  
+**Depends on:** PR 1  
+**Effort:** ~40 min
 
-**Goal:** `log_application_action` must not import `handoff.db`. Bootstrap stays infra-only.
+**Goal:** Bootstrap has no db or Streamlit dependencies. Single source of truth for `log_application_action`.
 
 **Steps:**
-1. In `src/handoff/bootstrap/logging.py`: change `log_application_action(action, **details)` to `log_application_action(action: str, *, db_path: str | None = None, **details)`. If `db_path` is None, use `"(unknown)"` in the log. Remove the `from handoff.db import get_db_path` block entirely.
-2. Find all callers of `log_application_action`:
-   - `src/handoff/data/io.py` — has db access
-   - `src/handoff/updater.py` — `_log_app_action` delegates to bootstrap; add db_path in updater before delegating
-   - `src/handoff/services/settings_service.py` — pass-through to bootstrap; add `db_path=str(get_db_path())` when calling `_logging.log_application_action`
-   - `src/handoff/interfaces/streamlit/pages/dashboard.py` — imports from settings_service (PR 5 will change this); no change in PR 3
-   - `src/handoff/interfaces/streamlit/pages/system_settings.py` — imports from services; no change in PR 3
-3. Update io, updater, and settings_service to pass `db_path=str(get_db_path())` when calling `log_application_action`. Pages go through settings_service, which will pass db_path.
-4. Update `tests/test_logging_module.py`: tests that assert on db_path — ensure they pass db_path explicitly or expect `"(unknown)"` when not passed.
+
+*Bootstrap logging → no db:*
+1. In `src/handoff/bootstrap/logging.py`: add `db_path: str | None = None` to `log_application_action`; if None, use `"(unknown)"`. Remove `from handoff.db import get_db_path` entirely.
+2. Update callers to pass `db_path=str(get_db_path())`: `data/io.py`, `updater.py` (in `_log_app_action`), `services/settings_service.py` (in its pass-through).
+
+*Streamlit config → interfaces:*
+3. Create `src/handoff/interfaces/streamlit/runtime_config.py` with the `os.environ.setdefault("STREAMLIT_*", ...)` block from `bootstrap/config.py`.
+4. In `src/handoff/__main__.py`: `import handoff.bootstrap.config` → `import handoff.interfaces.streamlit.runtime_config`.
+5. In `src/handoff/bootstrap/config.py`: remove Streamlit env block; leave placeholder or empty.
+
+*log_application_action direct import:*
+6. In `src/handoff/interfaces/streamlit/pages/dashboard.py`: import `log_application_action` from `handoff.bootstrap.logging` (not settings_service).
+7. In `src/handoff/services/settings_service.py`: remove the `log_application_action` pass-through.
+8. In `src/handoff/services/__init__.py`: remove `log_application_action` from exports.
+9. Update tests: `test_settings_service`, `test_settings_coverage`, `test_dashboard_render`, `test_logging_module`.
 
 **Verification:**
 - `uv run handoff ci` passes.
-- `rg "from handoff.db|import.*get_db_path" src/handoff/bootstrap/` returns no matches.
-- `python -c "import handoff.bootstrap.logging; handoff.bootstrap.logging.configure_logging()"` succeeds without importing handoff.db.
-
----
-
-### PR 4: Move Streamlit config from bootstrap to interfaces
-
-**Branch:** `refactor/streamlit-config-to-interfaces`  
-**Depends on:** —  
-**Effort:** Small (~15 min)
-
-**Goal:** Bootstrap has no Streamlit-specific setup. Streamlit config lives in `interfaces/streamlit`.
-
-**Steps:**
-1. Create `src/handoff/interfaces/streamlit/runtime_config.py` with the contents of the `os.environ.setdefault("STREAMLIT_*", ...)` block from `bootstrap/config.py`. Add a module docstring: "Streamlit runtime options. Import before any Streamlit process starts."
-2. In `src/handoff/__main__.py`: change `import handoff.bootstrap.config` to `import handoff.interfaces.streamlit.runtime_config`.
-3. In `src/handoff/bootstrap/config.py`: remove the Streamlit env block. Leave the file with a docstring and optional placeholder (e.g. `# Reserved for generic config`) or empty `__all__ = []`.
-4. Update `bootstrap/__init__.py` if it re-exports config; remove config from exports if it no longer has meaningful content.
-5. Update any tests that import or patch `handoff.bootstrap.config` to use `handoff.interfaces.streamlit.runtime_config` instead.
-
-**Verification:**
-- `uv run handoff ci` passes.
-- `uv run handoff` starts the app; Streamlit options (e.g. no error details) still apply.
-- `rg "STREAMLIT" src/handoff/bootstrap/` returns no matches.
-
----
-
-### PR 5: Remove log_application_action re-export from services
-
-**Branch:** `refactor/log-action-direct-import`  
-**Depends on:** PR 3 (so dashboard can import from bootstrap)  
-**Effort:** Trivial (~5 min)
-
-**Goal:** `log_application_action` has a single source of truth in `bootstrap.logging`. No re-export via services.
-
-**Steps:**
-1. In `src/handoff/interfaces/streamlit/pages/dashboard.py`: change `from handoff.services.settings_service import log_application_action` to `from handoff.bootstrap.logging import log_application_action`.
-2. In `src/handoff/services/settings_service.py`: remove the `log_application_action` function (the pass-through) and its delegation to `_logging.log_application_action`.
-3. In `src/handoff/services/__init__.py`: remove `log_application_action` from imports and `__all__`.
-4. Update `tests/test_settings_service.py`: remove or adjust `test_log_application_action_delegates_to_bootstrap_logging` (no longer applicable).
-5. Update `tests/test_settings_coverage.py` and `tests/test_dashboard_render.py`: any references to `settings_service.log_application_action` or mocking — switch to `bootstrap.logging.log_application_action` or the page under test.
-
-**Verification:**
-- `uv run handoff ci` passes.
+- `rg "from handoff.db|STREAMLIT|log_application_action" src/handoff/bootstrap/` returns no matches.
 - `rg "log_application_action" src/handoff/services/` returns no matches.
+- `python -c "import handoff.bootstrap.logging; handoff.bootstrap.logging.configure_logging()"` succeeds without importing db.
 
 ---
 
-### PR 6: CLI separation (handoff vs handoff-dev)
+### PR 3: CLI separation + docs
 
 **Branch:** `refactor/cli-separation`  
-**Depends on:** — (can run in parallel with PR 1–5)  
-**Effort:** Medium (~30 min)
+**Depends on:** PR 2  
+**Effort:** ~35 min
 
-**Goal:** `handoff` = run the app; `handoff-dev` = all dev and build commands. Clear separation.
+**Goal:** `handoff` = run the app; `handoff-dev` = all dev/build commands. Document `__main__.py`.
 
 **Steps:**
-1. In `pyproject.toml`: add `[project.scripts]` entry `handoff-dev = "scripts.cli:main"`. Keep `handoff = "scripts.cli:main"` for now (both point to same CLI).
-2. Create `scripts/app_cli.py`: a minimal Typer app with one command `run` (or default) that does what `handoff run` does today — invokes `python -m handoff` or `streamlit run app.py`.
-3. In `scripts/cli.py`: identify "app" commands vs "dev" commands.
-   - App: `run` (default), `cli` (stub)
-   - Dev: `sync`, `check`, `typecheck`, `test`, `ci`, `bump`, `build`, `sizecheck`, `db-path`, `format`, `lint`
-4. Split: create `scripts/dev_cli.py` with all dev commands (copy from cli.py). `scripts/cli.py` becomes the app CLI only (run, cli stub).
-5. Update `pyproject.toml`: `handoff = "scripts.cli:main"` (app), `handoff-dev = "scripts.dev_cli:main"` (dev).
-6. Update `AGENTS.md` Quick reference: `uv run handoff` for app; `uv run handoff-dev check`, `uv run handoff-dev test`, `uv run handoff-dev build --full`, etc.
-7. Update `.github/workflows/ci.yml`: replace `uv run handoff ci` with `uv run handoff-dev ci` (or `handoff-dev check` + `handoff-dev test`).
+
+*CLI split:*
+1. Create `scripts/dev_cli.py` with dev commands: sync, check, typecheck, test, ci, bump, build, sizecheck, db-path, format, lint. Copy logic from `scripts/cli.py`.
+2. Slim `scripts/cli.py` to app commands only: `run` (default), `cli` (stub).
+3. In `pyproject.toml`: `handoff = "scripts.cli:main"`, `handoff-dev = "scripts.dev_cli:main"`.
+4. Update `AGENTS.md` Quick reference: `uv run handoff` for app; `uv run handoff-dev check`, `uv run handoff-dev test`, etc.
+5. Update `.github/workflows/ci.yml`: use `handoff-dev ci` (or `handoff-dev check` + `handoff-dev test`).
+
+*Docs:*
+6. Add comment at top of `src/handoff/__main__.py`: "Entrypoint for Streamlit. For CLI/TUI, replace or add dispatch. See AGENTS.md."
+7. In AGENTS.md: add line under Project layout about `__main__.py` being replaceable for template projects.
 
 **Verification:**
-- `uv run handoff` starts the app (unchanged).
-- `uv run handoff-dev check` runs Ruff.
-- `uv run handoff-dev test` runs pytest.
-- `uv run handoff-dev build --full --dry-run` succeeds.
+- `uv run handoff` starts the app.
+- `uv run handoff-dev check`, `uv run handoff-dev test`, `uv run handoff-dev build --full --dry-run` succeed.
 - CI workflow passes.
-
----
-
-### PR 7: Document __main__.py as replaceable
-
-**Branch:** `refactor/doc-main-entrypoint`  
-**Depends on:** —  
-**Effort:** Trivial (~2 min)
-
-**Goal:** Document that `__main__.py` is the Streamlit entrypoint and can be replaced for other interfaces.
-
-**Steps:**
-1. Add a comment at the top of `src/handoff/__main__.py`: "Entrypoint for Streamlit. For CLI or TUI interfaces, replace this file or add a dispatch. See AGENTS.md."
-2. In `AGENTS.md`, under "Non-obvious caveats" or "Project layout": add one line: "`__main__.py` is the Streamlit launcher; template projects may replace it for other UIs."
-
-**Verification:**
-- No behavior change. `uv run handoff ci` passes.
 
 ---
 
 ## 9. PR Summary Table
 
-| PR | Title | Depends on | Est. effort | Parallelizable with |
-|----|-------|------------|-------------|---------------------|
-| 1 | Remove handoff.ui shim | — | ~15 min | 2, 4, 6, 7 |
-| 2 | Remove instrumentation.py | — | ~10 min | 1, 4, 6, 7 |
-| 3 | Bootstrap logging no db | — | ~20 min | 1, 2, 4, 7 |
-| 4 | Streamlit config to interfaces | — | ~15 min | 1, 2, 3, 6, 7 |
-| 5 | log_application_action direct import | 3 | ~5 min | — |
-| 6 | CLI separation | — | ~30 min | 1, 2, 3, 4, 7 |
-| 7 | Document __main__.py | — | ~2 min | All |
+| PR | Title | Depends on | Est. effort |
+|----|-------|------------|-------------|
+| 1 | Cleanup removals (handoff.ui + instrumentation) | — | ~25 min |
+| 2 | Bootstrap decoupling | 1 | ~40 min |
+| 3 | CLI separation + docs | 2 | ~35 min |
 
-**Merge order:** 1, 2, 3, 4 in any order (or parallel) → 5 (after 3) → 6 when ready → 7 anytime.
+**Merge order:** 1 → 2 → 3.
 
-**Agent guidance:** Each PR should be implemented in a single session. If a PR grows too large, split it rather than expanding scope. After each PR, run full CI: `uv run handoff ci` (before PR 6) or `uv run handoff-dev ci` (after PR 6). Fix any failures before merging.
+**Agent guidance:** Each PR in one session. After each, run `uv run handoff ci` (PR 1–2) or `uv run handoff-dev ci` (PR 3). Fix failures before merging.
