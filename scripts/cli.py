@@ -151,10 +151,12 @@ def run(
     extra_args = list(extra_args) if extra_args else []
     env = None
     if demo:
-        demo_db_path = _resolve_demo_db_path(db_path)
-        if not _db_has_projects(demo_db_path):
-            seed_demo_module.seed_demo_db(demo_db_path, force=False)
-        env = {**os.environ, "HANDOFF_DB_PATH": str(demo_db_path)}
+        resolved = _resolve_demo_db_path(db_path)
+        if not _db_has_projects(resolved):
+            seed_demo_module.seed_demo_db(resolved, force=False)
+        env = {**os.environ, "HANDOFF_DB_PATH": str(resolved)}
+    elif db_path is not None:
+        env = {**os.environ, "HANDOFF_DB_PATH": str(db_path)}
     run_cmd(
         ["uv", "run", "python", "-m", "handoff", *extra_args],
         cwd=ROOT,

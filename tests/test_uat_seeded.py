@@ -75,8 +75,9 @@ def _now_page_entry() -> None:
     """Single-page entrypoint for the seeded Now page."""
     import handoff.ui as ui
     from handoff.interfaces.streamlit.pages.now import render_now_page
+    from handoff.version import __version__
 
-    ui.setup("2026.2.24")
+    ui.setup(__version__)
     render_now_page()
 
 

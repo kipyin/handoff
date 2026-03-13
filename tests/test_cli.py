@@ -296,6 +296,24 @@ def test_seed_demo_cli_seeds_database_at_requested_path(tmp_path: Path) -> None:
     assert "Demo database ready at" in result.stdout
 
 
+def test_run_db_path_sets_env_for_subprocess(tmp_path: Path, monkeypatch) -> None:
+    """`handoff run --db-path PATH` should pass HANDOFF_DB_PATH without requiring --demo."""
+    db_path = tmp_path / "custom.db"
+    db_path.touch()
+    calls = _capture_run_cmd_details(monkeypatch)
+
+    result = RUNNER.invoke(
+        cli.app,
+        ["run", "--db-path", str(db_path), "--", "--server.port", "9999"],
+    )
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    env = calls[0]["env"]
+    assert isinstance(env, dict)
+    assert env["HANDOFF_DB_PATH"] == str(db_path.resolve())
+
+
 def test_run_demo_seeds_db_and_sets_env_for_subprocess(tmp_path: Path, monkeypatch) -> None:
     """`handoff run --demo` should seed an empty DB and pass HANDOFF_DB_PATH through."""
     db_path = tmp_path / "demo.db"
