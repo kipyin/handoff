@@ -16,20 +16,11 @@ class NowSnapshot:
     canonical order: Risk, Action required, custom sections, Upcoming,
     and Concluded. Also includes supporting data for filters and the add form.
 
-    Attributes:
-        risk: Handoffs matching the Risk rule.
-        action: Handoffs matching the Action required rule.
-        custom_sections: Tuples of (section_id, handoffs) for user-defined sections
-            in display order.
-        upcoming: Handoffs in the fallback section (usually "Upcoming").
-        upcoming_section_id: Section id for the fallback section; used to look up
-            its explanation in section_explanations.
-        concluded: Concluded handoffs.
-        projects: Available projects for filtering and context.
-        pitchmen: Unique pitchman names for filtering.
-        section_explanations: Map from section_id to the rule match reason for
-            rulebook-driven sections (Risk, Action required, custom sections,
-            Upcoming). Concluded section has no entry.
+    The risk, action, and custom_sections fields hold handoffs grouped by
+    matching rulebook sections. upcoming holds fallback handoffs, and concluded
+    holds concluded handoffs (which are not subject to open-item rules).
+    section_explanations maps each open section to its highest-priority rule's
+    match_reason for display to the user.
     """
 
     risk: list[Handoff]
