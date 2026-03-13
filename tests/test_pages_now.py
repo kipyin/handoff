@@ -3302,7 +3302,7 @@ def test_build_project_options_handles_label_collision_with_id_suffix(
     # Verify each project is still accessible
     for proj in projects:
         found = False
-        for label, option_proj in options.items():
+        for _label, option_proj in options.items():
             if option_proj.id == proj.id:
                 found = True
                 break
