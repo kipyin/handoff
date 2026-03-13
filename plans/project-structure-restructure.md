@@ -15,7 +15,7 @@ Consolidated plan for restructuring `src/handoff` into a functional layout. Each
 
 ### Hard Constraints (MUST)
 
-1. **PyArmor 32KB limit**: No `.py` file may exceed 32,768 bytes. Run `uv run handoff sizecheck` after each change.
+1. **PyArmor 32KB limit**: No Python file under `src/` may exceed 32,768 bytes (as enforced by the sizecheck). Run `uv run handoff sizecheck` after each change.
 2. **Architecture**: Pages import from `handoff.services` only, never `handoff.data` directly. `tests/test_services_architecture.py` enforces this.
 3. **CI**: `uv run handoff ci` must pass (Ruff, pyright, pytest).
 4. **One source of truth**: Filtering, validation, and serialization live in a single place; no duplicate logic across layers.
