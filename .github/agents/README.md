@@ -18,10 +18,9 @@ This directory contains project-specific custom agents for GitHub Copilot.
 
 ## PR Reviewer Detection (automation)
 
-The workflow `.github/workflows/pr-reviewer-detection.yml` runs on every PR and applies `reviewer:human` or `reviewer:ai` labels. It uses path-based rules first; if `ANTHROPIC_API_KEY` is set as a repository secret and paths are agent-safe, Haiku-4.5-thinking may elevate to `reviewer:human` when it detects security keywords, breaking-change signals, or very large diffs.
+**Primary**: Cursor Cloud automation at cursor.com/automations — trigger on PR opened/pushed, use "Comment on Pull Request" tool, Haiku-4.5-thinking. No API key. See `.github/cursor-automation-pr-reviewer.md`.
 
-- **Without** `ANTHROPIC_API_KEY`: path rules only (fast, deterministic).
-- **With** `ANTHROPIC_API_KEY`: path rules + optional Haiku override for edge cases.
+**Optional GitHub Action**: `.github/workflows/pr-reviewer-detection.yml` applies `reviewer:human` / `reviewer:ai` labels via path-based rules. No API key. Use as fallback or to sync labels before the Cursor automation runs.
 
 ## Notes
 

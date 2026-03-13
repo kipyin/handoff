@@ -1,15 +1,12 @@
-# Classify PRs as reviewer:human or reviewer:ai.
+# Classify PRs as reviewer:human or reviewer:ai (path-based).
 #
-# - reviewer:human — Requires manual review before merge (aligned with risk:high paths
-#   or Haiku override for security/breaking signals).
+# - reviewer:human — Requires manual review before merge.
 # - reviewer:ai — Can rely on AI reviewers (GitHub Copilot + optional second AI); merge
 #   when CI is green.
 #
-# Uses path-based rules first. If ANTHROPIC_API_KEY is set and paths are agent-safe,
-# Haiku-4.5-thinking may elevate to reviewer:human when it detects security keywords,
-# breaking-change signals, or very large diffs.
-#
-# Haiku has limited reasoning — keep the prompt simple and rule-augmented.
+# Uses path-based rules only. For Haiku-based override (security keywords, breaking
+# changes, large diffs), set up the Cursor Cloud automation per
+# .github/cursor-automation-pr-reviewer.md.
 
 name: PR Reviewer Detection
 
@@ -36,20 +33,11 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Install anthropic (optional, for Haiku override)
-        run: pip install anthropic
-        continue-on-error: true
-
-      - name: Fetch PR metadata and run detection
+      - name: Fetch PR files and run detection
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-          PR_ADDITIONS: ${{ github.event.pull_request.additions }}
-          PR_DELETIONS: ${{ github.event.pull_request.deletions }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         id: detect
         run: |
           python3 - <<'PYEOF'
@@ -101,11 +89,7 @@ jobs:
               page += 1
 
           env = os.environ.copy()
-          env["PR_TITLE"] = os.environ.get("PR_TITLE", "")
-          env["PR_BODY"] = os.environ.get("PR_BODY", "") or ""
           env["PR_FILES"] = "\n".join(files)
-          env["PR_ADDITIONS"] = os.environ.get("PR_ADDITIONS", "0")
-          env["PR_DELETIONS"] = os.environ.get("PR_DELETIONS", "0")
 
           script_path = os.path.join(os.environ.get("GITHUB_WORKSPACE", "."), ".github/scripts/pr_reviewer_detect.py")
           result = subprocess.run(
