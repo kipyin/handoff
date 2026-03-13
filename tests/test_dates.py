@@ -108,6 +108,7 @@ def test_format_date_smart_past(monkeypatch) -> None:
 
 def test_format_date_smart_past_teen_day_uses_th_suffix(monkeypatch) -> None:
     """Teen day ordinals should always use 'th' suffix in absolute formatting."""
+
     class _FixedDate(date):
         @classmethod
         def today(cls) -> date:
@@ -121,6 +122,7 @@ def test_format_date_smart_past_teen_day_uses_th_suffix(monkeypatch) -> None:
 
 def test_format_date_smart_next_week_within_six_days(monkeypatch) -> None:
     """Dates 2-6 days away in the next calendar week should render as 'next {day}'."""
+
     class _FixedDate(date):
         @classmethod
         def today(cls) -> date:
