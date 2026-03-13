@@ -344,7 +344,9 @@ def test_render_now_page_expanded_add_button_fallback_when_shortcut_unsupported(
     render_now_page()
 
     collapse_calls = [
-        c for c in st_mock.button.call_args_list if c.kwargs.get("key") == "now_add_handoff_collapse"
+        c
+        for c in st_mock.button.call_args_list
+        if c.kwargs.get("key") == "now_add_handoff_collapse"
     ]
     assert len(collapse_calls) >= 1
     assert any("shortcut" not in call.kwargs for call in collapse_calls)
