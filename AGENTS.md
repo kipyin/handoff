@@ -53,10 +53,13 @@ The goal is not maximal abstraction or maximal cleverness. The goal is code that
 |------|---------|
 | Install deps | `uv sync` |
 | Run app | `uv run handoff` (Streamlit on port 8501) |
+| Run with demo data | `uv run handoff run --demo` |
+| Seed demo DB | `uv run handoff seed-demo` |
 | Lint + format | `uv run handoff check` (`--fix` to apply Ruff changes) |
 | Type check | `uv run handoff typecheck` |
 | Size check | `uv run handoff sizecheck` (optional: path or dir) |
 | Tests | `uv run handoff test` |
+| UAT tests | `uv run pytest tests/test_uat_seeded.py` |
 | Full CI suite | `uv run handoff ci` (`--fix` to apply Ruff changes first) |
 | Bump version | `uv run handoff bump 2026.M.P` |
 | Build Windows zip | `uv run handoff build --full` |
@@ -89,6 +92,8 @@ Handoff ships as a self-contained Windows zip (or macOS tar.gz) that bundles an 
 ### CLI commands
 
 - `uv run handoff run` – start the app (Streamlit UI).
+- `uv run handoff run --demo [--db-path PATH]` – run the app against a demo database (seeds if empty; production DB is never touched).
+- `uv run handoff seed-demo [--db-path PATH] [--force]` – seed the demo database with representative data.
 - `uv run handoff sync` – sync dependencies.
 - `uv run handoff check` – Ruff format/lint (`--fix` to apply).
 - `uv run handoff typecheck` – pyright over `src/` and `scripts/`.
@@ -166,6 +171,71 @@ There is no Calendar page.
 
 ---
 
+## Demo mode and UAT
+
+### Running with demo data
+
+To explore the app with representative data without touching your production database:
+
+```bash
+uv run handoff run --demo
+```
+
+This seeds a demo database the first time (when it is empty) and opens the app against it. To use a custom path:
+
+```bash
+uv run handoff run --demo --db-path /tmp/my-demo.db
+```
+
+### Seeding the demo database
+
+```bash
+uv run handoff seed-demo                     # seed the default demo DB
+uv run handoff seed-demo --db-path PATH      # seed a custom path
+uv run handoff seed-demo --force             # re-seed even if not empty
+```
+
+The seed function lives in `scripts/seed_demo.py` and is also callable from Python:
+
+```python
+from scripts.seed_demo import seed_demo_db
+seed_demo_db(db_path, force=True, reference_date=date(2026, 3, 1))
+```
+
+When `reference_date` is supplied, all generated dates derive from it; otherwise `date.today()` is used. The default demo DB path is returned by `handoff.db.get_demo_db_path()`.
+
+### Seed data contents
+
+The seed creates 2–3 projects and 8–10 handoffs covering all Now sections and common edge cases:
+
+| Bucket | Example handoffs |
+|--------|-----------------|
+| Risk | Overdue deliverable (delayed check-in, yesterday deadline), due-today item |
+| Action required | Next check due today, on-track status |
+| Upcoming | Future deadline, no pitchman, long description, markdown notes |
+| Concluded | Completed handoff; also a reopened handoff (concluded → on_track) |
+
+Projects: **Acme Corp** (active), **Personal** (active), **Archived Project** (archived).
+
+### Automated UAT
+
+The UAT suite (`tests/test_uat_seeded.py`) exercises a fixed checklist of user flows against a seeded DB pinned to a reference date. It uses Streamlit's `AppTest` for UI-level smoke tests.
+
+```bash
+uv run pytest tests/test_uat_seeded.py
+```
+
+**Checklist covered:**
+
+1. Now sections — Risk, Action required, Upcoming, Concluded all render with expected seeded items.
+2. Conclude — conclude a specific handoff via UI; verify it moves to Concluded.
+3. Reopen — reopen a concluded handoff; verify it leaves Concluded.
+4. Add handoff — add via the inline form; verify persistence and placement.
+5. Archived toggle — enable "Include archived projects"; verify archived items appear.
+6. Dashboard — renders without error with seeded data.
+
+---
+
 ## Testing workflows by area
 
 **Data layer:** `uv run pytest tests/test_models.py tests/test_db.py tests/test_data.py` — in-memory SQLite. When adding a column, add inline migration in `db.py:init_db()` and a migration test.
@@ -179,6 +249,8 @@ There is no Calendar page.
 **Build:** `tests/test_build_artifacts.py` and `tests/test_launchers.py` require PyArmor and Windows embed — not expected to pass on Linux. Use `--dry-run` for CI.
 
 **Version sync:** `uv run pytest tests/test_version_sync.py`
+
+**UAT (seeded):** `uv run pytest tests/test_uat_seeded.py` — see [Demo mode and UAT](#demo-mode-and-uat) for fixture details.
 
 ---
 
