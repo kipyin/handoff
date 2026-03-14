@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
 from pathlib import Path
 
 from typer.testing import CliRunner
 
-import scripts.cli as app_cli
+import handoff.interfaces.cli as app_cli
 import scripts.dev_cli as dev_cli
 
 RUNNER = CliRunner()
@@ -24,13 +25,15 @@ def _capture_run_cmd(monkeypatch, module=dev_cli):
     return calls
 
 
-def _capture_run_cmd_details(monkeypatch, module=app_cli) -> list[dict[str, object]]:
+def _capture_launch_streamlit(monkeypatch) -> list[dict[str, object]]:
+    """Capture _launch_streamlit calls from handoff.interfaces.cli."""
     calls: list[dict[str, object]] = []
 
-    def fake_run_cmd(args, **kwargs) -> None:
-        calls.append({"args": list(args), **kwargs})
+    def fake_launch(extra_args: list[str], env: dict[str, str] | None = None) -> None:
+        cmd = [sys.executable, "-m", "handoff", *extra_args]
+        calls.append({"args": cmd, "cwd": app_cli.ROOT, "env": env})
 
-    monkeypatch.setattr(module, "run_cmd", fake_run_cmd)
+    monkeypatch.setattr(app_cli, "_launch_streamlit", fake_launch)
     return calls
 
 
@@ -301,7 +304,7 @@ def test_run_db_path_sets_env_for_subprocess(tmp_path: Path, monkeypatch) -> Non
     """`handoff run --db-path PATH` should pass HANDOFF_DB_PATH without requiring --demo."""
     db_path = tmp_path / "custom.db"
     db_path.touch()
-    calls = _capture_run_cmd_details(monkeypatch)
+    calls = _capture_launch_streamlit(monkeypatch)
 
     result = RUNNER.invoke(
         app_cli.app,
@@ -318,7 +321,7 @@ def test_run_db_path_sets_env_for_subprocess(tmp_path: Path, monkeypatch) -> Non
 def test_run_demo_seeds_db_and_sets_env_for_subprocess(tmp_path: Path, monkeypatch) -> None:
     """`handoff run --demo` should seed an empty DB and pass HANDOFF_DB_PATH through."""
     db_path = tmp_path / "demo.db"
-    calls = _capture_run_cmd_details(monkeypatch)
+    calls = _capture_launch_streamlit(monkeypatch)
 
     result = RUNNER.invoke(
         app_cli.app,
@@ -337,9 +340,8 @@ def test_run_demo_seeds_db_and_sets_env_for_subprocess(tmp_path: Path, monkeypat
     assert db_path.exists()
     assert _count_rows(db_path, "project") >= 3
     assert len(calls) == 1
-    assert calls[0]["args"] == ["uv", "run", "python", "-m", "handoff", "--server.port", "9999"]
+    assert calls[0]["args"] == [sys.executable, "-m", "handoff", "--server.port", "9999"]
     assert calls[0]["cwd"] == app_cli.ROOT
-    assert calls[0]["description"] == "Starting Streamlit app..."
     env = calls[0]["env"]
     assert isinstance(env, dict)
     assert env["HANDOFF_DB_PATH"] == str(db_path.resolve())

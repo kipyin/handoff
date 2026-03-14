@@ -61,7 +61,7 @@ omit = ["*/tests/*", "scripts/*"]
 link-mode = "copy"
 
 [project.scripts]
-handoff = "scripts.cli:main"
+handoff = "handoff.interfaces.cli:main"
 handoff-dev = "scripts.dev_cli:main"
 
 [tool.pyright]
