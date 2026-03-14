@@ -17,6 +17,28 @@ from pathlib import Path
 BOOTSTRAP_FILES = list(Path("src/handoff/bootstrap").glob("*.py"))
 
 
+def _collect_imports_from_nodes(nodes: list[ast.AST]) -> set[str]:
+    """Extract imports from a list of AST nodes (handles Import, ImportFrom, Try, If)."""
+    imports = set()
+    for node in nodes:
+        if isinstance(node, ast.ImportFrom):
+            if node.module:
+                imports.add(node.module)
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                imports.add(alias.name)
+        elif isinstance(node, ast.Try):
+            imports |= _collect_imports_from_nodes(node.body)
+            for handler in node.handlers:
+                imports |= _collect_imports_from_nodes(handler.body)
+            imports |= _collect_imports_from_nodes(node.orelse)
+            imports |= _collect_imports_from_nodes(node.finalbody)
+        elif isinstance(node, ast.If):
+            imports |= _collect_imports_from_nodes(node.body)
+            imports |= _collect_imports_from_nodes(node.orelse)
+    return imports
+
+
 def _get_imports_from_file(path: Path, scope: str = "module") -> set[str]:
     """Extract module imports from a Python file.
 
@@ -28,18 +50,12 @@ def _get_imports_from_file(path: Path, scope: str = "module") -> set[str]:
     imports = set()
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except SyntaxError:
-        return imports
+    except SyntaxError as e:
+        raise SyntaxError(f"Bootstrap file {path} has syntax error: {e}") from e
 
     if scope == "module":
-        # Only top-level imports (executed when module is imported)
-        for node in tree.body:
-            if isinstance(node, ast.ImportFrom):
-                if node.module:
-                    imports.add(node.module)
-            elif isinstance(node, ast.Import):
-                for alias in node.names:
-                    imports.add(alias.name)
+        # Top-level imports including those in try/if blocks (executed on import)
+        imports = _collect_imports_from_nodes(tree.body)
     else:  # 'all'
         # All imports, including those inside functions/conditions
         for node in ast.walk(tree):

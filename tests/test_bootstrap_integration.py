@@ -49,10 +49,15 @@ def test_get_readme_intro_extracts_intro_section() -> None:
 
 
 def test_configure_logging_is_idempotent_integration(
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """configure_logging can be called multiple times safely."""
     import handoff.bootstrap.logging as log_mod
+
+    def mock_user_data_dir(app_name: str, author: str) -> str:
+        return str(tmp_path / app_name / author)
+
+    monkeypatch.setattr(log_mod, "user_data_dir", mock_user_data_dir)
 
     # Reset state using monkeypatch for clean restoration
     original_configured = log_mod._CONFIGURED
@@ -66,12 +71,19 @@ def test_configure_logging_is_idempotent_integration(
 
     assert first_call_result is True
     assert second_call_result is True
-    # Restore original state
     monkeypatch.setattr(log_mod, "_CONFIGURED", original_configured)
 
 
-def test_get_logs_dir_creates_directory_structure() -> None:
+def test_get_logs_dir_creates_directory_structure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """_get_logs_dir creates necessary directory hierarchy."""
+    import handoff.bootstrap.logging as log_mod
+
+    def mock_user_data_dir(app_name: str, author: str) -> str:
+        return str(tmp_path / app_name / author)
+
+    monkeypatch.setattr(log_mod, "user_data_dir", mock_user_data_dir)
 
     logs_dir = _get_logs_dir()
     assert logs_dir.exists()
@@ -100,10 +112,13 @@ def test_bootstrap_paths_no_hardcoded_app_name_in_get_app_root() -> None:
     """get_app_root does not reference app name (future-proofs for templates)."""
     from handoff.bootstrap import paths as paths_module
 
-    # get_app_root should use relative path navigation, not app name
-    source = paths_module.get_app_root.__code__.co_names
-    # Should not contain hardcoded strings like "handoff" (except in comments)
-    assert "handoff" not in source
+    # get_app_root should use relative path navigation, not app name;
+    # check both identifiers (co_names) and string literals (co_consts)
+    code = paths_module.get_app_root.__code__
+    assert "handoff" not in code.co_names
+    for const in code.co_consts:
+        if isinstance(const, str) and (const == "handoff" or const.startswith("handoff.")):
+            raise AssertionError(f"get_app_root contains hardcoded app name literal: {const!r}")
 
 
 def test_bootstrap_logging_paths_dir_uses_app_name_placeholder(

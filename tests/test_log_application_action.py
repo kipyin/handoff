@@ -9,6 +9,7 @@ accept optional db_path parameter so bootstrap.logging never imports db directly
 
 from __future__ import annotations
 
+import builtins
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -29,11 +30,13 @@ def test_log_application_action_falls_back_gracefully_without_db(
 
     monkeypatch.setattr("handoff.bootstrap.logging.logger.info", mock_logger_info)
 
-    # Mock the db module import to fail
-    def mock_import(name, *args, **kwargs):
+    # Capture real import before patching to avoid recursion
+    real_import = builtins.__import__
+
+    def mock_import(name: str, *args: object, **kwargs: object) -> object:
         if "handoff.db" in name:
             raise ImportError("handoff.db not available")
-        return __import__(name, *args, **kwargs)
+        return real_import(name, *args, **kwargs)
 
     monkeypatch.setattr("builtins.__import__", mock_import)
 
