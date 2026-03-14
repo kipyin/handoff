@@ -62,6 +62,7 @@ link-mode = "copy"
 
 [project.scripts]
 handoff = "scripts.cli:main"
+handoff-dev = "scripts.dev_cli:main"
 
 [tool.pyright]
 include = ["src", "scripts"]

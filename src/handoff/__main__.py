@@ -1,4 +1,4 @@
-"""Launcher that applies Streamlit config then runs the app.
+"""Entrypoint for Streamlit. For CLI/TUI, replace or add dispatch. See AGENTS.md.
 
 Run with: python -m handoff
 

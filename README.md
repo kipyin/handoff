@@ -157,7 +157,7 @@ obfuscate the `src/handoff` package so that distributed code is protected;
 (`uv sync` installs it):
 
 ```bash
-uv run handoff build --full
+uv run handoff-dev build --full
 ```
 
 This produces a zip under `dist/` (named like
@@ -169,8 +169,8 @@ For small logic-only changes you can ship a **code-only patch** zip instead of
 a full embedded bundle. For production usage, always use the obfuscated patch
 flow:
 
-- Run `uv run handoff build --full` to produce the embedded app build.
-- Then run `uv run handoff build --patch` to create
+- Run `uv run handoff-dev build --full` to produce the embedded app build.
+- Then run `uv run handoff-dev build --patch` to create
   `dist/handoff-<version>-patch.zip` from the obfuscated build output so that
   the in-app updater can apply it to PyArmor-built installs.
 
@@ -214,5 +214,5 @@ README. For **developer docs** (CLI commands, layout, release workflow, and
 code style), see [`AGENTS.md`](AGENTS.md). You can also read the README and
 release notes inside the app via the About navigation entry.
 
-**Contributing:** Run `uv run handoff ci` before submitting changes. See
+**Contributing:** Run `uv run handoff-dev ci` before submitting changes. See
 AGENTS.md for commands, style, and workflow.

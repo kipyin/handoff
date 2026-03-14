@@ -1,4 +1,4 @@
-"""Tests for the developer CLI command wiring."""
+"""Tests for the developer and app CLI command wiring."""
 
 from __future__ import annotations
 
@@ -7,29 +7,30 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-import scripts.cli as cli
+import scripts.cli as app_cli
+import scripts.dev_cli as dev_cli
 
 RUNNER = CliRunner()
 _COUNTABLE_TABLES = {"project", "handoff", "check_in"}
 
 
-def _capture_run_cmd(monkeypatch):
+def _capture_run_cmd(monkeypatch, module=dev_cli):
     calls: list[list[str]] = []
 
     def fake_run_cmd(args, **_kwargs) -> None:
         calls.append(list(args))
 
-    monkeypatch.setattr(cli, "run_cmd", fake_run_cmd)
+    monkeypatch.setattr(module, "run_cmd", fake_run_cmd)
     return calls
 
 
-def _capture_run_cmd_details(monkeypatch) -> list[dict[str, object]]:
+def _capture_run_cmd_details(monkeypatch, module=app_cli) -> list[dict[str, object]]:
     calls: list[dict[str, object]] = []
 
     def fake_run_cmd(args, **kwargs) -> None:
         calls.append({"args": list(args), **kwargs})
 
-    monkeypatch.setattr(cli, "run_cmd", fake_run_cmd)
+    monkeypatch.setattr(module, "run_cmd", fake_run_cmd)
     return calls
 
 
@@ -42,28 +43,28 @@ def _count_rows(db_path: Path, table: str) -> int:
 
 
 def test_lint_is_non_mutating_by_default(monkeypatch) -> None:
-    """`handoff lint` should check without fixing unless requested."""
+    """`handoff-dev lint` should check without fixing unless requested."""
     calls = _capture_run_cmd(monkeypatch)
 
-    cli.lint()
+    dev_cli.lint()
 
     assert calls == [["uv", "run", "ruff", "check", "."]]
 
 
 def test_lint_accepts_fix_flag(monkeypatch) -> None:
-    """`handoff lint --fix` should forward the fix flag to Ruff."""
+    """`handoff-dev lint --fix` should forward the fix flag to Ruff."""
     calls = _capture_run_cmd(monkeypatch)
 
-    cli.lint(["--fix", "src"])
+    dev_cli.lint(["--fix", "src"])
 
     assert calls == [["uv", "run", "ruff", "check", "--fix", "src"]]
 
 
 def test_check_is_non_mutating_by_default(monkeypatch) -> None:
-    """`handoff check` should run format/lint in check mode."""
+    """`handoff-dev check` should run format/lint in check mode."""
     calls = _capture_run_cmd(monkeypatch)
 
-    cli.check_command()
+    dev_cli.check_command()
 
     assert calls == [
         ["uv", "run", "ruff", "format", "--check", "."],
@@ -72,10 +73,10 @@ def test_check_is_non_mutating_by_default(monkeypatch) -> None:
 
 
 def test_check_fix_applies_formatter_and_lint_fixes(monkeypatch) -> None:
-    """`handoff check --fix` should run the mutating Ruff commands."""
+    """`handoff-dev check --fix` should run the mutating Ruff commands."""
     calls = _capture_run_cmd(monkeypatch)
 
-    cli.check_command(["--fix", "src"])
+    dev_cli.check_command(["--fix", "src"])
 
     assert calls == [
         ["uv", "run", "ruff", "format", "src"],
@@ -84,10 +85,10 @@ def test_check_fix_applies_formatter_and_lint_fixes(monkeypatch) -> None:
 
 
 def test_ci_fix_only_applies_to_ruff_steps(monkeypatch) -> None:
-    """`handoff ci --fix` should not leak the fix flag to pyright or pytest."""
+    """`handoff-dev ci --fix` should not leak the fix flag to pyright or pytest."""
     calls = _capture_run_cmd(monkeypatch)
 
-    cli.ci(["--fix"])
+    dev_cli.ci(["--fix"])
 
     assert calls == [
         ["uv", "run", "ruff", "format", "."],
@@ -101,7 +102,7 @@ def test_check_cli_accepts_fix_flag(monkeypatch) -> None:
     """Typer should pass `--fix` through to the check command."""
     calls = _capture_run_cmd(monkeypatch)
 
-    result = RUNNER.invoke(cli.app, ["check", "--fix"])
+    result = RUNNER.invoke(dev_cli.app, ["check", "--fix"])
 
     assert result.exit_code == 0
     assert calls == [
@@ -114,7 +115,7 @@ def test_ci_cli_accepts_fix_flag(monkeypatch) -> None:
     """Typer should pass `--fix` through to the ci command."""
     calls = _capture_run_cmd(monkeypatch)
 
-    result = RUNNER.invoke(cli.app, ["ci", "--fix"])
+    result = RUNNER.invoke(dev_cli.app, ["ci", "--fix"])
 
     assert result.exit_code == 0
     assert calls == [
@@ -126,7 +127,7 @@ def test_ci_cli_accepts_fix_flag(monkeypatch) -> None:
 
 
 def test_sizecheck_cli_uses_defaults_when_no_paths(monkeypatch) -> None:
-    """`handoff sizecheck` should default to src with default thresholds."""
+    """`handoff-dev sizecheck` should default to src with default thresholds."""
     seen: dict[str, object] = {}
 
     def fake_run_sizecheck(paths, *, default_path: str, max_bytes: int, warn_threshold: float):
@@ -136,9 +137,9 @@ def test_sizecheck_cli_uses_defaults_when_no_paths(monkeypatch) -> None:
         seen["warn_threshold"] = warn_threshold
         return True, [], []
 
-    monkeypatch.setattr(cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+    monkeypatch.setattr(dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
 
-    result = RUNNER.invoke(cli.app, ["sizecheck"])
+    result = RUNNER.invoke(dev_cli.app, ["sizecheck"])
 
     assert result.exit_code == 0
     assert seen == {
@@ -151,7 +152,7 @@ def test_sizecheck_cli_uses_defaults_when_no_paths(monkeypatch) -> None:
 
 
 def test_sizecheck_cli_surfaces_warnings_and_fails_on_violations(monkeypatch) -> None:
-    """`handoff sizecheck` should print warnings and exit non-zero on violations."""
+    """`handoff-dev sizecheck` should print warnings and exit non-zero on violations."""
 
     def fake_run_sizecheck(paths, *, default_path: str, max_bytes: int, warn_threshold: float):
         assert paths == ["src/handoff", "scripts"]
@@ -164,10 +165,10 @@ def test_sizecheck_cli_surfaces_warnings_and_fails_on_violations(monkeypatch) ->
             ["src/handoff/io.py: 80 bytes (80% of limit)"],
         )
 
-    monkeypatch.setattr(cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+    monkeypatch.setattr(dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
 
     result = RUNNER.invoke(
-        cli.app,
+        dev_cli.app,
         [
             "sizecheck",
             "--max-bytes",
@@ -186,7 +187,7 @@ def test_sizecheck_cli_surfaces_warnings_and_fails_on_violations(monkeypatch) ->
 
 
 def test_sizecheck_cli_forwards_options_and_paths(monkeypatch) -> None:
-    """`handoff sizecheck` should pass options/paths through to run_sizecheck."""
+    """`handoff-dev sizecheck` should pass options/paths through to run_sizecheck."""
     captured: dict[str, object] = {}
 
     def fake_run_sizecheck(paths, *, default_path, max_bytes, warn_threshold):
@@ -196,10 +197,10 @@ def test_sizecheck_cli_forwards_options_and_paths(monkeypatch) -> None:
         captured["warn_threshold"] = warn_threshold
         return True, [], ["src/example.py: 9 bytes (90% of limit)"]
 
-    monkeypatch.setattr(cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+    monkeypatch.setattr(dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
 
     result = RUNNER.invoke(
-        cli.app,
+        dev_cli.app,
         [
             "sizecheck",
             "--path",
@@ -224,15 +225,15 @@ def test_sizecheck_cli_forwards_options_and_paths(monkeypatch) -> None:
 
 
 def test_sizecheck_cli_exits_nonzero_on_violations(monkeypatch) -> None:
-    """`handoff sizecheck` should fail fast when any file exceeds the limit."""
+    """`handoff-dev sizecheck` should fail fast when any file exceeds the limit."""
 
     def fake_run_sizecheck(_paths, *, default_path, max_bytes, warn_threshold):
         del default_path, warn_threshold
         return False, [f"src/too_big.py: {max_bytes + 1} bytes (max {max_bytes})"], []
 
-    monkeypatch.setattr(cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+    monkeypatch.setattr(dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
 
-    result = RUNNER.invoke(cli.app, ["sizecheck", "--max-bytes", "10"])
+    result = RUNNER.invoke(dev_cli.app, ["sizecheck", "--max-bytes", "10"])
 
     assert result.exit_code == 1
     assert "The following files exceed the limit (10 bytes):" in result.stdout
@@ -240,16 +241,16 @@ def test_sizecheck_cli_exits_nonzero_on_violations(monkeypatch) -> None:
 
 
 def test_ci_runs_sizecheck_with_fixed_src_settings(monkeypatch) -> None:
-    """`handoff ci` should always run sizecheck against src/ only."""
+    """`handoff-dev ci` should always run sizecheck against src/ only."""
     calls = _capture_run_cmd(monkeypatch)
     sizecheck_calls: list[dict[str, object]] = []
 
     def fake_sizecheck(**kwargs) -> None:
         sizecheck_calls.append(kwargs)
 
-    monkeypatch.setattr(cli, "sizecheck", fake_sizecheck)
+    monkeypatch.setattr(dev_cli, "sizecheck", fake_sizecheck)
 
-    cli.ci(["--fix"])
+    dev_cli.ci(["--fix"])
 
     assert calls == [
         ["uv", "run", "ruff", "format", "."],
@@ -269,7 +270,7 @@ def test_ci_runs_sizecheck_with_fixed_src_settings(monkeypatch) -> None:
 
 def test_cli_command_stub_prints_not_implemented_message() -> None:
     """`handoff cli` should print a clear "not implemented" message to stdout."""
-    result = RUNNER.invoke(cli.app, ["cli"])
+    result = RUNNER.invoke(app_cli.app, ["cli"])
 
     assert result.exit_code == 1
     assert "handoff cli is not implemented yet" in result.stdout
@@ -278,16 +279,16 @@ def test_cli_command_stub_prints_not_implemented_message() -> None:
 
 def test_cli_command_stub_exits_with_code_1() -> None:
     """`handoff cli` should exit with non-zero code to signal failure."""
-    result = RUNNER.invoke(cli.app, ["cli"])
+    result = RUNNER.invoke(app_cli.app, ["cli"])
 
     assert result.exit_code == 1
 
 
 def test_seed_demo_cli_seeds_database_at_requested_path(tmp_path: Path) -> None:
-    """`handoff seed-demo` should create and seed a DB at the provided path."""
+    """`handoff-dev seed-demo` should create and seed a DB at the provided path."""
     db_path = tmp_path / "demo.db"
 
-    result = RUNNER.invoke(cli.app, ["seed-demo", "--db-path", str(db_path)])
+    result = RUNNER.invoke(dev_cli.app, ["seed-demo", "--db-path", str(db_path)])
 
     assert result.exit_code == 0
     assert db_path.exists()
@@ -303,7 +304,7 @@ def test_run_db_path_sets_env_for_subprocess(tmp_path: Path, monkeypatch) -> Non
     calls = _capture_run_cmd_details(monkeypatch)
 
     result = RUNNER.invoke(
-        cli.app,
+        app_cli.app,
         ["run", "--db-path", str(db_path), "--", "--server.port", "9999"],
     )
 
@@ -320,7 +321,7 @@ def test_run_demo_seeds_db_and_sets_env_for_subprocess(tmp_path: Path, monkeypat
     calls = _capture_run_cmd_details(monkeypatch)
 
     result = RUNNER.invoke(
-        cli.app,
+        app_cli.app,
         [
             "run",
             "--demo",
@@ -337,7 +338,7 @@ def test_run_demo_seeds_db_and_sets_env_for_subprocess(tmp_path: Path, monkeypat
     assert _count_rows(db_path, "project") >= 3
     assert len(calls) == 1
     assert calls[0]["args"] == ["uv", "run", "python", "-m", "handoff", "--server.port", "9999"]
-    assert calls[0]["cwd"] == cli.ROOT
+    assert calls[0]["cwd"] == app_cli.ROOT
     assert calls[0]["description"] == "Starting Streamlit app..."
     env = calls[0]["env"]
     assert isinstance(env, dict)
@@ -346,6 +347,6 @@ def test_run_demo_seeds_db_and_sets_env_for_subprocess(tmp_path: Path, monkeypat
 
 def test_cli_command_stub_does_not_accept_subcommands() -> None:
     """`handoff cli` should not accept arbitrary subcommands (reserved for future)."""
-    result = RUNNER.invoke(cli.app, ["cli", "subcommand"])
+    result = RUNNER.invoke(app_cli.app, ["cli", "subcommand"])
 
     assert result.exit_code != 0
