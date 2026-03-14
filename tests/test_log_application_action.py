@@ -59,13 +59,14 @@ def test_log_application_action_with_multiple_details(
 
     monkeypatch.setattr("handoff.bootstrap.logging.logger.info", mock_logger_info)
 
-    # Mock db module to provide a test path
     test_path = Path("/test/path/db.db")
-    mock_db_module = MagicMock()
-    mock_db_module.get_db_path = MagicMock(return_value=test_path)
-    monkeypatch.setitem(sys.modules, "handoff.db", mock_db_module)
-
-    log_application_action("data_export", format="json", rows=42, destination="backup.json")
+    log_application_action(
+        "data_export",
+        db_path=str(test_path),
+        format="json",
+        rows=42,
+        destination="backup.json",
+    )
 
     assert len(messages) == 1
     message = messages[0]
@@ -149,11 +150,9 @@ def test_log_application_action_message_format(
     monkeypatch.setattr("handoff.bootstrap.logging.logger.info", mock_logger_info)
 
     expected_path = Path("/home/user/.local/share/handoff/handoff.db")
-    mock_db_module = MagicMock()
-    mock_db_module.get_db_path = MagicMock(return_value=expected_path)
-    monkeypatch.setitem(sys.modules, "handoff.db", mock_db_module)
-
-    log_application_action("app_update", version="2026.3.13", status="success")
+    log_application_action(
+        "app_update", db_path=str(expected_path), version="2026.3.13", status="success"
+    )
 
     assert len(messages) == 1
     message = messages[0]

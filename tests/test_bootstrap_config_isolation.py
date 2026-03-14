@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 def test_bootstrap_config_imports_are_minimal() -> None:
-    """bootstrap.config imports only os (no handoff or streamlit at module level)."""
+    """bootstrap.config has no handoff or streamlit imports at module level."""
     import ast
 
     config_file = Path("src/handoff/bootstrap/config.py")
@@ -34,7 +34,10 @@ def test_bootstrap_config_imports_are_minimal() -> None:
                 if alias.name != "__future__":
                     imports.add(alias.name)
 
-    assert imports == {"os"}, f"Unexpected imports in bootstrap.config: {imports}"
+    # Config was refactored minimal; Streamlit setup lives in runtime_config.
+    assert not any(m.startswith("handoff.") or m.startswith("streamlit") for m in imports), (
+        f"Unexpected imports in bootstrap.config: {imports}"
+    )
 
 
 def test_bootstrap_config_sets_exactly_five_env_vars() -> None:
@@ -46,8 +49,8 @@ import os
 for key in list(os.environ.keys()):
     if key.startswith("STREAMLIT_"):
         del os.environ[key]
-# Import config
-import handoff.bootstrap.config
+# Import runtime_config (Streamlit setup moved here from bootstrap.config)
+import handoff.interfaces.streamlit.runtime_config
 # Report keys
 keys = sorted([k for k in os.environ.keys() if k.startswith("STREAMLIT_")])
 print("\\n".join(keys))
@@ -74,14 +77,17 @@ print("\\n".join(keys))
 
 
 def test_bootstrap_config_respects_existing_env_vars() -> None:
-    """bootstrap.config uses setdefault; pre-set values are not overwritten."""
+    """runtime_config uses setdefault; pre-set values are not overwritten.
+
+    Streamlit setup moved from bootstrap.config to runtime_config.
+    """
     project_root = Path(__file__).resolve().parents[1]
     code = """
 import os
 # Pre-set one value
 os.environ["STREAMLIT_CLIENT_TOOLBAR_MODE"] = "custom"
-# Import config
-import handoff.bootstrap.config
+# Import runtime_config
+import handoff.interfaces.streamlit.runtime_config
 # Check it was not overwritten
 print(os.environ.get("STREAMLIT_CLIENT_TOOLBAR_MODE"))
 """
@@ -100,7 +106,10 @@ print(os.environ.get("STREAMLIT_CLIENT_TOOLBAR_MODE"))
 
 
 def test_bootstrap_config_sets_correct_values() -> None:
-    """bootstrap.config sets the expected values for each STREAMLIT_* variable."""
+    """runtime_config sets the expected values for each STREAMLIT_* variable.
+
+    Streamlit setup moved from bootstrap.config to runtime_config.
+    """
     project_root = Path(__file__).resolve().parents[1]
     code = """
 import os
@@ -108,8 +117,8 @@ import os
 for key in list(os.environ.keys()):
     if key.startswith("STREAMLIT_"):
         del os.environ[key]
-# Import config
-import handoff.bootstrap.config
+# Import runtime_config
+import handoff.interfaces.streamlit.runtime_config
 # Report values
 expected = {
     "STREAMLIT_CLIENT_SHOW_ERROR_DETAILS": "none",
