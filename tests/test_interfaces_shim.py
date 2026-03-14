@@ -1,11 +1,11 @@
-"""Regression tests for handoff.ui compatibility shim and interfaces package structure.
+"""Regression tests for interfaces package structure.
 
-This module verifies that the restructured UI interfaces remain accessible through:
-1. The compatibility shim at handoff.ui (for backward compatibility)
-2. Direct imports from handoff.interfaces.streamlit.ui (new canonical path)
-3. The public package __init__.py at handoff.interfaces.streamlit
+This module verifies that the Streamlit UI interfaces remain accessible through:
+1. Direct imports from handoff.interfaces.streamlit.ui (canonical path)
+2. The public package __init__.py at handoff.interfaces.streamlit
 
-These tests prevent regressions when the Streamlit UI is relocated to handoff/interfaces/streamlit/.
+These tests prevent regressions when the Streamlit UI is relocated to
+handoff/interfaces/streamlit/.
 """
 
 from __future__ import annotations
@@ -19,68 +19,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_handoff_ui_compatibility_shim_exports_setup() -> None:
-    """handoff.ui shim re-exports setup function from interfaces.streamlit.ui."""
-    # Re-import to ensure fresh module state
-    import handoff.ui as ui_module
-
-    importlib.reload(ui_module)
-    assert hasattr(ui_module, "setup")
-    assert callable(ui_module.setup)
-
-
-def test_handoff_ui_compatibility_shim_exports_render_projects_page() -> None:
-    """handoff.ui shim re-exports render_projects_page."""
-    import handoff.ui as ui_module
-
-    importlib.reload(ui_module)
-    assert hasattr(ui_module, "render_projects_page")
-    assert callable(ui_module.render_projects_page)
-
-
-def test_handoff_ui_compatibility_shim_exports_render_dashboard_page() -> None:
-    """handoff.ui shim re-exports render_dashboard_page."""
-    import handoff.ui as ui_module
-
-    importlib.reload(ui_module)
-    assert hasattr(ui_module, "render_dashboard_page")
-    assert callable(ui_module.render_dashboard_page)
-
-
-def test_handoff_ui_compatibility_shim_exports_render_about_page() -> None:
-    """handoff.ui shim re-exports render_about_page."""
-    import handoff.ui as ui_module
-
-    importlib.reload(ui_module)
-    assert hasattr(ui_module, "render_about_page")
-    assert callable(ui_module.render_about_page)
-
-
-def test_handoff_ui_compatibility_shim_exports_render_system_settings_page() -> None:
-    """handoff.ui shim re-exports render_system_settings_page."""
-    import handoff.ui as ui_module
-
-    importlib.reload(ui_module)
-    assert hasattr(ui_module, "render_system_settings_page")
-    assert callable(ui_module.render_system_settings_page)
-
-
-def test_handoff_ui_all_export_list() -> None:
-    """handoff.ui.__all__ lists all public exports."""
-    import handoff.ui as ui_module
-
-    importlib.reload(ui_module)
-    assert hasattr(ui_module, "__all__")
-    expected = {
-        "setup",
-        "render_projects_page",
-        "render_dashboard_page",
-        "render_about_page",
-        "render_system_settings_page",
-    }
-    assert set(ui_module.__all__) == expected
 
 
 def test_handoff_interfaces_streamlit_ui_setup_function() -> None:
@@ -136,16 +74,6 @@ def test_handoff_interfaces_streamlit_all_export_list() -> None:
         "render_system_settings_page",
     }
     assert set(streamlit_pkg.__all__) == expected
-
-
-def test_handoff_ui_and_interfaces_streamlit_ui_setup_are_same() -> None:
-    """The setup function accessible from both paths refers to same implementation."""
-    from handoff.interfaces.streamlit.ui import setup as canonical_setup
-    from handoff.ui import setup as compat_setup
-
-    # Both should be the same underlying function
-    assert compat_setup.__module__ == canonical_setup.__module__
-    assert compat_setup.__name__ == canonical_setup.__name__
 
 
 def test_handoff_ui_render_projects_page_delegates_to_impl() -> None:
@@ -259,43 +187,16 @@ def test_import_from_handoff_interfaces_pages_submodules() -> None:
 
 
 def test_app_py_imports_from_new_paths() -> None:
-    """Verify app.py uses the new import paths (not the old ones)."""
+    """Verify app.py uses the canonical import paths."""
     app_py = _REPO_ROOT / "app.py"
     content = app_py.read_text(encoding="utf-8")
     tree = ast.parse(content)
 
     imported_modules: set[str] = set()
-    handoff_ui_render_names: set[str] = set()
-
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module:
             imported_modules.add(node.module)
-            if node.module == "handoff.ui":
-                for alias in node.names:
-                    if alias.name.startswith("render_"):
-                        handoff_ui_render_names.add(alias.name)
 
     assert "handoff.interfaces.streamlit.pages.now" in imported_modules
     assert "handoff.interfaces.streamlit.ui" in imported_modules
     assert not any(m.startswith("handoff.pages") for m in imported_modules)
-    assert len(handoff_ui_render_names) == 0, (
-        f"app.py should not import render_* from handoff.ui, got {handoff_ui_render_names}"
-    )
-
-
-def test_compatibility_shim_enables_gradual_migration() -> None:
-    """Old code using handoff.ui.setup continues to work via compatibility shim."""
-    # Simulate old code that used to import setup from handoff.ui
-    import handoff.ui as old_style
-
-    importlib.reload(old_style)
-    # Should have setup without error
-    assert hasattr(old_style, "setup")
-    assert callable(old_style.setup)
-
-    # New code can use the canonical path
-    from handoff.interfaces.streamlit.ui import setup as new_style_setup
-
-    # Both should work
-    assert callable(old_style.setup)
-    assert callable(new_style_setup)
