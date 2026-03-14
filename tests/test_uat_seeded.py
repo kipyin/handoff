@@ -71,10 +71,10 @@ def seeded_uat_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def _now_page_entry() -> None:
     """Single-page entrypoint for the seeded Now page."""
     from handoff.interfaces.streamlit.pages.now import render_now_page
-    from handoff.interfaces.streamlit.ui import setup as ui_setup
+    from handoff.interfaces.streamlit.ui import setup
     from handoff.version import __version__
 
-    ui_setup(__version__)
+    setup(__version__)
     render_now_page()
 
 
