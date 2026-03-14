@@ -185,7 +185,7 @@ def test_bootstrap_docs_can_import_without_app_context() -> None:
 
 
 def test_config_sets_only_streamlit_env_vars() -> None:
-    """bootstrap.config only sets STREAMLIT_* environment variables (no app initialization)."""
+    """Streamlit runtime_config only sets STREAMLIT_* env vars (no app initialization)."""
     import os
     import subprocess
     import sys
@@ -198,8 +198,8 @@ import os
 for key in list(os.environ.keys()):
     if key.startswith("STREAMLIT_"):
         del os.environ[key]
-# Import config
-import handoff.bootstrap.config
+# Import runtime_config (Streamlit config moved from bootstrap.config)
+import handoff.interfaces.streamlit.runtime_config  # noqa: F401
 # Check only STREAMLIT_* keys were set
 changed_keys = [k for k in os.environ.keys() if k.startswith("STREAMLIT_")]
 print(",".join(sorted(changed_keys)))
