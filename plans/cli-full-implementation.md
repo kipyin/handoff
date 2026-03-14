@@ -73,25 +73,52 @@ src/handoff/interfaces/cli/
 
 ---
 
-## 2a. Deployment: PyPI vs Standalone
+## 2a. Deployment: Template Decision Matrix
 
-There are two distribution paths. The point of having both is **different audiences and constraints**.
+Shipment method is driven by two factors: **open source vs proprietary** and **technical vs non-technical audience**. These choices are mutually exclusive in practice — trying to support both paths dilutes focus.
 
-| | PyPI | Standalone (embedded zip / tar.gz) |
-|---|-----|-----------------------------------|
-| **Audience** | Developers, power users, anyone with Python | End users, corporate environments, anyone who wants "just run it" |
-| **Requirement** | Python 3.13+ on the machine | No Python install — runtime bundled |
-| **Install** | `pip install handoff` or `uv add handoff` | Download zip, extract, run `handoff.bat` (Windows) or `./handoff.sh` (macOS) |
-| **Update** | `handoff update` → `pip install --upgrade handoff` | Download patch zip, apply via Settings → Update (or CLI) |
-| **Use case** | Local dev, scripting, CLI-first users, open-source ecosystem | IT-distributed apps, locked-down environments, non-technical users who don't know what Python is |
+### Core conflicts
 
-**Why both?**
-1. **PyPI** — Reaches developers and the Python ecosystem. One command to install/update. No packaging to maintain.
-2. **Standalone** — Reaches users who can't or won't install Python. Single download, no dependencies. Common for desktop tools.
+| Conflict | Why |
+|----------|-----|
+| **Standalone ⇄ CLI** | Standalone targets non-technical users who won't use a terminal. CLI targets technical users who have Python. Pick one primary interface. |
+| **Open source ⇄ PyArmor** | If code is open source, obfuscation is pointless (source is visible). PyArmor only makes sense for proprietary builds. |
+| **Proprietary ⇄ Public PyPI** | Proprietary usually means "not on public PyPI." Use private index or direct download instead. |
 
-**Focus decision:** If the primary user is developers/CLI-power-users, **PyPI is enough**. You can add standalone later if you need to ship to non-Python users or locked-down environments. If you're already building standalone for Windows/macOS users, keep it; PyPI becomes an alternative for the Python crowd.
+### Decision matrix
 
-**Recommendation:** Pick one as the "default" for your intended audience. The other stays as an option. Don't split effort trying to keep both equally polished unless both audiences matter.
+| | **Technical** (devs, power users) | **Non-technical** (end users, point-and-click) |
+|---|-----------------------------------|------------------------------------------------|
+| **Open source** | **PyPI.** `pip install handoff`. CLI + Streamlit. No obfuscation. Self-update via `pip install --upgrade`. | **Standalone (non-obfuscated).** Zip/tar.gz with embedded Python. Streamlit UI only. No CLI. No obfuscation. |
+| **Proprietary** | **Private PyPI** or **obfuscated wheel from your URL.** CLI + Streamlit. Obfuscate to protect IP. Or ship **obfuscated standalone** if you prefer no Python dependency. | **Obfuscated standalone.** Zip with PyArmor. Streamlit UI only. No CLI. |
+
+### Refinements
+
+**Proprietary + technical:**
+- **Can you put obfuscated code on PyPI?** Yes — PyPI doesn't care. You can upload an obfuscated wheel. But "proprietary" usually implies *not* on *public* PyPI. Options:
+  1. **Private PyPI** (Artifactory, Nexus, AWS CodeArtifact) — obfuscated or not
+  2. **Direct download** — `pip install handoff` from your URL (obfuscated wheel)
+  3. **Obfuscated standalone** — no Python on client; CLI still works if you bundle it
+- If you want to hide source from customers: obfuscate. If it's internal-only and IP isn't a concern: skip obfuscation.
+
+**Open source + non-technical:**
+- Standalone without obfuscation. Users get a zip, extract, run. No CLI — they use the UI. Build script produces clean (readable) bundled app.
+
+**Proprietary + non-technical:**
+- Obfuscated standalone. PyArmor protects the code. UI-only. This is the "shrink-wrap" desktop app model.
+
+### Template implication
+
+For a **template** (e.g. Handoff as modular starter): document this matrix and let the consumer **choose one cell**. The template provides:
+- Core app + services + data
+- Streamlit UI (always)
+- CLI (only when technical audience)
+- Build scripts for PyPI **or** standalone (not both as primary)
+- Obfuscation step (only when proprietary)
+
+Don't try to be all four. Pick the cell that matches your product, then build for that path.
+
+**This plan assumes:** Open source + technical → PyPI, CLI, Streamlit. If Handoff (or a fork) targets a different cell, adjust: drop CLI for non-technical, add obfuscation for proprietary.
 
 ---
 
