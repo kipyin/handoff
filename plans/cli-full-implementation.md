@@ -46,7 +46,7 @@ src/handoff/interfaces/cli/
 ├── app.py                    # Typer app for domain commands; mounted by scripts.cli
 ├── db_context.py             # HANDOFF_DB_PATH resolution, --db-path support
 ├── output.py                 # Rich tables/panels/formatting helpers
-├── handoff_cmds.py           # add, list, show, edit, delete, on-track, delayed, conclude, reopen, check-in, snooze, trail
+├── handoff_cmds.py           # add, list, show, edit, delete, on-track, delayed, conclude, reopen, check-in, trail
 ├── project_cmds.py           # project add/list/rename/archive/unarchive/delete; project menu
 ├── backup_cmds.py            # export, import
 ├── update_cmds.py            # apply, list-backups, restore
@@ -69,7 +69,29 @@ src/handoff/interfaces/cli/
 ### PyPI distribution and Streamlit
 - **Publish to PyPI:** handoff becomes installable via `pip install handoff`
 - **handoff --web:** Launches the Streamlit UI (replaces/additional to `handoff run` for pip users)
-- **Self-update:** Replace patch-zip updater with PyPI self-update: `handoff update` (or `handoff self-update`) runs `pip install --upgrade handoff` and reports new version
+- **Self-update:** `handoff update` runs `pip install --upgrade handoff` (PyPI path)
+
+---
+
+## 2a. Deployment: PyPI vs Standalone
+
+There are two distribution paths. The point of having both is **different audiences and constraints**.
+
+| | PyPI | Standalone (embedded zip / tar.gz) |
+|---|-----|-----------------------------------|
+| **Audience** | Developers, power users, anyone with Python | End users, corporate environments, anyone who wants "just run it" |
+| **Requirement** | Python 3.13+ on the machine | No Python install — runtime bundled |
+| **Install** | `pip install handoff` or `uv add handoff` | Download zip, extract, run `handoff.bat` (Windows) or `./handoff.sh` (macOS) |
+| **Update** | `handoff update` → `pip install --upgrade handoff` | Download patch zip, apply via Settings → Update (or CLI) |
+| **Use case** | Local dev, scripting, CLI-first users, open-source ecosystem | IT-distributed apps, locked-down environments, non-technical users who don't know what Python is |
+
+**Why both?**
+1. **PyPI** — Reaches developers and the Python ecosystem. One command to install/update. No packaging to maintain.
+2. **Standalone** — Reaches users who can't or won't install Python. Single download, no dependencies. Common for desktop tools.
+
+**Focus decision:** If the primary user is developers/CLI-power-users, **PyPI is enough**. You can add standalone later if you need to ship to non-Python users or locked-down environments. If you're already building standalone for Windows/macOS users, keep it; PyPI becomes an alternative for the Python crowd.
+
+**Recommendation:** Pick one as the "default" for your intended audience. The other stays as an option. Don't split effort trying to keep both equally polished unless both audiences matter.
 
 ---
 
@@ -90,7 +112,6 @@ src/handoff/interfaces/cli/
 | Add check-in (interactive) | `handoff check-in ID` | Interactive menu → `add_check_in` |
 | Edit        | `handoff edit ID`          | `update_handoff`                 |
 | Delete      | `handoff delete ID`         | `delete_handoff`                 |
-| Snooze      | `handoff snooze ID`         | `snooze_handoff`                 |
 | Show one    | `handoff show ID`           | `get_handoff`                    |
 
 **Naming:** Use verb forms: `conclude` (not concluded), `delayed` (state/type: "handoff delayed 5" = add delayed check-in). Both `delayed` and `delay` are plausible; `delayed` matches the CheckInType enum; `delay` reads as verb. Plan uses `delayed`; can revisit.
@@ -130,15 +151,13 @@ Recommendation: Add `get_handoff(handoff_id)` to `handoff.data` and `handoff_ser
 
 ---
 
-### 3.4 App update (PyPI self-update)
+### 3.4 App update
 | Action     | CLI command(s)     | Implementation                |
 |------------|-------------------|-------------------------------|
-| Self-update| `handoff update`  | `pip install --upgrade handoff` (or equivalent for uv) |
-| Restore (embedded builds) | `handoff update restore LABEL` | `stage_restore_from_snapshot` (for non-PyPI installs) |
+| Self-update (PyPI) | `handoff update`  | `pip install --upgrade handoff` |
+| Restore (standalone only) | `handoff update restore LABEL` | `stage_restore_from_snapshot` |
 
-**PyPI path:** When published to PyPI, `handoff update` runs self-update via pip/uv. Check PyPI for latest version, upgrade, report success.
-
-**Embedded/patch path:** For Windows zip or macOS tar.gz (non-PyPI) installs, keep patch-zip flow and `handoff update restore` for code-backup rollback. PyPI and embedded are separate distribution channels.
+See **§2a Deployment** for when each path applies.
 
 ---
 
@@ -351,7 +370,7 @@ If "Add check-in":
 6. Update `tests/test_cli_interface.py` and `tests/test_cli.py` for new behaviour
 
 ### Phase 2: Core CRUD
-7. `handoff_cmds.py`: add, list (full + risk + concluded), show, edit, delete, on-track, delayed, conclude, reopen, check-in, snooze, trail; list supports --project, --who, --search, --filter
+7. `handoff_cmds.py`: add, list (full + risk + concluded), show, edit, delete, on-track, delayed, conclude, reopen, check-in, trail; list supports --project, --who, --search, --filter
 8. `project_cmds.py`: add, list, rename, archive, unarchive, delete; `handoff project` → project menu
 
 ### Phase 3: Backup and update
@@ -384,7 +403,6 @@ handoff                          # No args → main interactive menu
 ├── conclude ID
 ├── reopen ID
 ├── check-in ID                  # Interactive menu
-├── snooze ID
 ├── project                      # No args → project menu
 │   ├── add
 │   ├── list
