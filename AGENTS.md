@@ -198,7 +198,9 @@ uv run handoff seed-demo --force             # re-seed even if not empty
 The seed function lives in `scripts/seed_demo.py` and is also callable from Python:
 
 ```python
+from datetime import date
 from scripts.seed_demo import seed_demo_db
+
 seed_demo_db(db_path, force=True, reference_date=date(2026, 3, 1))
 ```
 
