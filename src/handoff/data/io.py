@@ -9,7 +9,7 @@ from sqlmodel import select
 from handoff.bootstrap.logging import log_application_action
 from handoff.core.backup_schema import BackupPayload
 from handoff.core.models import CheckIn, Handoff, Project
-from handoff.db import session_context
+from handoff.db import get_db_path, session_context
 
 
 def import_payload(data_payload: dict[str, Any]) -> None:
@@ -70,6 +70,7 @@ def import_payload(data_payload: dict[str, Any]) -> None:
         session.commit()
         log_application_action(
             "data_import",
+            db_path=str(get_db_path()),
             project_count=len(payload.projects),
             handoff_count=len(payload.handoffs),
             check_in_count=len(payload.check_ins),

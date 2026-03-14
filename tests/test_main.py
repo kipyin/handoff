@@ -34,7 +34,7 @@ def test_main_runs_streamlit_with_app_py() -> None:
     assert call_args[1]["env"] is not None  # env=os.environ
 
 
-def test_main_applies_bootstrap_config_defaults_to_subprocess_env() -> None:
+def test_main_applies_streamlit_config_defaults_to_subprocess_env() -> None:
     """Entry-point import should apply Streamlit defaults before spawning subprocess."""
     captured_env: dict[str, str] | None = None
     exit_calls: list[int] = []
@@ -58,13 +58,12 @@ def test_main_applies_bootstrap_config_defaults_to_subprocess_env() -> None:
         "STREAMLIT_BROWSER_GATHER_USAGE_STATS": "false",
     }
     old_values = {key: os.environ.get(key) for key in streamlit_defaults}
-    old_config_module = sys.modules.get("handoff.bootstrap.config")
+    old_config_module = sys.modules.get("handoff.interfaces.streamlit.runtime_config")
 
     try:
         for key in streamlit_defaults:
             os.environ.pop(key, None)
-        # Force a fresh import so config side effects are exercised deterministically.
-        sys.modules.pop("handoff.bootstrap.config", None)
+        sys.modules.pop("handoff.interfaces.streamlit.runtime_config", None)
 
         with (
             patch("subprocess.run", side_effect=capture_run),
@@ -79,9 +78,9 @@ def test_main_applies_bootstrap_config_defaults_to_subprocess_env() -> None:
             else:
                 os.environ[key] = value
         if old_config_module is None:
-            sys.modules.pop("handoff.bootstrap.config", None)
+            sys.modules.pop("handoff.interfaces.streamlit.runtime_config", None)
         else:
-            sys.modules["handoff.bootstrap.config"] = old_config_module
+            sys.modules["handoff.interfaces.streamlit.runtime_config"] = old_config_module
 
     assert exit_calls == [0]
     assert captured_env is not None, "subprocess.run should have been called with env"

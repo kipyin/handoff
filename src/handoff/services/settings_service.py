@@ -186,9 +186,3 @@ def get_export_payload() -> dict[str, Any]:
 def import_payload(payload: dict[str, Any]) -> None:
     """Replace persisted data from a validated backup payload."""
     _import_payload(payload)
-
-
-def log_application_action(action: str, **details: Any) -> None:
-    import handoff.bootstrap.logging as _logging
-
-    _logging.log_application_action(action, **details)

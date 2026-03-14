@@ -20,7 +20,13 @@ def _log_app_action(action: str, **details: Any) -> None:
     """Log an application-level action (backup, update, restore). Delegates to bootstrap.logging."""
     import handoff.bootstrap.logging as _logging
 
-    _logging.log_application_action(action, **details)
+    try:
+        from handoff.db import get_db_path
+
+        db_path: str | None = str(get_db_path())
+    except Exception:
+        db_path = None
+    _logging.log_application_action(action, db_path=db_path, **details)
 
 
 ALLOWED_PREFIXES = ("app.py", "src/", "README.md", "RELEASE_NOTES.md")
