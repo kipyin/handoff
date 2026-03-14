@@ -77,11 +77,11 @@ def seeded_uat_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _now_page_entry() -> None:
     """Single-page entrypoint for the seeded Now page."""
-    import handoff.interfaces.streamlit.ui as ui
     from handoff.interfaces.streamlit.pages.now import render_now_page
+    from handoff.interfaces.streamlit.ui import setup
     from handoff.version import __version__
 
-    ui.setup(__version__)
+    setup(__version__)
     render_now_page()
 
 
@@ -116,34 +116,66 @@ def test_now_page_renders_with_seeded_uat_db(seeded_uat_db: Path) -> None:
     assert any("Overdue deliverable" in label for label in expander_labels)
 
 
+def _partition_expanders_by_section(at: AppTest) -> dict[str, list[str]]:
+    """Group expander labels by their section header from the element tree.
+
+    Walks the main block's children in document order; when a markdown node
+    matches a known section header (**Risk**, **Action required**, etc.), subsequent
+    expanders are attributed to that section until the next header.
+    """
+    sections: dict[str, list[str]] = {}
+    current_section: str | None = None
+    section_headers = ("**Risk**", "**Action required**", "**Upcoming**", "**Concluded**")
+
+    main = at._tree[0]
+    for child in main.children.values():
+        if type(child).__name__ == "Markdown":
+            val = getattr(child, "value", "") or ""
+            for header in section_headers:
+                if header in val:
+                    current_section = header.strip("*")
+                    sections.setdefault(current_section, [])
+                    break
+        elif type(child).__name__ == "Expander" and current_section:
+            label = getattr(child, "label", "") or ""
+            sections.setdefault(current_section, []).append(label)
+    return sections
+
+
 def test_now_sections_contain_expected_seeded_items(seeded_uat_db: Path) -> None:
-    """Each Now section shows the correct seeded handoffs from the demo DB."""
+    """Each Now section shows the correct seeded handoffs from the demo DB.
+
+    Validates per-section placement: items must appear under the correct section
+    header in the element tree, not just anywhere on the page.
+    """
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=APP_TEST_TIMEOUT)
 
     assert len(at.exception) == 0
-    expander_labels = [getattr(e, "label", "") for e in at.get("expander")]
+    by_section = _partition_expanders_by_section(at)
 
-    # Risk: both overdue and due-today items must be present.
-    assert any("Overdue deliverable" in lbl for lbl in expander_labels), (
+    # Risk: both overdue and due-today items must be in the Risk section.
+    risk_labels = by_section.get("Risk", [])
+    assert any("Overdue deliverable" in lbl for lbl in risk_labels), (
         "Expected 'Overdue deliverable' in Risk section"
     )
-    assert any("Due today" in lbl for lbl in expander_labels), (
-        "Expected 'Due today' in Risk section"
-    )
+    assert any("Due today" in lbl for lbl in risk_labels), "Expected 'Due today' in Risk section"
 
-    # Action required: action item must be present.
-    assert any("Action required item" in lbl for lbl in expander_labels), (
+    # Action required: action item must be in the Action required section.
+    action_labels = by_section.get("Action required", [])
+    assert any("Action required item" in lbl for lbl in action_labels), (
         "Expected 'Action required item' in Action required section"
     )
 
-    # Upcoming: at least the plain upcoming task must be visible.
-    assert any("Upcoming task" in lbl for lbl in expander_labels), (
+    # Upcoming: at least the plain upcoming task in the Upcoming section.
+    upcoming_labels = by_section.get("Upcoming", [])
+    assert any("Upcoming task" in lbl for lbl in upcoming_labels), (
         "Expected 'Upcoming task' in Upcoming section"
     )
 
-    # Concluded: concluded task must be present.
-    assert any("Concluded task" in lbl for lbl in expander_labels), (
+    # Concluded: concluded task must be in the Concluded section.
+    concluded_labels = by_section.get("Concluded", [])
+    assert any("Concluded task" in lbl for lbl in concluded_labels), (
         "Expected 'Concluded task' in Concluded section"
     )
 

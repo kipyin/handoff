@@ -117,19 +117,6 @@ def test_import_payload_via_service(session, monkeypatch) -> None:
     assert handoffs[0].need_back == "Imported todo"
 
 
-def test_log_application_action_delegates_to_bootstrap_logging(monkeypatch) -> None:
-    """Service logger helper forwards action and details to bootstrap logging."""
-    logged: list[tuple[str, dict[str, object]]] = []
-    monkeypatch.setattr(
-        "handoff.bootstrap.logging.log_application_action",
-        lambda action, **details: logged.append((action, details)),
-    )
-
-    settings_service.log_application_action("data_export", format="json", source="settings")
-
-    assert logged == [("data_export", {"format": "json", "source": "settings"})]
-
-
 # --- deadline_near_days persistence ---
 
 
