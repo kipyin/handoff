@@ -25,28 +25,43 @@ Plan for replacing the `handoff cli` stub with a complete CLI that replicates St
 
 ## 2. Architecture
 
-### Module layout
+### Current structure (as of plan update)
+
+**Entrypoint:** `pyproject.toml` defines `handoff = "scripts.cli:main"`. The main Typer app lives in `scripts/cli.py`.
+
+**Existing stubs (to replace):**
+1. `scripts/cli.py` — `cli_command()` registered as `handoff cli`; prints "not implemented" and exits 1
+2. `src/handoff/interfaces/cli/__init__.py` — `run_cli()` raises NotImplementedError; not wired to scripts.cli
+
+**Interface pattern:** `src/handoff/interfaces/` holds user-facing UIs: `streamlit/` (pages, ui, runtime_config) and `cli/` (stub today). CLI implementation should live under `interfaces/cli/` to mirror Streamlit.
+
+### Module layout (revised)
 ```
 scripts/
-├── cli.py                    # Main Typer app; delegates to cli/ modules
-└── cli/
-    ├── __init__.py
-    ├── db_context.py         # HANDOFF_DB_PATH resolution, --db-path support
-    ├── handoff_commands.py   # handoff add/list/show/update/delete/conclude/reopen/check-in
-    ├── project_commands.py   # project add/list/archive/unarchive/rename/delete
-    ├── trail_commands.py     # trail show (check-in history)
-    ├── backup_commands.py    # export, import
-    ├── update_commands.py   # apply-patch, restore
-    ├── rulebook_commands.py  # rulebook show/reset (minimal)
-    ├── dashboard_commands.py# dashboard (summary metrics)
-    └── output.py             # Rich tables/panels/formatting helpers
+└── cli.py                    # Main Typer app; registers dev/build commands + mounts handoff CLI app
+
+src/handoff/interfaces/cli/
+├── __init__.py               # Exports run_cli, get_cli_app (or sub-apps)
+├── app.py                    # Typer app for domain commands; mounted by scripts.cli
+├── db_context.py             # HANDOFF_DB_PATH resolution, --db-path support
+├── output.py                 # Rich tables/panels/formatting helpers
+├── handoff_cmds.py           # handoff add/list/show/update/delete/conclude/reopen/check-in
+├── project_cmds.py           # project add/list/archive/unarchive/rename/delete
+├── trail_cmds.py             # trail show (check-in history)
+├── backup_cmds.py            # export, import
+├── update_cmds.py            # apply, list-backups, restore
+├── rulebook_cmds.py          # rulebook show/reset (minimal)
+└── dashboard_cmds.py         # dashboard summary
 ```
 
-### Invocation model
-- **Entry:** `handoff cli` → interactive menu (questionary) or `handoff cli <subcommand>` for direct usage
-- **Alternative:** `handoff handoff add`, `handoff project list`, etc. as top-level groups (Typer add_typer)
+### Wiring
+- `scripts/cli.py` imports `get_cli_app` from `handoff.interfaces.cli` and mounts it via `app.add_typer(cli_app, name="handoff")`. The `handoff cli` command invokes `run_cli()` for the interactive menu.
+- `run_cli()` becomes the interactive entry; direct subcommands (`handoff handoff add`, etc.) come from the mounted Typer app.
+- Dev/build commands (check, typecheck, test, ci, build, bump, seed-demo, db-path, …) stay in scripts.cli.py; domain commands live in handoff.interfaces.cli.
 
-Recommendation: Use **Typer groups** so users can run `handoff handoff add`, `handoff project list`, etc. The existing `handoff cli` stub becomes the interactive entry that uses questionary to choose a subcommand.
+### Invocation model
+- **Direct:** `handoff handoff add`, `handoff project list`, etc. (Typer groups from mounted app)
+- **Interactive:** `handoff cli` invokes `run_cli()` → questionary menu to pick action
 
 ---
 
@@ -151,9 +166,9 @@ Recommendation: Add `get_handoff(handoff_id)` to `handoff.data` and `handoff_ser
 
 ### 4.1 DB context
 - All data commands need DB path. Use `HANDOFF_DB_PATH` env or `--db-path` global option.
-- Add `cli/db_context.py`: `get_cli_db_path() -> Path` that respects `--db-path` and falls back to `get_db_path()`.
+- Add `handoff.interfaces.cli.db_context`: `get_cli_db_path() -> Path` that respects `--db-path` and falls back to `get_db_path()`.
 
-### 4.2 Output helpers (`cli/output.py`)
+### 4.2 Output helpers (`handoff.interfaces.cli.output`)
 - `print_handoff_table(handoffs)` — Rich Table
 - `print_project_table(projects)` — Rich Table with open/concluded
 - `print_trail(handoff)` — Rich table or tree for check-ins
@@ -170,27 +185,28 @@ Recommendation: Add `get_handoff(handoff_id)` to `handoff.data` and `handoff_ser
 
 ### Phase 1: Foundation
 1. Add `questionary` and move `rich` to main deps in pyproject.toml
-2. Create `scripts/cli/` package
-3. Add `output.py` with basic Rich helpers
-4. Add `db_context.py` and `--db-path` support to CLI
-5. Add `get_handoff(handoff_id)` to data + handoff_service
+2. Create `handoff.interfaces.cli` modules: `app.py`, `output.py`, `db_context.py`
+3. Add `get_handoff(handoff_id)` to data layer and handoff_service
+4. Wire `scripts.cli` to mount the CLI app from `handoff.interfaces.cli`; replace `cli_command` stub to call `run_cli()`
+5. Update `run_cli()` in `handoff.interfaces.cli` to run interactive menu (or no-op until Phase 5)
+6. Update `tests/test_cli_interface.py` and `tests/test_cli.py` for new behaviour
 
 ### Phase 2: Core CRUD
-6. `handoff_commands.py`: add, list, show, update, delete, conclude, reopen, check-in, snooze
-7. `project_commands.py`: add, list, rename, archive, unarchive, delete
-8. `trail_commands.py`: show
+7. `handoff_cmds.py`: add, list, show, update, delete, conclude, reopen, check-in, snooze
+8. `project_cmds.py`: add, list, rename, archive, unarchive, delete
+9. `trail_cmds.py`: show
 
 ### Phase 3: Backup and update
-9. `backup_commands.py`: export (json/csv), import
-10. `update_commands.py`: apply, list-backups, restore
+10. `backup_cmds.py`: export (json/csv), import
+11. `update_cmds.py`: apply, list-backups, restore
 
 ### Phase 4: Second-class features
-11. `rulebook_commands.py`: show, reset
-12. `dashboard_commands.py`: summary
+12. `rulebook_cmds.py`: show, reset
+13. `dashboard_cmds.py`: summary
 
 ### Phase 5: Interactive menu
-13. Wire `handoff cli` to questionary main menu
-14. Ensure all subcommands work both as `handoff <group> <cmd>` and from menu
+14. Implement full questionary menu in `run_cli()`
+15. Ensure all subcommands work both as `handoff <group> <cmd>` and from menu
 
 ---
 
@@ -238,7 +254,20 @@ handoff
 
 ---
 
-## 7. Clarification Questions for Product Owner
+## 7. Test Impact
+
+**tests/test_cli_interface.py** — currently expects `run_cli()` to raise NotImplementedError. When implemented:
+- `run_cli()` will run the interactive menu (or exit cleanly if non-interactive)
+- Tests should change to assert menu is shown or subcommand delegation works; remove NotImplementedError expectation
+
+**tests/test_cli.py** — `test_cli_command_stub_*` tests:
+- `test_cli_command_stub_prints_not_implemented_message` — remove or rewrite; `handoff cli` will show menu
+- `test_cli_command_stub_exits_with_code_1` — remove or rewrite
+- `test_cli_command_stub_does_not_accept_subcommands` — revisit; interactive menu may not take positional args
+
+---
+
+## 8. Clarification Questions for Product Owner
 
 1. **Interactive vs non-interactive default:** Should `handoff cli` with no args always show the interactive menu, or should `handoff cli` require a subcommand and offer `handoff cli --interactive` / `handoff cli -i` for the menu?
 
