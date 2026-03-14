@@ -44,3 +44,29 @@ assert os.environ.get("STREAMLIT_BROWSER_GATHER_USAGE_STATS") == "false"
         timeout=10,
     )
     assert result.returncode == 0, (result.stdout or "") + (result.stderr or "")
+
+
+def test_runtime_config_respects_already_set_env_vars() -> None:
+    """Importing runtime_config does not override vars already in os.environ."""
+    code = """
+import os
+# Pre-set one of the vars to a custom value.
+os.environ["STREAMLIT_CLIENT_SHOW_ERROR_DETAILS"] = "all"
+os.environ["STREAMLIT_CLIENT_TOOLBAR_MODE"] = "minimal"
+import handoff.interfaces.streamlit.runtime_config  # noqa: F401
+# Should not override already-set values.
+assert os.environ.get("STREAMLIT_CLIENT_SHOW_ERROR_DETAILS") == "all"
+assert os.environ.get("STREAMLIT_CLIENT_TOOLBAR_MODE") == "minimal"
+# Should set defaults for unset vars.
+assert os.environ.get("STREAMLIT_CLIENT_SHOW_SIDEBAR_NAVIGATION") == "false"
+"""
+    env = {**os.environ, "PYTHONPATH": str(PROJECT_ROOT / "src")}
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, (result.stdout or "") + (result.stderr or "")

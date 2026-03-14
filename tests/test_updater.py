@@ -86,6 +86,62 @@ def test_apply_patch_zip_applies_allowed_paths_and_creates_backup(
     assert (snapshot / "src" / "module.py").read_text(encoding="utf-8") == "old src"
 
 
+def test_log_app_action_delegates_to_bootstrap_logging(monkeypatch) -> None:
+    """_log_app_action delegates to bootstrap.logging.log_application_action."""
+    from handoff.updater import _log_app_action
+
+    logged: list[tuple[str, dict]] = []
+
+    def mock_bootstrap_log(action: str, **details) -> None:
+        logged.append((action, details))
+
+    monkeypatch.setattr(
+        "handoff.bootstrap.logging.log_application_action",
+        mock_bootstrap_log,
+    )
+    # Mock get_db_path to return a path
+    monkeypatch.setattr(
+        "handoff.db.get_db_path",
+        lambda: Path("/tmp/handoff.db"),
+    )
+
+    _log_app_action("data_backup", size_mb=150)
+
+    assert len(logged) == 1
+    action, details = logged[0]
+    assert action == "data_backup"
+    assert details.get("db_path") == "/tmp/handoff.db"
+    assert details.get("size_mb") == 150
+
+
+def test_log_app_action_handles_missing_db_path_gracefully(monkeypatch) -> None:
+    """_log_app_action passes db_path=None when get_db_path() raises."""
+    from handoff.updater import _log_app_action
+
+    logged: list[tuple[str, dict]] = []
+
+    def mock_bootstrap_log(action: str, **details) -> None:
+        logged.append((action, details))
+
+    monkeypatch.setattr(
+        "handoff.bootstrap.logging.log_application_action",
+        mock_bootstrap_log,
+    )
+    # Mock get_db_path to raise an exception
+    monkeypatch.setattr(
+        "handoff.db.get_db_path",
+        lambda: (_ for _ in ()).throw(RuntimeError("DB not available")),
+    )
+
+    _log_app_action("app_update", target_version="2026.3.0")
+
+    assert len(logged) == 1
+    action, details = logged[0]
+    assert action == "app_update"
+    assert details.get("db_path") is None
+    assert details.get("target_version") == "2026.3.0"
+
+
 def test_extract_patch_to_staging_writes_to_update_dir(tmp_path: Path) -> None:
     """extract_patch_to_staging extracts zip into app_root/update/ and leaves app root unchanged."""
     app_root = tmp_path

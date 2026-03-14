@@ -1863,6 +1863,35 @@ def test_import_payload_legacy_format(session, monkeypatch) -> None:
     assert check_ins[0].check_in_type == CheckInType.CONCLUDED
 
 
+def test_import_payload_logs_with_db_path(session, monkeypatch) -> None:
+    """import_payload calls log_application_action with db_path parameter."""
+    _patch_session_context(monkeypatch, session)
+
+    logged: list[tuple[str, dict]] = []
+
+    def mock_log_action(action: str, **details) -> None:
+        logged.append((action, details))
+
+    import handoff.data.io as io_mod
+
+    monkeypatch.setattr(io_mod, "log_application_action", mock_log_action)
+
+    payload = {
+        "projects": [{"id": 1, "name": "P", "created_at": "2026-01-01T00:00:00"}],
+        "handoffs": [],
+        "check_ins": [],
+    }
+    data.import_payload(payload)
+
+    assert len(logged) == 1
+    action, details = logged[0]
+    assert action == "data_import"
+    assert "db_path" in details
+    assert details["project_count"] == 1
+    assert details["handoff_count"] == 0
+    assert details["check_in_count"] == 0
+
+
 def test_create_check_in(session, monkeypatch) -> None:
     """create_check_in inserts a record and can update handoff.next_check."""
     _patch_session_context(monkeypatch, session)
