@@ -127,6 +127,15 @@ def _backup_existing_files(paths: list[str], app_root: Path, backup_root: Path) 
     return backed_up
 
 
+def _reset_update_staging_dir(app_root: Path) -> Path:
+    """Return a clean update staging directory under the app root."""
+    staging = app_root / UPDATE_STAGING_DIR
+    if staging.exists():
+        shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True, exist_ok=True)
+    return staging
+
+
 def _get_app_root() -> Path:
     """Compatibility wrapper returning the application root directory."""
     return get_app_root()
@@ -189,7 +198,7 @@ def stage_patch_with_backup(
         if not members:
             return "No applicable files found in patch zip."
 
-        staging = app_root / UPDATE_STAGING_DIR
+        staging = _reset_update_staging_dir(app_root)
         extracted, extract_failed = _extract_zip_to_dir(zf, members, staging)
         if not extracted:
             return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
@@ -261,7 +270,7 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
         if not members:
             return "No applicable files found in patch zip."
 
-        staging = app_root / UPDATE_STAGING_DIR
+        staging = _reset_update_staging_dir(app_root)
         extracted, extract_failed = _extract_zip_to_dir(zf, members, staging)
         if not extracted:
             return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."

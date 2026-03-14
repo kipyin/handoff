@@ -108,6 +108,20 @@ def test_extract_patch_to_staging_writes_to_update_dir(tmp_path: Path) -> None:
     assert app_file.read_text(encoding="utf-8") == "old app"
 
 
+def test_extract_patch_to_staging_replaces_existing_staging_contents(tmp_path: Path) -> None:
+    """Extracting a new patch should clear stale files from update/ first."""
+    app_root = tmp_path
+    stale_file = app_root / "update" / "src" / "stale.py"
+    stale_file.parent.mkdir(parents=True, exist_ok=True)
+    stale_file.write_text("stale", encoding="utf-8")
+
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"new app"})
+    extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+
+    assert (app_root / "update" / "app.py").read_text(encoding="utf-8") == "new app"
+    assert not stale_file.exists()
+
+
 def test_stage_patch_with_backup_creates_backup_and_staging_leaves_app_root_unchanged(
     tmp_path: Path,
     monkeypatch,
@@ -157,6 +171,29 @@ def test_stage_patch_with_backup_creates_backup_and_staging_leaves_app_root_unch
     assert logged[0][0] == "app_backup"
     assert logged[0][1]["target_version"] == "2026.2.99"
     assert logged[0][1]["backup_path"].startswith(str(app_root / "backup"))
+
+
+def test_stage_patch_with_backup_replaces_existing_staging_contents(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Staging a new patch should clear stale files from a previous staging run."""
+    app_root = tmp_path
+    stale_file = app_root / "update" / "src" / "stale.py"
+    stale_file.parent.mkdir(parents=True, exist_ok=True)
+    stale_file.write_text("stale", encoding="utf-8")
+
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"fresh"})
+    monkeypatch.setattr("handoff.updater._log_app_action", lambda *_a, **_k: None)
+
+    stage_patch_with_backup(
+        BytesIO(zip_bytes),
+        app_root=app_root,
+        app_version="2026.3.1",
+    )
+
+    assert (app_root / "update" / "app.py").read_text(encoding="utf-8") == "fresh"
+    assert not stale_file.exists()
 
 
 def test_extract_patch_to_staging_no_applicable_files(tmp_path: Path) -> None:
