@@ -1864,9 +1864,10 @@ def test_import_payload_legacy_format(session, monkeypatch) -> None:
 
 
 def test_import_payload_logs_with_db_path(session, monkeypatch) -> None:
-    """import_payload calls log_application_action with db_path parameter."""
+    """import_payload calls log_application_action with db_path from get_db_path."""
     _patch_session_context(monkeypatch, session)
 
+    known_db_path = Path("/tmp/test-import-handoff.db")
     logged: list[tuple[str, dict]] = []
 
     def mock_log_action(action: str, **details) -> None:
@@ -1875,6 +1876,7 @@ def test_import_payload_logs_with_db_path(session, monkeypatch) -> None:
     import handoff.data.io as io_mod
 
     monkeypatch.setattr(io_mod, "log_application_action", mock_log_action)
+    monkeypatch.setattr(io_mod, "get_db_path", lambda: known_db_path)
 
     payload = {
         "projects": [{"id": 1, "name": "P", "created_at": "2026-01-01T00:00:00"}],
@@ -1886,7 +1888,7 @@ def test_import_payload_logs_with_db_path(session, monkeypatch) -> None:
     assert len(logged) == 1
     action, details = logged[0]
     assert action == "data_import"
-    assert "db_path" in details
+    assert details.get("db_path") == str(known_db_path)
     assert details["project_count"] == 1
     assert details["handoff_count"] == 0
     assert details["check_in_count"] == 0

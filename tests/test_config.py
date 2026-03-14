@@ -50,14 +50,21 @@ def test_runtime_config_respects_already_set_env_vars() -> None:
     """Importing runtime_config does not override vars already in os.environ."""
     code = """
 import os
-# Pre-set one of the vars to a custom value.
+# Clear the vars we care about so we control their initial state.
+for key in (
+    "STREAMLIT_CLIENT_SHOW_ERROR_DETAILS",
+    "STREAMLIT_CLIENT_TOOLBAR_MODE",
+    "STREAMLIT_CLIENT_SHOW_SIDEBAR_NAVIGATION",
+):
+    os.environ.pop(key, None)
+# Pre-set two vars to custom values (setdefault must not override these).
 os.environ["STREAMLIT_CLIENT_SHOW_ERROR_DETAILS"] = "all"
 os.environ["STREAMLIT_CLIENT_TOOLBAR_MODE"] = "minimal"
 import handoff.interfaces.streamlit.runtime_config  # noqa: F401
 # Should not override already-set values.
 assert os.environ.get("STREAMLIT_CLIENT_SHOW_ERROR_DETAILS") == "all"
 assert os.environ.get("STREAMLIT_CLIENT_TOOLBAR_MODE") == "minimal"
-# Should set defaults for unset vars.
+# Should set default for unset var.
 assert os.environ.get("STREAMLIT_CLIENT_SHOW_SIDEBAR_NAVIGATION") == "false"
 """
     env = {**os.environ, "PYTHONPATH": str(PROJECT_ROOT / "src")}

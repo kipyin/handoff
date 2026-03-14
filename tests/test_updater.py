@@ -127,11 +127,11 @@ def test_log_app_action_handles_missing_db_path_gracefully(monkeypatch) -> None:
         "handoff.bootstrap.logging.log_application_action",
         mock_bootstrap_log,
     )
-    # Mock get_db_path to raise an exception
-    monkeypatch.setattr(
-        "handoff.db.get_db_path",
-        lambda: (_ for _ in ()).throw(RuntimeError("DB not available")),
-    )
+
+    def raise_db_unavailable() -> None:
+        raise RuntimeError("DB not available")
+
+    monkeypatch.setattr("handoff.db.get_db_path", raise_db_unavailable)
 
     _log_app_action("app_update", target_version="2026.3.0")
 
