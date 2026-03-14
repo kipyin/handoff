@@ -3237,3 +3237,564 @@ def test_build_project_options_handles_label_collision_with_id_suffix(
                 found = True
                 break
         assert found, f"Project with id {proj.id} not found in options"
+
+
+# --- Regression Tests for PR #187 (instrumentation removal) ---
+
+
+class TestSubmissionFunctionRegressions:
+    """Regression tests for form submission functions after time_action removal.
+
+    PR #187 removed instrumentation.py and time_action() calls from submission
+    functions. These tests verify all submission flows work correctly without
+    instrumentation, with focus on:
+    - Success paths (which had instrumentation context managers removed)
+    - Form state cleanup after successful operations
+    - Whitespace normalization in user inputs
+    - Edge cases with None/missing values
+    """
+
+    def test_confirm_delete_handoff_success_clears_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Successful delete clears mode state and shows success flash."""
+        from handoff.interfaces.streamlit.pages.now_forms import _confirm_delete_handoff
+
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        delete_calls: list[int] = []
+
+        def _fake_delete(handoff_id: int) -> bool:
+            delete_calls.append(handoff_id)
+            return True
+
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.delete_handoff",
+            _fake_delete,
+        )
+
+        st_mock.session_state["test_action_mode"] = "delete"
+        _confirm_delete_handoff(handoff_id=42, action_mode_key="test_action_mode")
+
+        assert delete_calls == [42]
+        assert st_mock.session_state.get("test_action_mode") is None
+        assert st_mock.session_state["now_flash_success"] == "Handoff deleted."
+        assert "now_flash_error" not in st_mock.session_state
+
+    def test_save_check_in_submission_conclude_clears_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Conclude check-in clears mode state after success."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        conclude_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.conclude_handoff",
+            conclude_mock,
+        )
+
+        st_mock.session_state["test_mode"] = "concluded"
+        st_mock.session_state["test_note"] = "Wrapped up"
+
+        _save_check_in_submission(
+            handoff_id=5,
+            selected_mode="concluded",
+            mode_key="test_mode",
+            note_key="test_note",
+            next_check_key="test_next_check",
+        )
+
+        conclude_mock.assert_called_once_with(5, note="Wrapped up")
+        assert st_mock.session_state.get("test_mode") is None
+        assert st_mock.session_state["now_flash_success"] == ("Checked in today as concluded.")
+
+    def test_save_check_in_submission_on_track_clears_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """On-track check-in clears mode state after success."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        check_in_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.add_check_in",
+            check_in_mock,
+        )
+
+        st_mock.session_state["test_mode"] = "on_track"
+        st_mock.session_state["test_note"] = "Good progress"
+        st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+
+        _save_check_in_submission(
+            handoff_id=6,
+            selected_mode="on_track",
+            mode_key="test_mode",
+            note_key="test_note",
+            next_check_key="test_next_check",
+        )
+
+        check_in_mock.assert_called_once()
+        call_args = check_in_mock.call_args
+        assert call_args[0][0] == 6
+        assert call_args[1]["check_in_type"] is CheckInType.ON_TRACK
+        assert st_mock.session_state.get("test_mode") is None
+
+    def test_save_check_in_submission_delayed_clears_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Delayed check-in clears mode state after success."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        check_in_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.add_check_in",
+            check_in_mock,
+        )
+
+        st_mock.session_state["test_mode"] = "delayed"
+        st_mock.session_state["test_note"] = "Blocked"
+        st_mock.session_state["test_next_check"] = date(2026, 3, 20)
+
+        _save_check_in_submission(
+            handoff_id=7,
+            selected_mode="delayed",
+            mode_key="test_mode",
+            note_key="test_note",
+            next_check_key="test_next_check",
+        )
+
+        check_in_mock.assert_called_once()
+        call_args = check_in_mock.call_args
+        assert call_args[1]["check_in_type"] is CheckInType.DELAYED
+        assert st_mock.session_state.get("test_mode") is None
+
+    def test_save_check_in_submission_conclude_strips_note_whitespace(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Conclude check-in normalizes whitespace in note."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        conclude_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.conclude_handoff",
+            conclude_mock,
+        )
+
+        st_mock.session_state["test_mode"] = "concluded"
+        st_mock.session_state["test_note"] = "   Completed successfully   "
+
+        _save_check_in_submission(
+            handoff_id=8,
+            selected_mode="concluded",
+            mode_key="test_mode",
+            note_key="test_note",
+            next_check_key=None,
+        )
+
+        conclude_mock.assert_called_once_with(8, note="Completed successfully")
+
+    def test_save_check_in_submission_on_track_converts_empty_note_to_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """On-track check-in converts empty note string to None."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        check_in_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.add_check_in",
+            check_in_mock,
+        )
+
+        st_mock.session_state["test_mode"] = "on_track"
+        st_mock.session_state["test_note"] = "   "
+        st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+
+        _save_check_in_submission(
+            handoff_id=9,
+            selected_mode="on_track",
+            mode_key="test_mode",
+            note_key="test_note",
+            next_check_key="test_next_check",
+        )
+
+        check_in_mock.assert_called_once()
+        call_args = check_in_mock.call_args
+        assert call_args[1]["note"] is None
+
+    def test_save_reopen_submission_success_clears_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Successful reopen clears mode state and shows success flash."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        reopen_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.reopen_handoff",
+            reopen_mock,
+        )
+
+        st_mock.session_state["test_reopen_mode"] = "reopen"
+        st_mock.session_state["test_reopen_note"] = "Reopening work"
+        st_mock.session_state["test_reopen_next_check"] = date(2026, 3, 16)
+
+        _save_reopen_submission(
+            handoff_id=10,
+            mode_key="test_reopen_mode",
+            note_key="test_reopen_note",
+            next_check_key="test_reopen_next_check",
+        )
+
+        reopen_mock.assert_called_once_with(
+            10, note="Reopening work", next_check_date=date(2026, 3, 16)
+        )
+        assert st_mock.session_state.get("test_reopen_mode") is None
+
+    def test_save_reopen_submission_strips_note_whitespace(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Reopen submission normalizes whitespace in note."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        reopen_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.reopen_handoff",
+            reopen_mock,
+        )
+
+        st_mock.session_state["test_reopen_mode"] = "reopen"
+        st_mock.session_state["test_reopen_note"] = "   Need to continue   "
+        st_mock.session_state["test_reopen_next_check"] = date(2026, 3, 20)
+
+        _save_reopen_submission(
+            handoff_id=11,
+            mode_key="test_reopen_mode",
+            note_key="test_reopen_note",
+            next_check_key="test_reopen_next_check",
+        )
+
+        reopen_mock.assert_called_once()
+        call_args = reopen_mock.call_args
+        assert call_args[1]["note"] == "Need to continue"
+
+    def test_save_reopen_submission_empty_note_becomes_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Reopen with empty note passes None to service."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        reopen_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.reopen_handoff",
+            reopen_mock,
+        )
+
+        st_mock.session_state["test_reopen_mode"] = "reopen"
+        st_mock.session_state["test_reopen_note"] = "    "
+        st_mock.session_state["test_reopen_next_check"] = date(2026, 3, 20)
+
+        _save_reopen_submission(
+            handoff_id=12,
+            mode_key="test_reopen_mode",
+            note_key="test_reopen_note",
+            next_check_key="test_reopen_next_check",
+        )
+
+        reopen_mock.assert_called_once()
+        call_args = reopen_mock.call_args
+        assert call_args[1]["note"] is None
+
+    def test_save_edit_submission_success_clears_mode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Successful edit clears action mode and shows success flash."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        update_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.update_handoff",
+            update_mock,
+        )
+
+        st_mock.session_state["test_action_mode"] = "edit"
+        st_mock.session_state["test_project"] = "Work"
+        st_mock.session_state["test_need"] = "Updated need"
+        st_mock.session_state["test_who"] = "  Bob  "
+        st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+        st_mock.session_state["test_deadline"] = None
+        st_mock.session_state["test_context"] = "Updated context"
+
+        _save_edit_submission(
+            handoff_id=13,
+            project_options={"Work": SimpleNamespace(id=1)},
+            project_key="test_project",
+            need_key="test_need",
+            who_key="test_who",
+            next_check_key="test_next_check",
+            deadline_key="test_deadline",
+            context_key="test_context",
+            action_mode_key="test_action_mode",
+        )
+
+        update_mock.assert_called_once()
+        call_args = update_mock.call_args
+        assert call_args[0][0] == 13
+        assert call_args[1]["pitchman"] == "Bob"
+        assert st_mock.session_state.get("test_action_mode") is None
+        assert st_mock.session_state["now_flash_success"] == "Saved."
+
+    def test_save_edit_submission_strips_pitchman_whitespace(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Edit submission normalizes pitchman field whitespace."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        update_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.update_handoff",
+            update_mock,
+        )
+
+        st_mock.session_state["test_project"] = "Work"
+        st_mock.session_state["test_need"] = "Updated"
+        st_mock.session_state["test_who"] = "   Charlie   "
+        st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+        st_mock.session_state["test_deadline"] = None
+        st_mock.session_state["test_context"] = ""
+
+        _save_edit_submission(
+            handoff_id=14,
+            project_options={"Work": SimpleNamespace(id=1)},
+            project_key="test_project",
+            need_key="test_need",
+            who_key="test_who",
+            next_check_key="test_next_check",
+            deadline_key="test_deadline",
+            context_key="test_context",
+        )
+
+        update_mock.assert_called_once()
+        call_args = update_mock.call_args
+        assert call_args[1]["pitchman"] == "Charlie"
+
+    def test_save_edit_submission_empty_pitchman_becomes_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Edit with empty pitchman passes None to service."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        update_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.update_handoff",
+            update_mock,
+        )
+
+        st_mock.session_state["test_project"] = "Work"
+        st_mock.session_state["test_need"] = "Updated"
+        st_mock.session_state["test_who"] = "    "
+        st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+        st_mock.session_state["test_deadline"] = None
+        st_mock.session_state["test_context"] = "Details"
+
+        _save_edit_submission(
+            handoff_id=15,
+            project_options={"Work": SimpleNamespace(id=1)},
+            project_key="test_project",
+            need_key="test_need",
+            who_key="test_who",
+            next_check_key="test_next_check",
+            deadline_key="test_deadline",
+            context_key="test_context",
+        )
+
+        update_mock.assert_called_once()
+        call_args = update_mock.call_args
+        assert call_args[1]["pitchman"] is None
+
+    def test_save_edit_submission_strips_notes_whitespace(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Edit submission normalizes context/notes field whitespace."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        update_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.update_handoff",
+            update_mock,
+        )
+
+        st_mock.session_state["test_project"] = "Work"
+        st_mock.session_state["test_need"] = "Need"
+        st_mock.session_state["test_who"] = ""
+        st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+        st_mock.session_state["test_deadline"] = None
+        st_mock.session_state["test_context"] = "   Important details   "
+
+        _save_edit_submission(
+            handoff_id=16,
+            project_options={"Work": SimpleNamespace(id=1)},
+            project_key="test_project",
+            need_key="test_need",
+            who_key="test_who",
+            next_check_key="test_next_check",
+            deadline_key="test_deadline",
+            context_key="test_context",
+        )
+
+        update_mock.assert_called_once()
+        call_args = update_mock.call_args
+        assert call_args[1]["notes"] == "Important details"
+
+    def test_save_edit_submission_deadline_date_type_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Edit submission passes deadline only when it's a date object."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        update_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.update_handoff",
+            update_mock,
+        )
+
+        deadline_date = date(2026, 4, 1)
+        st_mock.session_state["test_project"] = "Work"
+        st_mock.session_state["test_need"] = "Need"
+        st_mock.session_state["test_who"] = ""
+        st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+        st_mock.session_state["test_deadline"] = deadline_date
+        st_mock.session_state["test_context"] = ""
+
+        _save_edit_submission(
+            handoff_id=17,
+            project_options={"Work": SimpleNamespace(id=1)},
+            project_key="test_project",
+            need_key="test_need",
+            who_key="test_who",
+            next_check_key="test_next_check",
+            deadline_key="test_deadline",
+            context_key="test_context",
+        )
+
+        update_mock.assert_called_once()
+        call_args = update_mock.call_args
+        assert call_args[1]["deadline"] == deadline_date
+
+    def test_save_add_submission_success_clears_add_form(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Successful add collapses form and shows success flash."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        create_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
+            create_mock,
+        )
+
+        st_mock.session_state["test_project"] = "Work"
+        st_mock.session_state["test_need"] = "New handoff"
+        st_mock.session_state["test_who"] = "  Diana  "
+        st_mock.session_state["test_next_check"] = date(2026, 3, 16)
+        st_mock.session_state["test_deadline"] = None
+        st_mock.session_state["test_context"] = "New work"
+        st_mock.session_state["now_add_expanded"] = True
+
+        _save_add_submission(
+            project_options={"Work": SimpleNamespace(id=1)},
+            project_key="test_project",
+            need_key="test_need",
+            who_key="test_who",
+            next_check_key="test_next_check",
+            deadline_key="test_deadline",
+            context_key="test_context",
+        )
+
+        create_mock.assert_called_once()
+        call_args = create_mock.call_args
+        assert call_args[1]["pitchman"] == "Diana"
+        assert st_mock.session_state.get("now_add_expanded") is None
+        assert st_mock.session_state["now_flash_success"] == "Added."
+
+    def test_save_add_submission_strips_pitchman_and_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Add submission normalizes pitchman and context whitespace."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        create_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
+            create_mock,
+        )
+
+        st_mock.session_state["test_project"] = "Work"
+        st_mock.session_state["test_need"] = "New"
+        st_mock.session_state["test_who"] = "   Eve   "
+        st_mock.session_state["test_next_check"] = date(2026, 3, 18)
+        st_mock.session_state["test_deadline"] = date(2026, 4, 15)
+        st_mock.session_state["test_context"] = "   Initial context   "
+
+        _save_add_submission(
+            project_options={"Work": SimpleNamespace(id=1)},
+            project_key="test_project",
+            need_key="test_need",
+            who_key="test_who",
+            next_check_key="test_next_check",
+            deadline_key="test_deadline",
+            context_key="test_context",
+        )
+
+        create_mock.assert_called_once()
+        call_args = create_mock.call_args
+        assert call_args[1]["pitchman"] == "Eve"
+        assert call_args[1]["notes"] == "Initial context"
+
+    def test_save_add_submission_empty_optional_fields_become_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Add with empty optional fields converts them to None."""
+        st_mock = _build_streamlit_mock()
+        _patch_now_streamlit(monkeypatch, st_mock)
+
+        create_mock = MagicMock()
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.pages.now_forms.create_handoff",
+            create_mock,
+        )
+
+        st_mock.session_state["test_project"] = "Work"
+        st_mock.session_state["test_need"] = "New"
+        st_mock.session_state["test_who"] = "    "
+        st_mock.session_state["test_next_check"] = date(2026, 3, 18)
+        st_mock.session_state["test_deadline"] = None
+        st_mock.session_state["test_context"] = ""
+
+        _save_add_submission(
+            project_options={"Work": SimpleNamespace(id=1)},
+            project_key="test_project",
+            need_key="test_need",
+            who_key="test_who",
+            next_check_key="test_next_check",
+            deadline_key="test_deadline",
+            context_key="test_context",
+        )
+
+        create_mock.assert_called_once()
+        call_args = create_mock.call_args
+        assert call_args[1]["pitchman"] is None
+        assert call_args[1]["notes"] is None

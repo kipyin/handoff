@@ -25,9 +25,6 @@ def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import handoff.interfaces.streamlit.ui as streamlit_ui
 
     importlib.reload(streamlit_ui)
-    import handoff.ui as ui
-
-    importlib.reload(ui)
 
 
 def _patch_uat_date(monkeypatch: pytest.MonkeyPatch, fixed_date_class: type[date]) -> None:
@@ -73,11 +70,11 @@ def seeded_uat_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _now_page_entry() -> None:
     """Single-page entrypoint for the seeded Now page."""
-    import handoff.ui as ui
     from handoff.interfaces.streamlit.pages.now import render_now_page
+    from handoff.interfaces.streamlit.ui import setup
     from handoff.version import __version__
 
-    ui.setup(__version__)
+    setup(__version__)
     render_now_page()
 
 
