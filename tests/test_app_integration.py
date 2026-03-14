@@ -38,14 +38,11 @@ def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import handoff.interfaces.streamlit.ui as streamlit_ui
 
     importlib.reload(streamlit_ui)
-    import handoff.ui as ui
-
-    importlib.reload(ui)
 
 
 @pytest.fixture
 def app_test_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Set up a temporary DB path and reload handoff.db / ui so app uses it."""
+    """Set up a temporary DB path and reload handoff.db / streamlit ui so app uses it."""
     db_path = tmp_path / "handoff_test.db"
     _reload_db_for_test(db_path, monkeypatch)
     return db_path
@@ -53,7 +50,7 @@ def app_test_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _projects_page_entry() -> None:
     """Single-page entrypoint for Projects: setup + render."""
-    import handoff.ui as ui
+    import handoff.interfaces.streamlit.ui as ui
     from handoff.interfaces.streamlit.pages.projects import render_projects_page
 
     ui.setup("2026.2.24")
@@ -62,7 +59,7 @@ def _projects_page_entry() -> None:
 
 def _system_settings_page_entry() -> None:
     """Single-page entrypoint for System Settings: setup + render."""
-    import handoff.ui as ui
+    import handoff.interfaces.streamlit.ui as ui
     from handoff.interfaces.streamlit.pages.system_settings import render_system_settings_page
 
     ui.setup("2026.2.24")
@@ -71,7 +68,7 @@ def _system_settings_page_entry() -> None:
 
 def _dashboard_page_entry() -> None:
     """Single-page entrypoint for Dashboard: setup + render."""
-    import handoff.ui as ui
+    import handoff.interfaces.streamlit.ui as ui
     from handoff.interfaces.streamlit.pages.dashboard import render_dashboard_page
 
     ui.setup("2026.2.24")
@@ -80,7 +77,7 @@ def _dashboard_page_entry() -> None:
 
 def _about_page_entry() -> None:
     """Single-page entrypoint for About: setup + render."""
-    import handoff.ui as ui
+    import handoff.interfaces.streamlit.ui as ui
     from handoff.interfaces.streamlit.pages.about import render_about_page
 
     ui.setup("2026.2.24")
@@ -89,7 +86,7 @@ def _about_page_entry() -> None:
 
 def _now_page_entry() -> None:
     """Single-page entrypoint for Now: setup + render."""
-    import handoff.ui as ui
+    import handoff.interfaces.streamlit.ui as ui
     from handoff.interfaces.streamlit.pages.now import render_now_page
 
     ui.setup("2026.2.24")

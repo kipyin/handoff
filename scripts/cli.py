@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import os
+import sqlite3
 from enum import StrEnum
+from pathlib import Path
 
 import typer
 from rich.console import Console
+
+from handoff.db import get_demo_db_path
 
 from . import ROOT
 from . import build_full as build_full_module
 from . import build_patch as build_patch_module
 from . import bump_version as bump_version_module
+from . import seed_demo as seed_demo_module
 from . import sizecheck as sizecheck_module
 from .subprocess_utils import run_cmd
 
@@ -94,6 +100,33 @@ def _ci_run(extra_args: list[str] | None = None) -> None:
     test(extra_args=extra_args)
 
 
+def _resolve_demo_db_path(db_path: str | None) -> Path:
+    """Return the explicit demo DB path or the default demo location."""
+    if db_path:
+        return Path(db_path).expanduser().resolve()
+    return get_demo_db_path()
+
+
+def _db_has_projects(db_path: Path) -> bool:
+    """Return True when the SQLite DB already has at least one project row."""
+    if not db_path.exists():
+        return False
+
+    try:
+        with sqlite3.connect(db_path) as conn:
+            table_exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type=? AND name=?",
+                ("table", "project"),
+            ).fetchone()
+            if table_exists is None:
+                return False
+            row = conn.execute("SELECT COUNT(*) FROM project").fetchone()
+    except sqlite3.Error:
+        return False
+
+    return bool(row and row[0] > 0)
+
+
 @app.command("cli")
 def cli_command() -> None:
     """Run the handoff CLI (stub for future implementation)."""
@@ -104,13 +137,30 @@ def cli_command() -> None:
     raise typer.Exit(code=1)
 
 
-@app.command()
-def run(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
+def run(
+    demo: bool = typer.Option(False, "--demo", help="Run against a demo database."),
+    db_path: str | None = typer.Option(
+        None,
+        "--db-path",
+        help="Override the database path. With --demo, defaults to the demo DB path.",
+    ),
+    extra_args: list[str] = EXTRA_ARGS_ARG,
+) -> None:
     """Run the Streamlit app (applies Streamlit options from handoff.bootstrap.config)."""
     extra_args = list(extra_args) if extra_args else []
+    env = None
+    if demo:
+        resolved = _resolve_demo_db_path(db_path)
+        if not _db_has_projects(resolved):
+            seed_demo_module.seed_demo_db(resolved, force=False)
+        env = {**os.environ, "HANDOFF_DB_PATH": str(resolved)}
+    elif db_path is not None:
+        env = {**os.environ, "HANDOFF_DB_PATH": str(db_path)}
     run_cmd(
         ["uv", "run", "python", "-m", "handoff", *extra_args],
         cwd=ROOT,
+        env=env,
         description="Starting Streamlit app...",
     )
 
@@ -120,6 +170,21 @@ def main_callback(ctx: typer.Context) -> None:
     """Default entrypoint so `uv run handoff` behaves like `uv run handoff run`."""
     if ctx.invoked_subcommand is None:
         run(extra_args=list(ctx.args))
+
+
+@app.command("seed-demo")
+def seed_demo(
+    db_path: str | None = typer.Option(
+        None,
+        "--db-path",
+        help="Override the database path. Defaults to the demo DB path.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Replace any existing demo DB."),
+) -> None:
+    """Create or refresh a demo database with representative seed data."""
+    resolved_path = _resolve_demo_db_path(db_path)
+    seed_demo_module.seed_demo_db(resolved_path, force=force)
+    console.print(f"Demo database ready at {resolved_path}", style="bold green")
 
 
 @app.command()
