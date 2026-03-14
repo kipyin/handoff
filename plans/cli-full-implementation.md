@@ -80,6 +80,9 @@ src/handoff/interfaces/cli/
 |-------------|-----------------------------|----------------------------------|
 | Create      | `handoff add`               | `create_handoff`                 |
 | List (full snapshot) | `handoff list`     | `get_now_snapshot`               |
+| List Risk only       | `handoff list risk`| `query_risk_handoffs`            |
+| List Concluded only  | `handoff list concluded`| `query_concluded_handoffs`   |
+| List Action/Upcoming | `handoff list action`, `handoff list upcoming` | (optional) |
 | Add on-track check-in | `handoff on-track ID`  | `add_check_in(..., on_track)`     |
 | Add delayed check-in  | `handoff delayed ID`   | `add_check_in(..., delayed)`      |
 | Conclude    | `handoff conclude ID`       | `conclude_handoff`               |
@@ -181,7 +184,7 @@ Recommendation: Add `get_handoff(handoff_id)` to `handoff.data` and `handoff_ser
 - `print_project_table(projects)` — Rich Table with open/concluded
 - `print_trail(handoff)` — Rich table or tree for check-ins
 - `print_success(msg)`, `print_error(msg)` — Rich console
-- `print_now_snapshot(snapshot)` — Sections (Risk, Action, Upcoming, Concluded) as Rich panels
+- `print_now_snapshot(snapshot)` — Section counts header; Risk, Action, Upcoming tables; Concluded count only (no table). Use `print_concluded_table` for `handoff list concluded`.
 
 ### 4.3 Interactive menus (questionary)
 
@@ -223,47 +226,62 @@ All interactive flows use questionary. Design with questionary in mind from the 
 
 ### 4.4 `handoff list` mock (Rich output)
 
-Full Now snapshot with Risk | Action | Upcoming | Concluded sections:
+Full Now snapshot. All sections show a count. Concluded is hidden in the default view (count only). Use `handoff list risk`, `handoff list concluded` for filtered views.
 
 ```
-┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Risk (deadline near + delayed)                                       ┃
-┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━┫
-┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Next   ┃ Deadline┃   ┃
-┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━┩
-│ 12  │ API design review        │ Jane   │ Alpha  │ 3/10   │ 3/14    │   │
-│ 8   │ Q1 budget sign-off      │ Bob    │ Beta   │ 3/11   │ 3/15    │   │
-└─────┴──────────────────────────┴────────┴────────┴────────┴────────┴───┘
+  Risk: 2    Action: 2    Upcoming: 2    Concluded: 2
+─────────────────────────────────────────────────────
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Action required (next check due)                                      ┃
-┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━┫
-┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Next   ┃ Deadline┃   ┃
-┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━┩
-│ 5   │ Spec doc v2              │ Jane   │ Alpha  │ 3/14   │ 3/20    │   │
-│ 9   │ Security review         │ Carol  │ Beta   │ today  │ —       │   │
-└─────┴──────────────────────────┴────────┴────────┴────────┴────────┴───┘
+┃ Risk (2) — deadline near + delayed                                   ┃
+┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┫
+┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Next   ┃ Deadline┃
+┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩
+│ 12  │ API design review        │ Jane   │ Alpha  │ 3/10   │ 3/14    │
+│ 8   │ Q1 budget sign-off       │ Bob    │ Beta   │ 3/11   │ 3/15    │
+└─────┴──────────────────────────┴────────┴────────┴────────┴─────────┘
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Upcoming                                                                ┃
-┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━┫
-┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Next   ┃ Deadline┃   ┃
-┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━┩
-│ 3   │ Design mockups           │ Dave   │ Alpha  │ 3/18   │ 3/25    │   │
-│ 7   │ Stakeholder demo         │ Bob    │ Gamma  │ 3/22   │ —       │   │
-└─────┴──────────────────────────┴────────┴────────┴────────┴────────┴───┘
+┃ Action (2) — next check due                                           ┃
+┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┫
+┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Next   ┃ Deadline┃
+┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩
+│ 5   │ Spec doc v2              │ Jane   │ Alpha  │ 3/14   │ 3/20    │
+│ 9   │ Security review          │ Carol  │ Beta   │ today  │ —       │
+└─────┴──────────────────────────┴────────┴────────┴────────┴─────────┘
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-┃ Concluded                                                              ┃
-┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━┫
-┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Closed ┃         ┃   ┃
-┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━┩
-│ 2   │ Login flow fix           │ Jane   │ Alpha  │ 3/12   │         │   │
-│ 4   │ DB migration run         │ Carol  │ Beta   │ 3/10   │         │   │
-└─────┴──────────────────────────┴────────┴────────┴────────┴────────┴───┘
+┃ Upcoming (2)                                                          ┃
+┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┫
+┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Next   ┃ Deadline┃
+┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩
+│ 3   │ Design mockups           │ Dave   │ Alpha  │ 3/18   │ 3/25    │
+│ 7   │ Stakeholder demo         │ Bob    │ Gamma  │ 3/22   │ —       │
+└─────┴──────────────────────────┴────────┴────────┴────────┴─────────┘
+
+  Concluded: 2  (run `handoff list concluded` to view)
 ```
 
-### 4.5 `handoff show ID` mock (handoff detail + trail + interactive menu)
+**`handoff list risk`** — single table, Risk section only (same columns).
+**`handoff list concluded`** — single table, Concluded section (ID, Need back, Who, Project, Closed).
+
+### 4.4a Filter and search
+
+**Flags (non-interactive):**
+```
+handoff list [--project NAME] [--who PITCHMAN] [--search TEXT]
+handoff list risk [--project NAME] [--who PITCHMAN] [--search TEXT]
+handoff list concluded [--project NAME] [--who PITCHMAN] [--search TEXT]
+```
+- `--project` — filter by project name (repeatable: `--project Alpha --project Beta`)
+- `--who` — filter by pitchman (repeatable)
+- `--search` — text search over need_back, notes, check-in notes (uses existing `parse_search_query` for @today, @due, date ranges)
+
+**Interactive filter:**
+- `handoff list --filter` or `handoff list -f` — run `handoff list` then questionary prompts for project (multiselect), who (multiselect), search text before fetching/displaying
+- Or: main menu "Handoffs → List" could always show filter prompts first
+
+**Recommendation:** Support both. Flags for scripts/automation; `--filter` for ad-hoc narrowing. Reuse the same query params the Streamlit Now page uses (`project_ids`, `pitchman_names`, `search_text`). (handoff detail + trail + interactive menu)
 
 First, display the handoff and its trail:
 
@@ -333,7 +351,7 @@ If "Add check-in":
 6. Update `tests/test_cli_interface.py` and `tests/test_cli.py` for new behaviour
 
 ### Phase 2: Core CRUD
-7. `handoff_cmds.py`: add, list, show, edit, delete, on-track, delayed, conclude, reopen, check-in, snooze, trail
+7. `handoff_cmds.py`: add, list (full + risk + concluded), show, edit, delete, on-track, delayed, conclude, reopen, check-in, snooze, trail; list supports --project, --who, --search, --filter
 8. `project_cmds.py`: add, list, rename, archive, unarchive, delete; `handoff project` → project menu
 
 ### Phase 3: Backup and update
@@ -356,7 +374,8 @@ If "Add check-in":
 handoff                          # No args → main interactive menu
 ├── --web                        # Launch Streamlit (PyPI installs)
 ├── add                          # Handoff first-class
-├── list                         # Full Now snapshot (Risk|Action|Upcoming|Concluded)
+├── list [risk|concluded]        # Full snapshot; risk/concluded = filtered view
+│   [--project NAME] [--who NAME] [--search TEXT] [--filter]
 ├── show ID
 ├── edit ID
 ├── delete ID
