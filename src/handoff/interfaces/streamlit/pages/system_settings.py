@@ -19,7 +19,7 @@ import streamlit as st
 from loguru import logger
 
 from handoff.bootstrap.docs import get_readme_intro
-from handoff.bootstrap.logging import _get_logs_dir
+from handoff.bootstrap.logging import _get_logs_dir, log_application_action
 from handoff.core.backup_schema import BackupPayload
 from handoff.core.models import CheckInType
 from handoff.core.rulebook import (
@@ -31,13 +31,13 @@ from handoff.core.rulebook import (
     RuleDefinition,
     is_built_in_rule,
 )
+from handoff.db import get_db_path
 from handoff.services.handoff_service import get_rulebook_section_preview_counts
 from handoff.services.settings_service import (
     DEADLINE_NEAR_DAYS_MAX,
     get_export_payload,
     get_rulebook_settings,
     import_payload,
-    log_application_action,
     reset_rulebook_settings,
     save_rulebook_settings,
 )
@@ -486,7 +486,7 @@ def _render_data_export_section() -> None:
         mime="application/json",
         key="settings_download_json_backup",
     ):
-        log_application_action("data_export", format="json")
+        log_application_action("data_export", db_path=str(get_db_path()), format="json")
 
     if st.download_button(
         "Download CSV (handoffs)",
@@ -495,7 +495,7 @@ def _render_data_export_section() -> None:
         mime="text/csv",
         key="settings_download_csv_backup",
     ):
-        log_application_action("data_export", format="csv")
+        log_application_action("data_export", db_path=str(get_db_path()), format="csv")
 
 
 def _render_send_log_section() -> None:
@@ -575,7 +575,11 @@ def _render_data_import_section() -> None:
         try:
             import_payload(payload.to_dict())
             st.success("Import complete — all data has been replaced.")
-            log_application_action("data_import", source_file=uploaded.name or "upload")
+            log_application_action(
+                "data_import",
+                db_path=str(get_db_path()),
+                source_file=uploaded.name or "upload",
+            )
         except Exception as exc:
             st.error(f"Import failed: {exc}")
 
