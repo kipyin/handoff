@@ -44,3 +44,36 @@ assert os.environ.get("STREAMLIT_BROWSER_GATHER_USAGE_STATS") == "false"
         timeout=10,
     )
     assert result.returncode == 0, (result.stdout or "") + (result.stderr or "")
+
+
+def test_runtime_config_respects_already_set_env_vars() -> None:
+    """Importing runtime_config does not override vars already in os.environ."""
+    code = """
+import os
+# Clear the vars we care about so we control their initial state.
+for key in (
+    "STREAMLIT_CLIENT_SHOW_ERROR_DETAILS",
+    "STREAMLIT_CLIENT_TOOLBAR_MODE",
+    "STREAMLIT_CLIENT_SHOW_SIDEBAR_NAVIGATION",
+):
+    os.environ.pop(key, None)
+# Pre-set two vars to custom values (setdefault must not override these).
+os.environ["STREAMLIT_CLIENT_SHOW_ERROR_DETAILS"] = "all"
+os.environ["STREAMLIT_CLIENT_TOOLBAR_MODE"] = "minimal"
+import handoff.interfaces.streamlit.runtime_config  # noqa: F401
+# Should not override already-set values.
+assert os.environ.get("STREAMLIT_CLIENT_SHOW_ERROR_DETAILS") == "all"
+assert os.environ.get("STREAMLIT_CLIENT_TOOLBAR_MODE") == "minimal"
+# Should set default for unset var.
+assert os.environ.get("STREAMLIT_CLIENT_SHOW_SIDEBAR_NAVIGATION") == "false"
+"""
+    env = {**os.environ, "PYTHONPATH": str(PROJECT_ROOT / "src")}
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=str(PROJECT_ROOT),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode == 0, (result.stdout or "") + (result.stderr or "")
