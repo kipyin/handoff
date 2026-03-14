@@ -501,13 +501,13 @@ def test_run_demo_seeds_when_db_is_empty(tmp_path: Path, monkeypatch) -> None:
         conn.execute("CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT)")
         conn.commit()
 
-    calls = _capture_launch_streamlit(monkeypatch)
     seed_calls: list[tuple[Path, dict[str, object]]] = []
 
     def mock_seed_demo(path: Path, **kwargs) -> None:
         seed_calls.append((path, kwargs))
 
     monkeypatch.setattr(scripts.seed_demo, "seed_demo_db", mock_seed_demo)
+    _capture_launch_streamlit(monkeypatch)  # Mock streamlit launch
 
     result = RUNNER.invoke(
         app_cli.app,
