@@ -86,10 +86,11 @@ def test_apply_patch_zip_applies_allowed_paths_and_creates_backup(
     assert (snapshot / "src" / "module.py").read_text(encoding="utf-8") == "old src"
 
 
-def test_log_app_action_delegates_to_bootstrap_logging(monkeypatch) -> None:
+def test_log_app_action_delegates_to_bootstrap_logging(monkeypatch, tmp_path: Path) -> None:
     """_log_app_action delegates to bootstrap.logging.log_application_action."""
     from handoff.updater import _log_app_action
 
+    fake_db_path = tmp_path / "handoff.db"
     logged: list[tuple[str, dict]] = []
 
     def mock_bootstrap_log(action: str, **details) -> None:
@@ -99,10 +100,10 @@ def test_log_app_action_delegates_to_bootstrap_logging(monkeypatch) -> None:
         "handoff.bootstrap.logging.log_application_action",
         mock_bootstrap_log,
     )
-    # Mock get_db_path to return a path
+    # Mock get_db_path to return a platform-appropriate path
     monkeypatch.setattr(
         "handoff.db.get_db_path",
-        lambda: Path("/tmp/handoff.db"),
+        lambda: fake_db_path,
     )
 
     _log_app_action("data_backup", size_mb=150)
@@ -110,7 +111,7 @@ def test_log_app_action_delegates_to_bootstrap_logging(monkeypatch) -> None:
     assert len(logged) == 1
     action, details = logged[0]
     assert action == "data_backup"
-    assert details.get("db_path") == "/tmp/handoff.db"
+    assert details.get("db_path") == str(fake_db_path)
     assert details.get("size_mb") == 150
 
 
