@@ -1,7 +1,7 @@
 """In-app update panel and patch application helpers.
 
 Patches for PyArmor-obfuscated distributions must be built with
-uv run handoff build-patch from the obfuscated build output.
+uv run handoff-dev build --patch from the obfuscated build output.
 """
 
 import re

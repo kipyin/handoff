@@ -3,8 +3,8 @@
 Supports Windows (embedded Python zip) and macOS (python-build-standalone).
 Intended to be used via the Typer CLI:
 
-    uv run handoff build --full              # Windows (default)
-    uv run handoff build --full --platform mac   # macOS
+    uv run handoff-dev build --full              # Windows (default)
+    uv run handoff-dev build --full --platform mac   # macOS
 """
 
 from __future__ import annotations

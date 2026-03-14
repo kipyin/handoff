@@ -198,7 +198,7 @@ import os
 for key in list(os.environ.keys()):
     if key.startswith("STREAMLIT_"):
         del os.environ[key]
-# Import runtime_config (Streamlit config moved from bootstrap.config)
+# Import runtime_config (Streamlit setup moved here from bootstrap.config)
 import handoff.interfaces.streamlit.runtime_config  # noqa: F401
 # Check only STREAMLIT_* keys were set
 changed_keys = [k for k in os.environ.keys() if k.startswith("STREAMLIT_")]

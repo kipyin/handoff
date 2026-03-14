@@ -1,1 +1,1 @@
-"""User-facing interfaces (Streamlit UI, future CLI)."""
+"""User-facing interfaces (Streamlit UI, app CLI)."""

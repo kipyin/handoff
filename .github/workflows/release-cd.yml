@@ -100,7 +100,7 @@ jobs:
         run: uv sync
 
       - name: Build patch
-        run: uv run handoff build --patch
+        run: uv run handoff-dev build --patch
 
       - name: Upload patch artifact
         uses: actions/upload-artifact@v4
@@ -132,7 +132,7 @@ jobs:
         run: uv sync
 
       - name: Build full release
-        run: uv run handoff build --full
+        run: uv run handoff-dev build --full
 
       - name: Upload full artifact
         uses: actions/upload-artifact@v4

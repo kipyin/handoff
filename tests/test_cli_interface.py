@@ -1,39 +1,33 @@
-"""Regression tests for the new CLI interface stub."""
+"""Regression tests for the app CLI interface."""
 
 from __future__ import annotations
 
 import importlib
 
-import pytest
+from typer.testing import CliRunner
 
 import handoff.interfaces.cli as cli_module
 
-
-def test_run_cli_raises_not_implemented_error() -> None:
-    """run_cli() should raise NotImplementedError with a helpful message."""
-    with pytest.raises(NotImplementedError) as exc_info:
-        cli_module.run_cli()
-
-    assert "not yet implemented" in str(exc_info.value).lower()
-    assert "streamlit" in str(exc_info.value).lower()
+RUNNER = CliRunner()
 
 
-def test_cli_module_exports_run_cli() -> None:
-    """The CLI interface module should export run_cli via __all__."""
-    assert "run_cli" in cli_module.__all__
-    assert cli_module.run_cli is not None
+def test_cli_module_exports_main_and_app() -> None:
+    """The CLI interface module should export main and app."""
+    assert hasattr(cli_module, "main")
+    assert hasattr(cli_module, "app")
+    assert "main" in cli_module.__all__
+    assert "app" in cli_module.__all__
 
 
 def test_cli_interface_is_importable() -> None:
-    """The new CLI interface module should be importable."""
+    """The CLI interface module should be importable."""
     imported = importlib.import_module("handoff.interfaces.cli")
-    assert hasattr(imported, "run_cli")
+    assert hasattr(imported, "main")
+    assert hasattr(imported, "app")
 
 
-def test_cli_interface_is_reloadable() -> None:
-    """The CLI interface module should be safely reloadable."""
-    before_all = set(cli_module.__all__)
-    reloaded = importlib.reload(cli_module)
-
-    assert hasattr(reloaded, "run_cli")
-    assert set(reloaded.__all__) == before_all
+def test_cli_command_stub_via_invoke() -> None:
+    """The `handoff cli` subcommand should print not-implemented message and exit 1."""
+    result = RUNNER.invoke(cli_module.app, ["cli"])
+    assert result.exit_code == 1
+    assert "not implemented" in result.stdout.lower()

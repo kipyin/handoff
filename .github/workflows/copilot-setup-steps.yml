@@ -35,6 +35,6 @@ jobs:
       - name: Smoke-check handoff CLI entrypoints
         run: |
           uv run handoff --help
-          uv run handoff check --help
-          uv run handoff typecheck --help
-          uv run handoff test --help
+          uv run handoff-dev check --help
+          uv run handoff-dev typecheck --help
+          uv run handoff-dev test --help
