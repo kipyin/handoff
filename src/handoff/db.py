@@ -27,6 +27,19 @@ def _get_default_db_path() -> Path:
     return data_dir / "todo.db"
 
 
+def get_demo_db_path() -> Path:
+    """Return the default path for the demo SQLite database.
+
+    The demo DB is separate from the production DB and is used by
+    `run --demo` and `seed-demo`. Does not touch or create the file.
+
+    Returns:
+        Path to handoff-demo.db in the user data directory.
+    """
+    data_dir = Path(user_data_dir("handoff", "handoff"))
+    return data_dir / "handoff-demo.db"
+
+
 def _resolve_db_path() -> Path:
     """Resolve the database path, allowing an override via environment variable.
 

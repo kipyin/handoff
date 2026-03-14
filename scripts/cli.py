@@ -105,13 +105,30 @@ def cli_command() -> None:
 
 
 @app.command()
-def run(extra_args: list[str] = EXTRA_ARGS_ARG) -> None:
+def run(
+    extra_args: list[str] = EXTRA_ARGS_ARG,
+    demo: bool = typer.Option(False, "--demo", help="Run against demo DB; seeds if empty."),
+    db_path: str | None = typer.Option(None, "--db-path", help="Database path (with --demo)."),
+) -> None:
     """Run the Streamlit app (applies Streamlit options from handoff.bootstrap.config)."""
     extra_args = list(extra_args) if extra_args else []
+    env = None
+    if demo:
+        from pathlib import Path
+
+        from handoff.db import get_demo_db_path
+
+        from .seed_demo import seed_demo_db
+
+        path = Path(db_path) if db_path else get_demo_db_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        seed_demo_db(path, force=False)
+        env = {**dict(__import__("os").environ), "HANDOFF_DB_PATH": str(path.resolve())}
     run_cmd(
         ["uv", "run", "python", "-m", "handoff", *extra_args],
         cwd=ROOT,
         description="Starting Streamlit app...",
+        env=env,
     )
 
 
@@ -260,6 +277,24 @@ def bump(
     """Bump project and app version together."""
     bump_version_module.bump_version(version)
     console.print(f"Bumped version to {version}", style="bold green")
+
+
+@app.command("seed-demo")
+def seed_demo(
+    db_path: str | None = typer.Option(None, "--db-path", help="Custom demo DB path."),
+    force: bool = typer.Option(False, "--force", help="Re-seed even if DB already has data."),
+) -> None:
+    """Seed the demo database with representative projects and handoffs."""
+    from pathlib import Path
+
+    from handoff.db import get_demo_db_path
+
+    from .seed_demo import seed_demo_db
+
+    path = Path(db_path) if db_path else get_demo_db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    count = seed_demo_db(path, force=force)
+    console.print(f"Seeded {count} handoffs to {path}", style="bold green")
 
 
 @app.command("db-path")
