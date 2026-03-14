@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import sqlite3
+from pathlib import Path
+
 from typer.testing import CliRunner
 
 import scripts.cli as cli
 
 RUNNER = CliRunner()
+_COUNTABLE_TABLES = {"project", "handoff", "check_in"}
 
 
 def _capture_run_cmd(monkeypatch):
@@ -17,6 +21,24 @@ def _capture_run_cmd(monkeypatch):
 
     monkeypatch.setattr(cli, "run_cmd", fake_run_cmd)
     return calls
+
+
+def _capture_run_cmd_details(monkeypatch) -> list[dict[str, object]]:
+    calls: list[dict[str, object]] = []
+
+    def fake_run_cmd(args, **kwargs) -> None:
+        calls.append({"args": list(args), **kwargs})
+
+    monkeypatch.setattr(cli, "run_cmd", fake_run_cmd)
+    return calls
+
+
+def _count_rows(db_path: Path, table: str) -> int:
+    assert table in _COUNTABLE_TABLES
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+    assert row is not None
+    return int(row[0])
 
 
 def test_lint_is_non_mutating_by_default(monkeypatch) -> None:
@@ -259,6 +281,67 @@ def test_cli_command_stub_exits_with_code_1() -> None:
     result = RUNNER.invoke(cli.app, ["cli"])
 
     assert result.exit_code == 1
+
+
+def test_seed_demo_cli_seeds_database_at_requested_path(tmp_path: Path) -> None:
+    """`handoff seed-demo` should create and seed a DB at the provided path."""
+    db_path = tmp_path / "demo.db"
+
+    result = RUNNER.invoke(cli.app, ["seed-demo", "--db-path", str(db_path)])
+
+    assert result.exit_code == 0
+    assert db_path.exists()
+    assert _count_rows(db_path, "project") >= 3
+    assert _count_rows(db_path, "handoff") >= 9
+    assert "Demo database ready at" in result.stdout
+
+
+def test_run_db_path_sets_env_for_subprocess(tmp_path: Path, monkeypatch) -> None:
+    """`handoff run --db-path PATH` should pass HANDOFF_DB_PATH without requiring --demo."""
+    db_path = tmp_path / "custom.db"
+    db_path.touch()
+    calls = _capture_run_cmd_details(monkeypatch)
+
+    result = RUNNER.invoke(
+        cli.app,
+        ["run", "--db-path", str(db_path), "--", "--server.port", "9999"],
+    )
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    env = calls[0]["env"]
+    assert isinstance(env, dict)
+    assert env["HANDOFF_DB_PATH"] == str(db_path.resolve())
+
+
+def test_run_demo_seeds_db_and_sets_env_for_subprocess(tmp_path: Path, monkeypatch) -> None:
+    """`handoff run --demo` should seed an empty DB and pass HANDOFF_DB_PATH through."""
+    db_path = tmp_path / "demo.db"
+    calls = _capture_run_cmd_details(monkeypatch)
+
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "run",
+            "--demo",
+            "--db-path",
+            str(db_path),
+            "--",
+            "--server.port",
+            "9999",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert db_path.exists()
+    assert _count_rows(db_path, "project") >= 3
+    assert len(calls) == 1
+    assert calls[0]["args"] == ["uv", "run", "python", "-m", "handoff", "--server.port", "9999"]
+    assert calls[0]["cwd"] == cli.ROOT
+    assert calls[0]["description"] == "Starting Streamlit app..."
+    env = calls[0]["env"]
+    assert isinstance(env, dict)
+    assert env["HANDOFF_DB_PATH"] == str(db_path.resolve())
 
 
 def test_cli_command_stub_does_not_accept_subcommands() -> None:
