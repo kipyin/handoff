@@ -221,6 +221,105 @@ All interactive flows use questionary. Design with questionary in mind from the 
   Next check date (if on-track/delayed): [date picker / today+7]
 ```
 
+### 4.4 `handoff list` mock (Rich output)
+
+Full Now snapshot with Risk | Action | Upcoming | Concluded sections:
+
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Risk (deadline near + delayed)                                       ┃
+┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━┫
+┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Next   ┃ Deadline┃   ┃
+┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━┩
+│ 12  │ API design review        │ Jane   │ Alpha  │ 3/10   │ 3/14    │   │
+│ 8   │ Q1 budget sign-off      │ Bob    │ Beta   │ 3/11   │ 3/15    │   │
+└─────┴──────────────────────────┴────────┴────────┴────────┴────────┴───┘
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Action required (next check due)                                      ┃
+┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━┫
+┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Next   ┃ Deadline┃   ┃
+┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━┩
+│ 5   │ Spec doc v2              │ Jane   │ Alpha  │ 3/14   │ 3/20    │   │
+│ 9   │ Security review         │ Carol  │ Beta   │ today  │ —       │   │
+└─────┴──────────────────────────┴────────┴────────┴────────┴────────┴───┘
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Upcoming                                                                ┃
+┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━┫
+┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Next   ┃ Deadline┃   ┃
+┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━┩
+│ 3   │ Design mockups           │ Dave   │ Alpha  │ 3/18   │ 3/25    │   │
+│ 7   │ Stakeholder demo         │ Bob    │ Gamma  │ 3/22   │ —       │   │
+└─────┴──────────────────────────┴────────┴────────┴────────┴────────┴───┘
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Concluded                                                              ┃
+┣━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━┫
+┃ ID  ┃ Need back                ┃ Who    ┃ Project┃ Closed ┃         ┃   ┃
+┡━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━┩
+│ 2   │ Login flow fix           │ Jane   │ Alpha  │ 3/12   │         │   │
+│ 4   │ DB migration run         │ Carol  │ Beta   │ 3/10   │         │   │
+└─────┴──────────────────────────┴────────┴────────┴────────┴────────┴───┘
+```
+
+### 4.5 `handoff show ID` mock (handoff detail + trail + interactive menu)
+
+First, display the handoff and its trail:
+
+```
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Handoff #5 — Spec doc v2                                               ┃
+┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ Project:  Alpha                                                        ┃
+┃ Who:      Jane                                                         ┃
+┃ Next:     2026-03-14    Deadline: 2026-03-20                          ┃
+┃ Notes:    Blocked on legal review.                                      ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Check-in trail                                                         ┃
+┣━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫
+┃ Date       ┃ Type          ┃ Note                                    ┃
+┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 2026-03-01 │ on_track      │ Kicked off, on schedule                  │
+│ 2026-03-08 │ delayed       │ Waiting on legal feedback                 │
+│ 2026-03-14 │ (current)     │ —                                        │
+└────────────┴───────────────┴──────────────────────────────────────────┘
+```
+
+Then, interactive menu (select a check-in to view details, or add one):
+
+```
+? What next?
+  ❯ Add check-in (on-track / delayed / concluded)
+    Select check-in for details
+    Edit this handoff
+    Conclude
+    Reopen (if concluded)
+    Delete
+    Back
+```
+
+If "Select check-in for details":
+```
+? Select check-in
+  ❯ 2026-03-14 — (current)
+    2026-03-08 — delayed: Waiting on legal feedback
+    2026-03-01 — on_track: Kicked off, on schedule
+    Back
+```
+
+If "Add check-in":
+```
+? Add check-in for handoff #5: "Spec doc v2"
+  ❯ On track
+    Delayed
+    Concluded
+  Note: [________________]
+  Next check date (if on-track/delayed): [date picker]
+```
+
 ---
 
 ## 5. Implementation Phases
