@@ -57,8 +57,9 @@ def test_log_application_action_with_multiple_details(
     monkeypatch.setattr("handoff.bootstrap.logging.logger.info", mock_logger_info)
 
     # Mock db module to provide a test path
+    test_path = Path("/test/path/db.db")
     mock_db_module = MagicMock()
-    mock_db_module.get_db_path = MagicMock(return_value=Path("/test/path/db.db"))
+    mock_db_module.get_db_path = MagicMock(return_value=test_path)
     monkeypatch.setitem(sys.modules, "handoff.db", mock_db_module)
 
     log_application_action("data_export", format="json", rows=42, destination="backup.json")
@@ -66,7 +67,7 @@ def test_log_application_action_with_multiple_details(
     assert len(messages) == 1
     message = messages[0]
     assert "action=data_export" in message
-    assert "db_path=/test/path/db.db" in message
+    assert f"db_path={test_path}" in message
     assert "format=json" in message
     assert "rows=42" in message
     assert "destination=backup.json" in message
@@ -144,10 +145,9 @@ def test_log_application_action_message_format(
 
     monkeypatch.setattr("handoff.bootstrap.logging.logger.info", mock_logger_info)
 
+    expected_path = Path("/home/user/.local/share/handoff/handoff.db")
     mock_db_module = MagicMock()
-    mock_db_module.get_db_path = MagicMock(
-        return_value=Path("/home/user/.local/share/handoff/handoff.db")
-    )
+    mock_db_module.get_db_path = MagicMock(return_value=expected_path)
     monkeypatch.setitem(sys.modules, "handoff.db", mock_db_module)
 
     log_application_action("app_update", version="2026.3.13", status="success")
@@ -156,6 +156,6 @@ def test_log_application_action_message_format(
     message = messages[0]
     assert message.startswith("application ")
     assert "action=app_update" in message
-    assert "db_path=/home/user/.local/share/handoff/handoff.db" in message
+    assert f"db_path={expected_path}" in message
     assert "version=2026.3.13" in message
     assert "status=success" in message
