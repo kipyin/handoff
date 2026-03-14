@@ -14,7 +14,7 @@ Take a failing CI signal (lint, typecheck, tests, or workflow issues), find the 
 - Python 3.13+, `uv` managed environment.
 - Main quality commands:
   - `uv run handoff-dev check`
-  - `uv run handoff typecheck`
+  - `uv run handoff-dev typecheck`
   - `uv run handoff-dev test`
   - `uv run handoff-dev ci`
 - Architecture rule: page modules must import from `handoff.services`, not directly from `handoff.data`.

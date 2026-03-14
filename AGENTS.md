@@ -125,7 +125,7 @@ Project layout: `app.py` (entrypoint), `src/handoff/` (package), `interfaces/str
 
 - **Ruff**: `uv run handoff-dev check` / `uv run handoff-dev check --fix`.
 - **Docstrings**: Google style.
-- **Pyright**: `uv run handoff typecheck` over `src/` and `scripts/`.
+- **Pyright**: `uv run handoff-dev typecheck` over `src/` and `scripts/`.
 
 ### macOS build
 
