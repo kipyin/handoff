@@ -1,8 +1,10 @@
-"""Typer-based CLI entrypoint for local development and build tasks."""
+"""Typer-based CLI for development and build tasks.
+
+Use via: uv run handoff-dev check | test | ci | build | ...
+"""
 
 from __future__ import annotations
 
-import os
 import sqlite3
 from enum import StrEnum
 from pathlib import Path
@@ -125,66 +127,6 @@ def _db_has_projects(db_path: Path) -> bool:
         return False
 
     return bool(row and row[0] > 0)
-
-
-@app.command("cli")
-def cli_command() -> None:
-    """Run the handoff CLI (stub for future implementation)."""
-    console.print(
-        "[bold red]handoff cli is not implemented yet.[/bold red]\n"
-        "This subcommand is reserved for a future interactive CLI interface."
-    )
-    raise typer.Exit(code=1)
-
-
-@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
-def run(
-    demo: bool = typer.Option(False, "--demo", help="Run against a demo database."),
-    db_path: str | None = typer.Option(
-        None,
-        "--db-path",
-        help="Override the database path. With --demo, defaults to the demo DB path.",
-    ),
-    extra_args: list[str] = EXTRA_ARGS_ARG,
-) -> None:
-    """Run the Streamlit app (applies Streamlit options from runtime_config)."""
-    extra_args = list(extra_args) if extra_args else []
-    env = None
-    if demo:
-        resolved = _resolve_demo_db_path(db_path)
-        if not _db_has_projects(resolved):
-            seed_demo_module.seed_demo_db(resolved, force=False)
-        env = {**os.environ, "HANDOFF_DB_PATH": str(resolved)}
-    elif db_path is not None:
-        env = {**os.environ, "HANDOFF_DB_PATH": str(db_path)}
-    run_cmd(
-        ["uv", "run", "python", "-m", "handoff", *extra_args],
-        cwd=ROOT,
-        env=env,
-        description="Starting Streamlit app...",
-    )
-
-
-@app.callback(invoke_without_command=True)
-def main_callback(ctx: typer.Context) -> None:
-    """Default entrypoint so `uv run handoff` behaves like `uv run handoff run`."""
-    if ctx.invoked_subcommand is None:
-        run(extra_args=list(ctx.args))
-
-
-@app.command("seed-demo")
-def seed_demo(
-    db_path: str | None = typer.Option(
-        None,
-        "--db-path",
-        help="Override the database path. Defaults to the demo DB path.",
-    ),
-    force: bool = typer.Option(False, "--force", help="Replace any existing demo DB."),
-) -> None:
-    """Create or refresh a demo database with representative seed data."""
-    resolved_path = _resolve_demo_db_path(db_path)
-    seed_demo_module.seed_demo_db(resolved_path, force=force)
-    console.print(f"Demo database ready at {resolved_path}", style="bold green")
 
 
 @app.command()
@@ -335,8 +277,23 @@ def db_path() -> None:
     console.print(str(get_db_path()))
 
 
+@app.command("seed-demo")
+def seed_demo(
+    db_path: str | None = typer.Option(
+        None,
+        "--db-path",
+        help="Override the database path. Defaults to the demo DB path.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Replace any existing demo DB."),
+) -> None:
+    """Create or refresh a demo database with representative seed data."""
+    resolved_path = _resolve_demo_db_path(db_path)
+    seed_demo_module.seed_demo_db(resolved_path, force=force)
+    console.print(f"Demo database ready at {resolved_path}", style="bold green")
+
+
 def main() -> None:
-    """Entrypoint for `python -m scripts.cli`."""
+    """Entrypoint for `uv run handoff-dev`."""
     app()
 
 

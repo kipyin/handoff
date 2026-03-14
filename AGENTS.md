@@ -53,16 +53,16 @@ The goal is not maximal abstraction or maximal cleverness. The goal is code that
 |------|---------|
 | Install deps | `uv sync` |
 | Run app | `uv run handoff` (Streamlit on port 8501) |
-| Lint + format | `uv run handoff check` (`--fix` to apply Ruff changes) |
-| Type check | `uv run handoff typecheck` |
-| Size check | `uv run handoff sizecheck` (optional: path or dir) |
-| Tests | `uv run handoff test` |
-| Full CI suite | `uv run handoff ci` (`--fix` to apply Ruff changes first) |
-| Bump version | `uv run handoff bump 2026.M.P` |
-| Build Windows zip | `uv run handoff build --full` |
-| Build patch zip | `uv run handoff build --patch` |
-| Build macOS tar.gz | `uv run handoff build --full --platform mac` |
-| Build dry-run (CI) | `uv run handoff build --full --dry-run` or `--patch --dry-run` |
+| Lint + format | `uv run handoff-dev check` (`--fix` to apply Ruff changes) |
+| Type check | `uv run handoff-dev typecheck` |
+| Size check | `uv run handoff-dev sizecheck` (optional: path or dir) |
+| Tests | `uv run handoff-dev test` |
+| Full CI suite | `uv run handoff-dev ci` (`--fix` to apply Ruff changes first) |
+| Bump version | `uv run handoff-dev bump 2026.M.P` |
+| Build Windows zip | `uv run handoff-dev build --full` |
+| Build patch zip | `uv run handoff-dev build --patch` |
+| Build macOS tar.gz | `uv run handoff-dev build --full --platform mac` |
+| Build dry-run (CI) | `uv run handoff-dev build --full --dry-run` or `--patch --dry-run` |
 
 ---
 
@@ -88,19 +88,19 @@ Handoff ships as a self-contained Windows zip (or macOS tar.gz) that bundles an 
 
 ### CLI commands
 
-- `uv run handoff run` – start the app (Streamlit UI).
-- `uv run handoff sync` – sync dependencies.
-- `uv run handoff check` – Ruff format/lint (`--fix` to apply).
-- `uv run handoff typecheck` – pyright over `src/` and `scripts/`.
-- `uv run handoff test` – pytest suite.
-- `uv run handoff ci` – checks + typecheck + tests (`--fix` for Ruff fixes first).
-- `uv run handoff build --full` – Windows embedded zip or macOS tar.gz (`--platform mac`).
-- `uv run handoff build --patch` – patch zip from obfuscated build.
-- `uv run handoff bump 2026.M.P` – bump version in `pyproject.toml` and `handoff.version`.
+- `uv run handoff` – start the app (Streamlit UI). Use `handoff run` for explicit subcommand.
+- `uv run handoff-dev sync` – sync dependencies.
+- `uv run handoff-dev check` – Ruff format/lint (`--fix` to apply).
+- `uv run handoff-dev typecheck` – pyright over `src/` and `scripts/`.
+- `uv run handoff-dev test` – pytest suite.
+- `uv run handoff-dev ci` – checks + typecheck + tests (`--fix` for Ruff fixes first).
+- `uv run handoff-dev build --full` – Windows embedded zip or macOS tar.gz (`--platform mac`).
+- `uv run handoff-dev build --patch` – patch zip from obfuscated build.
+- `uv run handoff-dev bump 2026.M.P` – bump version in `pyproject.toml` and `handoff.version`.
 
 Version sync: `src/handoff/version.py` and `pyproject.toml` must match; `tests/test_version_sync.py` enforces this.
 
-Project layout: `app.py` (entrypoint), `src/handoff/` (package), `interfaces/streamlit/pages/`, `services/`, `tests/`. Pages import from `handoff.services`, never from `handoff.data` directly; the architecture test enforces this.
+Project layout: `app.py` (entrypoint), `src/handoff/` (package), `interfaces/streamlit/pages/`, `interfaces/cli/` (app launcher), `services/`, `tests/`, `scripts/` (dev/build tooling). Pages import from `handoff.services`, never from `handoff.data` directly; the architecture test enforces this. App CLI (`handoff`) lives in `handoff.interfaces.cli`; dev CLI (`handoff-dev`) in `scripts/dev_cli.py`. For template extraction, `src/handoff/__main__.py` is replaceable (Streamlit-only entrypoint).
 
 ### Branching, commits, and releases
 
@@ -114,25 +114,25 @@ Project layout: `app.py` (entrypoint), `src/handoff/` (package), `interfaces/str
 
 1. Branch from `main`.
 2. `uv sync` (if deps changed).
-3. `uv run handoff bump 2026.M.P`.
+3. `uv run handoff-dev bump 2026.M.P`.
 4. Update `RELEASE_NOTES.md`.
 5. Update README if user-visible behavior changed.
-6. `uv run handoff ci`.
-7. `uv run handoff build --full` and `uv run handoff build --patch` (for distribution).
+6. `uv run handoff-dev ci`.
+7. `uv run handoff-dev build --full` and `uv run handoff-dev build --patch` (for distribution).
 8. Merge to `main` when passing.
 
 ### Code tools
 
-- **Ruff**: `uv run handoff check` / `uv run handoff check --fix`.
+- **Ruff**: `uv run handoff-dev check` / `uv run handoff-dev check --fix`.
 - **Docstrings**: Google style.
-- **Pyright**: `uv run handoff typecheck` over `src/` and `scripts/`.
+- **Pyright**: `uv run handoff-dev typecheck` over `src/` and `scripts/`.
 
 ### macOS build
 
 macOS builds produce a `.tar.gz` with python-build-standalone:
 
 ```bash
-uv run handoff build --full --platform mac
+uv run handoff-dev build --full --platform mac
 ```
 
 Extract and run `./handoff.sh`. Future work may add a signed `.app` bundle.
@@ -185,11 +185,11 @@ There is no Calendar page.
 ## Full CI
 
 ```bash
-uv run handoff ci          # format/lint + typecheck + pytest
-uv run handoff ci --fix    # apply Ruff fixes first
-uv run handoff check       # Ruff only
-uv run handoff typecheck   # pyright only
-uv run handoff test        # pytest only
+uv run handoff-dev ci          # format/lint + typecheck + pytest
+uv run handoff-dev ci --fix    # apply Ruff fixes first
+uv run handoff-dev check       # Ruff only
+uv run handoff-dev typecheck   # pyright only
+uv run handoff-dev test        # pytest only
 ```
 
 **pyright exclusions:** `data/`, `interfaces/streamlit/pages/dashboard.py`, `services/dashboard_service.py` — do not remove without understanding the consequences.
