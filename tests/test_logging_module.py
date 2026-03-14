@@ -61,19 +61,16 @@ def test_log_application_action_includes_db_path_and_details(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import handoff.bootstrap.logging as log_mod
-    import handoff.db as db_mod
 
-    db_path = Path("/tmp/handoff.db")
-    monkeypatch.setattr(db_mod, "get_db_path", lambda: db_path)
     messages: list[str] = []
     monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
 
-    log_mod.log_application_action("data_export", format="json")
+    log_mod.log_application_action("data_export", db_path="/tmp/handoff.db", format="json")
 
     assert len(messages) == 1
     message = messages[0]
     assert message.startswith("application action=data_export")
-    assert f"db_path={db_path}" in message
+    assert "db_path=/tmp/handoff.db" in message
     assert "format=json" in message
 
 
@@ -81,12 +78,7 @@ def test_log_application_action_falls_back_to_unknown_db_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import handoff.bootstrap.logging as log_mod
-    import handoff.db as db_mod
 
-    def _raise() -> Path:
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(db_mod, "get_db_path", _raise)
     messages: list[str] = []
     monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
 

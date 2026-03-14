@@ -147,7 +147,7 @@ def run(
     ),
     extra_args: list[str] = EXTRA_ARGS_ARG,
 ) -> None:
-    """Run the Streamlit app (applies Streamlit options from handoff.bootstrap.config)."""
+    """Run the Streamlit app (applies Streamlit options from runtime_config)."""
     extra_args = list(extra_args) if extra_args else []
     env = None
     if demo:

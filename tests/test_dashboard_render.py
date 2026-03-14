@@ -170,7 +170,6 @@ class TestRenderDashboardPage:
 
         render_dashboard_page()
 
-        assert logged == [
-            ("metrics_export", {"format": "csv"}),
-            ("metrics_export", {"format": "json"}),
-        ]
+        assert len(logged) == 2
+        assert logged[0][0] == "metrics_export" and logged[0][1].get("format") == "csv"
+        assert logged[1][0] == "metrics_export" and logged[1][1].get("format") == "json"

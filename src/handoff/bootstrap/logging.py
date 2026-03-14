@@ -18,19 +18,15 @@ from platformdirs import user_data_dir
 _CONFIGURED = False
 
 
-def log_application_action(action: str, **details: Any) -> None:
+def log_application_action(action: str, *, db_path: str | None = None, **details: Any) -> None:
     """Log an application-level action for audit (export, import, backup, update).
 
     Best-effort: never raises. Used by UI and updater so audit logging cannot
-    break core flows.
+    break core flows. Callers with db access should pass db_path explicitly;
+    bootstrap stays db-agnostic.
     """
-    try:
-        from handoff.db import get_db_path
-
-        db_path = str(get_db_path())
-    except Exception:
-        db_path = "(unknown)"
-    parts = [f"action={action}", f"db_path={db_path}"]
+    resolved_db_path = db_path if db_path is not None else "(unknown)"
+    parts = [f"action={action}", f"db_path={resolved_db_path}"]
     for k, v in details.items():
         parts.append(f"{k}={v}")
     logger.info("application " + " ".join(parts))

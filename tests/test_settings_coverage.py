@@ -786,7 +786,9 @@ class TestRenderDataExportSection:
 
         _render_data_export_section()
 
-        assert logged == [("data_export", {"format": "json"})]
+        assert len(logged) == 1
+        assert logged[0][0] == "data_export"
+        assert logged[0][1].get("format") == "json"
 
     def test_csv_export_logs_application_action(self, monkeypatch) -> None:
         """Clicking CSV export writes an application audit event."""
@@ -804,7 +806,9 @@ class TestRenderDataExportSection:
 
         _render_data_export_section()
 
-        assert logged == [("data_export", {"format": "csv"})]
+        assert len(logged) == 1
+        assert logged[0][0] == "data_export"
+        assert logged[0][1].get("format") == "csv"
 
     def test_csv_download_uses_handoff_rows(self, monkeypatch) -> None:
         """CSV export should include current handoff rows instead of legacy todos."""
@@ -918,7 +922,9 @@ class TestRenderDataImportSection:
 
         _render_data_import_section()
 
-        assert logged == [("data_import", {"source_file": "seed.json"})]
+        assert len(logged) == 1
+        assert logged[0][0] == "data_import"
+        assert logged[0][1].get("source_file") == "seed.json"
 
     def test_import_exception_shows_error(self, monkeypatch) -> None:
         """When import_payload raises, error message is shown."""
