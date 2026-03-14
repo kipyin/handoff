@@ -25,11 +25,14 @@ def log_application_action(action: str, *, db_path: str | None = None, **details
     break core flows. Callers with db access should pass db_path explicitly;
     bootstrap stays db-agnostic.
     """
-    resolved_db_path = db_path if db_path is not None else "(unknown)"
-    parts = [f"action={action}", f"db_path={resolved_db_path}"]
-    for k, v in details.items():
-        parts.append(f"{k}={v}")
-    logger.info("application " + " ".join(parts))
+    try:
+        resolved_db_path = db_path if db_path is not None else "(unknown)"
+        parts = [f"action={action}", f"db_path={resolved_db_path}"]
+        for k, v in details.items():
+            parts.append(f"{k}={v}")
+        logger.info("application " + " ".join(parts))
+    except Exception:
+        pass
 
 
 def _get_logs_dir() -> Path:

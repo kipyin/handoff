@@ -23,9 +23,9 @@ def _log_app_action(action: str, **details: Any) -> None:
     try:
         from handoff.db import get_db_path
 
-        db_path = str(get_db_path())
+        db_path: str | None = str(get_db_path())
     except Exception:
-        db_path = "(unknown)"
+        db_path = None
     _logging.log_application_action(action, db_path=db_path, **details)
 
 

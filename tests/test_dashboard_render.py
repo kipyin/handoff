@@ -171,5 +171,9 @@ class TestRenderDashboardPage:
         render_dashboard_page()
 
         assert len(logged) == 2
-        assert logged[0][0] == "metrics_export" and logged[0][1].get("format") == "csv"
-        assert logged[1][0] == "metrics_export" and logged[1][1].get("format") == "json"
+        assert logged[0][0] == "metrics_export"
+        assert logged[0][1].get("format") == "csv"
+        assert logged[0][1].get("db_path")
+        assert logged[1][0] == "metrics_export"
+        assert logged[1][1].get("format") == "json"
+        assert logged[1][1].get("db_path")
