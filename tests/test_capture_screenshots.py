@@ -76,7 +76,7 @@ class TestWaitForServer:
     def test_wait_for_server_respects_timeout_parameter(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """_wait_for_server passes timeout to urlopen."""
+        """_wait_for_server passes timeout=2 and HEALTH_URL to urlopen."""
         call_args = []
 
         def fake_urlopen_with_response(*args, **kwargs):
@@ -94,8 +94,10 @@ class TestWaitForServer:
 
         capture_screenshots_module._wait_for_server()
 
-        # Verify that timeout was passed to urlopen
-        assert any("timeout" in kwargs for _args, kwargs in call_args)
+        url = capture_screenshots_module.HEALTH_URL
+        assert any(
+            kwargs.get("timeout") == 2 and (args and args[0] == url) for args, kwargs in call_args
+        ), f"Expected urlopen(..., timeout=2); got {call_args}"
 
     def test_wait_for_server_checks_status_200(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """_wait_for_server only succeeds on HTTP 200 status."""
@@ -225,10 +227,10 @@ class TestCaptureScreenshotsMain:
         assert kwargs["env"]["HANDOFF_DB_PATH"] == str(temp_db.resolve())
         assert kwargs["env"]["STREAMLIT_SERVER_HEADLESS"] == "true"
 
-    def test_main_terminates_subprocess_on_success(
+    def test_main_terminates_subprocess_on_early_exit(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """main() calls proc.terminate() and proc.wait() after screenshots."""
+        """main() calls proc.terminate() and proc.wait() on early exit (e.g. Playwright error)."""
         temp_db = tmp_path / "test.db"
 
         def fake_seed(db, *, force):
@@ -295,12 +297,54 @@ class TestCaptureScreenshotsMain:
     def test_main_deletes_temp_db_on_success(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """main() deletes TEMP_DB after completion."""
+        """main() deletes TEMP_DB when it completes normally (no exception)."""
         temp_db = tmp_path / "test.db"
 
         def fake_seed(db, *, force):
             db.parent.mkdir(parents=True, exist_ok=True)
             db.write_text("seed")
+
+        def fake_playwright_success():
+            """Stub that lets main() complete normally: launch, navigate, screenshot, close."""
+            mock_page = MagicMock()
+            mock_page.goto = MagicMock()
+            mock_page.wait_for_load_state = MagicMock()
+            mock_page.locator = MagicMock(
+                return_value=MagicMock(
+                    count=MagicMock(return_value=0),
+                    nth=MagicMock(
+                        return_value=MagicMock(
+                            locator=MagicMock(
+                                return_value=MagicMock(
+                                    first=MagicMock(
+                                        scroll_into_view_if_needed=MagicMock(), click=MagicMock()
+                                    )
+                                )
+                            )
+                        )
+                    ),
+                )
+            )
+            mock_page.get_by_role = MagicMock(return_value=MagicMock(click=MagicMock()))
+            mock_page.get_by_text = MagicMock(return_value=MagicMock(click=MagicMock()))
+            mock_page.screenshot = MagicMock()
+
+            mock_browser = MagicMock()
+            mock_browser.new_page = MagicMock(return_value=mock_page)
+            mock_browser.close = MagicMock()
+
+            mock_p = MagicMock()
+            mock_p.chromium = MagicMock()
+            mock_p.chromium.launch = MagicMock(return_value=mock_browser)
+
+            class FakeSyncPlaywright:
+                def __enter__(self):
+                    return mock_p
+
+                def __exit__(self, *_):
+                    pass
+
+            return FakeSyncPlaywright()
 
         monkeypatch.setattr(
             capture_screenshots_module, "OUTPUT_DIR", tmp_path / "docs" / "screenshots"
@@ -314,13 +358,9 @@ class TestCaptureScreenshotsMain:
             ),
         )
         monkeypatch.setattr("scripts.capture_screenshots._wait_for_server", MagicMock())
-        monkeypatch.setattr(
-            "scripts.capture_screenshots.sync_playwright",
-            MagicMock(side_effect=RuntimeError("exit")),
-        )
+        monkeypatch.setattr("scripts.capture_screenshots.sync_playwright", fake_playwright_success)
 
-        with pytest.raises(RuntimeError):
-            capture_screenshots_module.main()
+        capture_screenshots_module.main()
 
         assert not temp_db.exists()
 
