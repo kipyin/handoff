@@ -3,19 +3,24 @@
 from __future__ import annotations
 
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 import handoff.interfaces.cli as app_cli
-import scripts.dev_cli as dev_cli
+import scripts
+import scripts.dev_cli
+import scripts.seed_demo
 
 RUNNER = CliRunner()
 _COUNTABLE_TABLES = {"project", "handoff", "check_in"}
 
 
-def _capture_run_cmd(monkeypatch, module=dev_cli):
+def _capture_run_cmd(monkeypatch, module=None):
+    if module is None:
+        module = scripts.dev_cli
     calls: list[list[str]] = []
 
     def fake_run_cmd(args, **_kwargs) -> None:
@@ -47,27 +52,27 @@ def _count_rows(db_path: Path, table: str) -> int:
 
 def test_lint_is_non_mutating_by_default(monkeypatch) -> None:
     """`handoff-dev lint` should check without fixing unless requested."""
-    calls = _capture_run_cmd(monkeypatch)
+    calls = _capture_run_cmd(monkeypatch, scripts.dev_cli)
 
-    dev_cli.lint()
+    scripts.dev_cli.lint()
 
     assert calls == [["uv", "run", "ruff", "check", "."]]
 
 
 def test_lint_accepts_fix_flag(monkeypatch) -> None:
     """`handoff-dev lint --fix` should forward the fix flag to Ruff."""
-    calls = _capture_run_cmd(monkeypatch)
+    calls = _capture_run_cmd(monkeypatch, scripts.dev_cli)
 
-    dev_cli.lint(["--fix", "src"])
+    scripts.dev_cli.lint(["--fix", "src"])
 
     assert calls == [["uv", "run", "ruff", "check", "--fix", "src"]]
 
 
 def test_check_is_non_mutating_by_default(monkeypatch) -> None:
     """`handoff-dev check` should run format/lint in check mode."""
-    calls = _capture_run_cmd(monkeypatch)
+    calls = _capture_run_cmd(monkeypatch, scripts.dev_cli)
 
-    dev_cli.check_command()
+    scripts.dev_cli.check_command()
 
     assert calls == [
         ["uv", "run", "ruff", "format", "--check", "."],
@@ -77,9 +82,9 @@ def test_check_is_non_mutating_by_default(monkeypatch) -> None:
 
 def test_check_fix_applies_formatter_and_lint_fixes(monkeypatch) -> None:
     """`handoff-dev check --fix` should run the mutating Ruff commands."""
-    calls = _capture_run_cmd(monkeypatch)
+    calls = _capture_run_cmd(monkeypatch, scripts.dev_cli)
 
-    dev_cli.check_command(["--fix", "src"])
+    scripts.dev_cli.check_command(["--fix", "src"])
 
     assert calls == [
         ["uv", "run", "ruff", "format", "src"],
@@ -89,9 +94,9 @@ def test_check_fix_applies_formatter_and_lint_fixes(monkeypatch) -> None:
 
 def test_ci_fix_only_applies_to_ruff_steps(monkeypatch) -> None:
     """`handoff-dev ci --fix` should not leak the fix flag to pyright or pytest."""
-    calls = _capture_run_cmd(monkeypatch)
+    calls = _capture_run_cmd(monkeypatch, scripts.dev_cli)
 
-    dev_cli.ci(["--fix"])
+    scripts.dev_cli.ci(["--fix"])
 
     assert calls == [
         ["uv", "run", "ruff", "format", "."],
@@ -103,9 +108,9 @@ def test_ci_fix_only_applies_to_ruff_steps(monkeypatch) -> None:
 
 def test_check_cli_accepts_fix_flag(monkeypatch) -> None:
     """Typer should pass `--fix` through to the check command."""
-    calls = _capture_run_cmd(monkeypatch)
+    calls = _capture_run_cmd(monkeypatch, scripts.dev_cli)
 
-    result = RUNNER.invoke(dev_cli.app, ["check", "--fix"])
+    result = RUNNER.invoke(scripts.dev_cli.app, ["check", "--fix"])
 
     assert result.exit_code == 0
     assert calls == [
@@ -116,9 +121,9 @@ def test_check_cli_accepts_fix_flag(monkeypatch) -> None:
 
 def test_ci_cli_accepts_fix_flag(monkeypatch) -> None:
     """Typer should pass `--fix` through to the ci command."""
-    calls = _capture_run_cmd(monkeypatch)
+    calls = _capture_run_cmd(monkeypatch, scripts.dev_cli)
 
-    result = RUNNER.invoke(dev_cli.app, ["ci", "--fix"])
+    result = RUNNER.invoke(scripts.dev_cli.app, ["ci", "--fix"])
 
     assert result.exit_code == 0
     assert calls == [
@@ -140,9 +145,9 @@ def test_sizecheck_cli_uses_defaults_when_no_paths(monkeypatch) -> None:
         seen["warn_threshold"] = warn_threshold
         return True, [], []
 
-    monkeypatch.setattr(dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+    monkeypatch.setattr(scripts.dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
 
-    result = RUNNER.invoke(dev_cli.app, ["sizecheck"])
+    result = RUNNER.invoke(scripts.dev_cli.app, ["sizecheck"])
 
     assert result.exit_code == 0
     assert seen == {
@@ -168,10 +173,10 @@ def test_sizecheck_cli_surfaces_warnings_and_fails_on_violations(monkeypatch) ->
             ["src/handoff/io.py: 80 bytes (80% of limit)"],
         )
 
-    monkeypatch.setattr(dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+    monkeypatch.setattr(scripts.dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
 
     result = RUNNER.invoke(
-        dev_cli.app,
+        scripts.dev_cli.app,
         [
             "sizecheck",
             "--max-bytes",
@@ -200,10 +205,10 @@ def test_sizecheck_cli_forwards_options_and_paths(monkeypatch) -> None:
         captured["warn_threshold"] = warn_threshold
         return True, [], ["src/example.py: 9 bytes (90% of limit)"]
 
-    monkeypatch.setattr(dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+    monkeypatch.setattr(scripts.dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
 
     result = RUNNER.invoke(
-        dev_cli.app,
+        scripts.dev_cli.app,
         [
             "sizecheck",
             "--path",
@@ -234,9 +239,9 @@ def test_sizecheck_cli_exits_nonzero_on_violations(monkeypatch) -> None:
         del default_path, warn_threshold
         return False, [f"src/too_big.py: {max_bytes + 1} bytes (max {max_bytes})"], []
 
-    monkeypatch.setattr(dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
+    monkeypatch.setattr(scripts.dev_cli.sizecheck_module, "run_sizecheck", fake_run_sizecheck)
 
-    result = RUNNER.invoke(dev_cli.app, ["sizecheck", "--max-bytes", "10"])
+    result = RUNNER.invoke(scripts.dev_cli.app, ["sizecheck", "--max-bytes", "10"])
 
     assert result.exit_code == 1
     assert "The following files exceed the limit (10 bytes):" in result.stdout
@@ -245,15 +250,15 @@ def test_sizecheck_cli_exits_nonzero_on_violations(monkeypatch) -> None:
 
 def test_ci_runs_sizecheck_with_fixed_src_settings(monkeypatch) -> None:
     """`handoff-dev ci` should always run sizecheck against src/ only."""
-    calls = _capture_run_cmd(monkeypatch)
+    calls = _capture_run_cmd(monkeypatch, scripts.dev_cli)
     sizecheck_calls: list[dict[str, object]] = []
 
     def fake_sizecheck(**kwargs) -> None:
         sizecheck_calls.append(kwargs)
 
-    monkeypatch.setattr(dev_cli, "sizecheck", fake_sizecheck)
+    monkeypatch.setattr(scripts.dev_cli, "sizecheck", fake_sizecheck)
 
-    dev_cli.ci(["--fix"])
+    scripts.dev_cli.ci(["--fix"])
 
     assert calls == [
         ["uv", "run", "ruff", "format", "."],
@@ -291,7 +296,7 @@ def test_seed_demo_cli_seeds_database_at_requested_path(tmp_path: Path) -> None:
     """`handoff-dev seed-demo` should create and seed a DB at the provided path."""
     db_path = tmp_path / "demo.db"
 
-    result = RUNNER.invoke(dev_cli.app, ["seed-demo", "--db-path", str(db_path)])
+    result = RUNNER.invoke(scripts.dev_cli.app, ["seed-demo", "--db-path", str(db_path)])
 
     assert result.exit_code == 0
     assert db_path.exists()
@@ -365,25 +370,286 @@ def test_cli_command_stub_does_not_accept_subcommands() -> None:
     assert result.exit_code != 0
 
 
-def test_seed_demo_with_temp_path(tmp_path, monkeypatch) -> None:
-    """`handoff-dev seed-demo --db-path PATH` should seed the DB and print confirmation."""
-    db_path = tmp_path / "demo.db"
-    result = RUNNER.invoke(dev_cli.app, ["seed-demo", "--db-path", str(db_path)])
+def test_resolve_demo_db_path_uses_provided_path(tmp_path: Path) -> None:
+    """_resolve_demo_db_path should return expanded/resolved provided path."""
+    absolute_path = tmp_path / "test.db"
+    result = app_cli._resolve_demo_db_path(str(absolute_path))
+    assert result == absolute_path.resolve()
+
+    # Test with relative path
+    result = app_cli._resolve_demo_db_path("test.db")
+    assert result == Path("test.db").resolve()
+
+
+def test_resolve_demo_db_path_with_tilde_expansion() -> None:
+    """_resolve_demo_db_path should expand ~ in paths."""
+    result = app_cli._resolve_demo_db_path("~/test.db")
+    assert "~" not in str(result)
+    assert result == Path("~/test.db").expanduser().resolve()
+
+
+def test_resolve_demo_db_path_uses_default_when_none() -> None:
+    """_resolve_demo_db_path should use get_demo_db_path() when no path provided."""
+    result = app_cli._resolve_demo_db_path(None)
+    expected = app_cli.get_demo_db_path()
+    assert result == expected
+
+
+def test_db_has_projects_returns_false_when_db_not_exists(tmp_path: Path) -> None:
+    """_db_has_projects should return False when DB file does not exist."""
+    missing_db = tmp_path / "nonexistent.db"
+    assert app_cli._db_has_projects(missing_db) is False
+
+
+def test_db_has_projects_returns_false_when_table_missing(tmp_path: Path) -> None:
+    """_db_has_projects should return False when project table doesn't exist."""
+    db_path = tmp_path / "empty.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE other_table (id INTEGER)")
+        conn.commit()
+
+    assert app_cli._db_has_projects(db_path) is False
+
+
+def test_db_has_projects_returns_false_when_no_rows(tmp_path: Path) -> None:
+    """_db_has_projects should return False when project table is empty."""
+    db_path = tmp_path / "empty.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE project (id INTEGER PRIMARY KEY)")
+        conn.commit()
+
+    assert app_cli._db_has_projects(db_path) is False
+
+
+def test_db_has_projects_returns_true_when_rows_exist(tmp_path: Path) -> None:
+    """_db_has_projects should return True when project table has rows."""
+    db_path = tmp_path / "seeded.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT)")
+        conn.execute("INSERT INTO project (name) VALUES ('Test Project')")
+        conn.commit()
+
+    assert app_cli._db_has_projects(db_path) is True
+
+
+def test_db_has_projects_handles_corrupt_db_gracefully(tmp_path: Path, monkeypatch) -> None:
+    """_db_has_projects should return False if sqlite3.Error occurs (corrupt DB)."""
+    db_path = tmp_path / "corrupt.db"
+    db_path.touch()
+
+    def raise_on_connect(*_args, **_kwargs):
+        raise sqlite3.DatabaseError("database disk image is malformed")
+
+    monkeypatch.setattr(sqlite3, "connect", raise_on_connect)
+
+    assert app_cli._db_has_projects(db_path) is False
+
+
+def test_run_without_demo_or_db_path_passes_no_env(monkeypatch) -> None:
+    """`handoff run` without flags should not set HANDOFF_DB_PATH in subprocess env."""
+    monkeypatch.delenv("HANDOFF_DB_PATH", raising=False)
+    run_calls: list[dict[str, object]] = []
+
+    def mock_run(cmd, **kwargs) -> None:
+        run_calls.append({"cmd": cmd, "kwargs": kwargs})
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = RUNNER.invoke(app_cli.app, ["run"])
 
     assert result.exit_code == 0
-    assert "Demo database ready" in result.stdout
-    assert str(db_path) in result.stdout
-    assert db_path.exists()
+    assert len(run_calls) == 1
+    subprocess_env = run_calls[0]["kwargs"].get("env")
+    assert subprocess_env is not None
+    assert "HANDOFF_DB_PATH" not in subprocess_env
 
 
-def test_run_demo_passes_env_to_subprocess(monkeypatch) -> None:
-    """`handoff run --demo` should pass HANDOFF_DB_PATH to the handoff subprocess."""
+def test_run_demo_without_db_path_uses_default_demo_location(tmp_path: Path, monkeypatch) -> None:
+    """`handoff run --demo` without --db-path should use default demo location."""
     calls = _capture_launch_streamlit(monkeypatch)
 
-    RUNNER.invoke(app_cli.app, ["run", "--demo"])
+    # Mock get_demo_db_path to return a known location
+    def mock_get_demo_db_path():
+        return tmp_path / "demo.db"
 
+    monkeypatch.setattr(app_cli, "get_demo_db_path", mock_get_demo_db_path)
+
+    result = RUNNER.invoke(app_cli.app, ["run", "--demo"])
+
+    assert result.exit_code == 0
     assert len(calls) == 1
-    assert "python" in str(calls[0]["args"]) and "handoff" in str(calls[0]["args"])
     env = calls[0]["env"]
-    assert env is not None
-    assert "HANDOFF_DB_PATH" in env
+    assert isinstance(env, dict)
+    assert env["HANDOFF_DB_PATH"] == str((tmp_path / "demo.db").resolve())
+
+
+def test_run_demo_skips_seeding_when_db_already_has_projects(tmp_path: Path, monkeypatch) -> None:
+    """_run --demo should skip seeding if DB already has project rows."""
+    db_path = tmp_path / "seeded.db"
+    # Create a DB with a project already seeded
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT)")
+        conn.execute("INSERT INTO project (name) VALUES ('Existing Project')")
+        conn.commit()
+
+    calls = _capture_launch_streamlit(monkeypatch)
+    seed_calls: list[tuple[Path, dict[str, object]]] = []
+
+    def mock_seed_demo(path: Path, **kwargs) -> None:
+        seed_calls.append((path, kwargs))
+
+    monkeypatch.setattr(scripts.seed_demo, "seed_demo_db", mock_seed_demo)
+
+    result = RUNNER.invoke(
+        app_cli.app,
+        ["run", "--demo", "--db-path", str(db_path)],
+    )
+
+    assert result.exit_code == 0
+    # Should not call seed_demo_db since DB already has projects
+    assert len(seed_calls) == 0
+    assert len(calls) == 1
+
+
+def test_run_demo_seeds_when_db_is_empty(tmp_path: Path, monkeypatch) -> None:
+    """`handoff run --demo` should seed an empty DB."""
+    db_path = tmp_path / "empty.db"
+    # Create empty DB with schema but no data
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT)")
+        conn.commit()
+
+    seed_calls: list[tuple[Path, dict[str, object]]] = []
+
+    def mock_seed_demo(path: Path, **kwargs) -> None:
+        seed_calls.append((path, kwargs))
+
+    monkeypatch.setattr(scripts.seed_demo, "seed_demo_db", mock_seed_demo)
+    _capture_launch_streamlit(monkeypatch)  # Mock streamlit launch
+
+    result = RUNNER.invoke(
+        app_cli.app,
+        ["run", "--demo", "--db-path", str(db_path)],
+    )
+
+    assert result.exit_code == 0
+    # Should call seed_demo_db since DB is empty
+    assert len(seed_calls) == 1
+    assert seed_calls[0][0] == db_path
+    assert seed_calls[0][1] == {"force": False}
+
+
+def test_run_passes_extra_streamlit_args(monkeypatch) -> None:
+    """`handoff run` should forward extra args to Streamlit via subprocess."""
+    calls = _capture_launch_streamlit(monkeypatch)
+
+    result = RUNNER.invoke(
+        app_cli.app,
+        [
+            "run",
+            "--",
+            "--server.port",
+            "9999",
+            "--logger.level",
+            "debug",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    assert calls[0]["args"] == [
+        sys.executable,
+        "-m",
+        "handoff",
+        "--server.port",
+        "9999",
+        "--logger.level",
+        "debug",
+    ]
+
+
+def test_main_invokes_app_callback(monkeypatch) -> None:
+    """main() should invoke the app() which runs typer."""
+    invoked = {"called": False}
+
+    def mock_app() -> None:
+        invoked["called"] = True
+
+    monkeypatch.setattr(app_cli, "app", mock_app)
+
+    app_cli.main()
+
+    assert invoked["called"] is True
+
+
+def test_main_callback_without_subcommand_invokes_run(monkeypatch) -> None:
+    """main_callback without subcommand should invoke run() (default entrypoint)."""
+    calls = _capture_launch_streamlit(monkeypatch)
+
+    # Invoke with no arguments - triggers callback when ctx.invoked_subcommand is None
+    result = RUNNER.invoke(app_cli.app, [])
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    assert calls[0]["args"] == [sys.executable, "-m", "handoff"]
+
+
+def test_main_callback_with_subcommand_does_not_invoke_run(monkeypatch) -> None:
+    """main_callback with subcommand should not invoke run()."""
+    calls = _capture_launch_streamlit(monkeypatch)
+
+    result = RUNNER.invoke(app_cli.app, ["cli"])
+
+    assert result.exit_code == 1
+    # Should not have invoked _launch_streamlit since 'cli' is a subcommand
+    assert len(calls) == 0
+    assert "handoff cli is not implemented yet" in result.stdout
+
+
+def test_launch_streamlit_with_no_env_inherits_parent(monkeypatch) -> None:
+    """_launch_streamlit with env=None should use os.environ."""
+    monkeypatch.setenv("TEST_VAR", "test_value")
+    run_calls: list[dict[str, object]] = []
+
+    def mock_run(cmd, **kwargs) -> None:
+        run_calls.append({"cmd": cmd, "kwargs": kwargs})
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    app_cli._launch_streamlit(["--test"], env=None)
+
+    assert len(run_calls) == 1
+    # env should be a copy of os.environ
+    assert "TEST_VAR" in run_calls[0]["kwargs"]["env"]
+    assert run_calls[0]["kwargs"]["env"]["TEST_VAR"] == "test_value"
+
+
+def test_launch_streamlit_with_env_uses_provided(monkeypatch) -> None:
+    """_launch_streamlit with env dict should use a copy of it (no mutation)."""
+    run_calls: list[dict[str, object]] = []
+
+    def mock_run(cmd, **kwargs) -> None:
+        run_calls.append({"cmd": cmd, "kwargs": kwargs})
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    custom_env = {"CUSTOM_VAR": "custom_value"}
+    app_cli._launch_streamlit(["--test"], env=custom_env)
+
+    assert len(run_calls) == 1
+    assert run_calls[0]["kwargs"]["env"]["CUSTOM_VAR"] == "custom_value"
+    assert "HANDOFF_DB_PATH" not in custom_env
+
+
+def test_db_has_projects_count_query_checks_row_value(tmp_path: Path) -> None:
+    """_db_has_projects should correctly evaluate COUNT(*) > 0."""
+    db_path = tmp_path / "multi.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT)")
+        # Insert multiple rows
+        conn.execute("INSERT INTO project (name) VALUES ('P1')")
+        conn.execute("INSERT INTO project (name) VALUES ('P2')")
+        conn.execute("INSERT INTO project (name) VALUES ('P3')")
+        conn.commit()
+
+    assert app_cli._db_has_projects(db_path) is True
