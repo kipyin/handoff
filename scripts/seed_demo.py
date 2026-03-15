@@ -1,197 +1,246 @@
-"""Seed a demo database with representative handoffs and projects.
-
-Used by `handoff run --demo` (auto-seed when empty) and `handoff seed-demo`.
-Uses only handoff.data APIs. All dates derive from reference_date when
-supplied; otherwise date.today().
-"""
+"""Seed a database with deterministic demo data for local demos and UAT."""
 
 from __future__ import annotations
 
-import os
 from contextlib import contextmanager
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
-from unittest.mock import patch
+from types import ModuleType
 
-import handoff.data as data
-import handoff.db as db
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import close_all_sessions
+from sqlmodel import Session, SQLModel, create_engine
+
 from handoff.dates import add_business_days
 
 
-def seed_demo_db(
-    db_path: Path | str,
-    *,
-    force: bool = False,
-    reference_date: date | None = None,
-) -> int:
-    """Seed the database at db_path with demo projects and handoffs.
+def _build_engine(db_path: Path) -> Engine:
+    """Create and initialize an engine for the requested SQLite path."""
+    # Import models so SQLModel metadata is populated before create_all() runs.
+    import handoff.core.models  # noqa: F401
+    from handoff.migrations import run_pending_migrations
 
-    Args:
-        db_path: Path to the SQLite database file.
-        force: When True, re-seed even if the DB already has projects.
-        reference_date: Base date for all generated dates; uses date.today() if None.
+    engine = create_engine(f"sqlite:///{db_path}", echo=False)
+    SQLModel.metadata.create_all(engine)
+    run_pending_migrations(engine)
+    return engine
 
-    Returns:
-        Number of handoffs created.
-    """
-    path = Path(db_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
 
-    os.environ["HANDOFF_DB_PATH"] = str(path.resolve())
-    db.dispose_db()
-    db.init_db()
+@contextmanager
+def _patch_data_session_context(engine: Engine):
+    """Temporarily point handoff.data helpers at a specific engine."""
+    import handoff.data as data
+    import handoff.data.activity as data_activity
+    import handoff.data.handoffs as data_handoffs
+    import handoff.data.io as data_io
+    import handoff.data.projects as data_projects
+    import handoff.data.queries as data_queries
 
-    projects = data.list_projects(include_archived=True)
-    if projects and not force:
-        return 0
+    modules: tuple[ModuleType, ...] = (
+        data_activity,
+        data_handoffs,
+        data_io,
+        data_projects,
+        data_queries,
+    )
+    original_contexts = {module: module.session_context for module in modules}
 
-    if force:
-        for p in projects:
-            if p.id is not None:
-                data.delete_project(p.id)
+    @contextmanager
+    def session_context():
+        with Session(engine) as session:
+            yield session
 
-    ref = reference_date or date.today()
-    yesterday = add_business_days(ref, -1)
-    tomorrow = add_business_days(ref, 1)
-    next_week = add_business_days(ref, 5)
-    next_month = add_business_days(ref, 22)
-    last_week = add_business_days(ref, -5)
+    for module in modules:
+        module.session_context = session_context  # type: ignore[attr-defined]
 
+    try:
+        yield data
+    finally:
+        close_all_sessions()
+        for module, original_context in original_contexts.items():
+            module.session_context = original_context  # type: ignore[attr-defined]
+
+
+def _seed_projects(data) -> dict[str, int]:
+    """Create the demo projects and return their ids keyed by name."""
     acme = data.create_project("Acme Corp")
     personal = data.create_project("Personal")
-    archived_proj = data.create_project("Archived Project")
+    archived = data.create_project("Archived Project")
     assert acme.id is not None
     assert personal.id is not None
-    assert archived_proj.id is not None
-    data.archive_project(archived_proj.id)
+    assert archived.id is not None
+    data.archive_project(archived.id)
+    return {
+        "acme": acme.id,
+        "personal": personal.id,
+        "archived": archived.id,
+    }
 
-    data.create_handoff(
-        project_id=archived_proj.id,
-        need_back="Archived project handoff",
-        next_check=next_week,
-        pitchman="Eve",
-    )
-    count = 1
 
+def _seed_handoffs(data, *, project_ids: dict[str, int], reference_date: date) -> None:
+    """Create representative demo handoffs and check-ins."""
     risk_overdue = data.create_handoff(
-        project_id=acme.id,
+        project_id=project_ids["acme"],
         need_back="Overdue deliverable",
-        next_check=yesterday,
-        deadline=yesterday,
         pitchman="Alice",
+        next_check=reference_date - timedelta(days=1),
+        deadline=reference_date - timedelta(days=1),
+        notes="Waiting on revised numbers before we can send the deck.",
     )
     assert risk_overdue.id is not None
     data.create_check_in(
         handoff_id=risk_overdue.id,
         check_in_type=data.CheckInType.DELAYED,
-        check_in_date=yesterday,
+        check_in_date=reference_date - timedelta(days=1),
+        note="Blocked on finance input.",
     )
-    count += 1
 
-    risk_due_today = data.create_handoff(
-        project_id=acme.id,
+    risk_today = data.create_handoff(
+        project_id=project_ids["acme"],
         need_back="Due today",
-        next_check=ref,
-        deadline=ref,
         pitchman="Alice",
+        next_check=reference_date,
+        deadline=reference_date,
+        notes="Customer review scheduled for this afternoon.",
     )
-    assert risk_due_today.id is not None
+    assert risk_today.id is not None
     data.create_check_in(
-        handoff_id=risk_due_today.id,
+        handoff_id=risk_today.id,
         check_in_type=data.CheckInType.DELAYED,
-        check_in_date=ref,
+        check_in_date=reference_date,
+        note="Needs a final legal sign-off.",
     )
-    count += 1
 
-    action_item = data.create_handoff(
-        project_id=acme.id,
+    action_required = data.create_handoff(
+        project_id=project_ids["acme"],
         need_back="Action required item",
-        next_check=ref,
-        deadline=tomorrow,
         pitchman="Bob",
+        next_check=reference_date,
+        deadline=add_business_days(reference_date, 1),
+        notes="Ask Bob to confirm the rollout checklist.",
     )
-    assert action_item.id is not None
+    assert action_required.id is not None
     data.create_check_in(
-        handoff_id=action_item.id,
+        handoff_id=action_required.id,
         check_in_type=data.CheckInType.ON_TRACK,
-        check_in_date=ref,
+        check_in_date=reference_date - timedelta(days=1),
+        note="Waiting for today's confirmation.",
     )
-    count += 1
 
     data.create_handoff(
-        project_id=personal.id,
+        project_id=project_ids["personal"],
         need_back="Upcoming task",
-        next_check=next_week,
-        deadline=next_week,
         pitchman="Carol",
+        next_check=add_business_days(reference_date, 5),
+        deadline=add_business_days(reference_date, 5),
+        notes="Prep notes for next week's planning meeting.",
     )
-    count += 1
 
-    concluded_h = data.create_handoff(
-        project_id=acme.id,
+    concluded = data.create_handoff(
+        project_id=project_ids["personal"],
         need_back="Concluded task",
-        next_check=last_week,
-        deadline=last_week,
         pitchman="Bob",
+        next_check=reference_date - timedelta(days=7),
+        deadline=reference_date - timedelta(days=5),
+        notes="Finished and ready to archive later.",
     )
-    assert concluded_h.id is not None
-    with _today_context(ref):
-        data.conclude_handoff(concluded_h.id, note="Done")
-    count += 1
+    assert concluded.id is not None
+    data.create_check_in(
+        handoff_id=concluded.id,
+        check_in_type=data.CheckInType.ON_TRACK,
+        check_in_date=reference_date - timedelta(days=7),
+        note="In progress.",
+    )
+    data.create_check_in(
+        handoff_id=concluded.id,
+        check_in_type=data.CheckInType.CONCLUDED,
+        check_in_date=reference_date - timedelta(days=5),
+        note="Wrapped up last week.",
+    )
 
-    reopened_h = data.create_handoff(
-        project_id=personal.id,
+    reopened = data.create_handoff(
+        project_id=project_ids["personal"],
         need_back="Reopened handoff",
-        next_check=ref,
-        deadline=tomorrow,
         pitchman="Alice",
+        next_check=reference_date,
+        deadline=add_business_days(reference_date, 1),
+        notes="This was reopened after a follow-up question.",
     )
-    assert reopened_h.id is not None
-    with _today_context(ref):
-        data.conclude_handoff(reopened_h.id, note="Initial close")
-    data.reopen_handoff(reopened_h.id, note="Reopened for follow-up", next_check_date=ref)
-    count += 1
+    assert reopened.id is not None
+    data.create_check_in(
+        handoff_id=reopened.id,
+        check_in_type=data.CheckInType.CONCLUDED,
+        check_in_date=reference_date - timedelta(days=1),
+        note="Originally thought done.",
+    )
+    data.create_check_in(
+        handoff_id=reopened.id,
+        check_in_type=data.CheckInType.ON_TRACK,
+        check_in_date=reference_date,
+        note="Follow-up requested after reopen.",
+        next_check_date=reference_date,
+    )
 
     data.create_handoff(
-        project_id=personal.id,
+        project_id=project_ids["personal"],
         need_back="No pitchman, no dates",
-        next_check=None,
-        deadline=None,
-        pitchman=None,
+        notes="Useful edge case for blank optional fields.",
     )
-    count += 1
 
     data.create_handoff(
-        project_id=acme.id,
+        project_id=project_ids["personal"],
         need_back=(
-            "Long description that goes on and on to test truncation and layout "
-            "in the UI when the need_back text is very lengthy"
+            "Long description for a cross-team migration handoff that spans multiple "
+            "milestones and needs a realistic amount of wrapping text in the UI."
         ),
-        next_check=next_month,
-        deadline=next_month,
         pitchman="Dave",
+        next_check=add_business_days(reference_date, 20),
+        deadline=add_business_days(reference_date, 20),
+        notes="Keep this visible as a long-text layout example.",
     )
-    count += 1
 
     data.create_handoff(
-        project_id=personal.id,
-        need_back="Notes with [markdown](url)",
-        next_check=None,
-        deadline=None,
+        project_id=project_ids["personal"],
+        need_back="Notes with markdown",
         pitchman="Carol",
-        notes="See [documentation](https://example.com) for details.",
+        notes="Review the [draft brief](https://example.com/demo-brief) before Friday.",
     )
-    count += 1
 
-    return count
+    data.create_handoff(
+        project_id=project_ids["archived"],
+        need_back="Archived project follow-up",
+        pitchman="Eve",
+        next_check=reference_date,
+        deadline=add_business_days(reference_date, 2),
+        notes="Hidden by default unless archived projects are included.",
+    )
 
 
-@contextmanager
-def _today_context(ref: date):
-    """Context manager that patches date.today() to return ref in handoff.data.handoffs."""
-    from datetime import date as real_date
+def seed_demo_db(
+    db_path: str | Path,
+    *,
+    force: bool = False,
+    reference_date: date | None = None,
+) -> Path:
+    """Seed the requested SQLite database with demo data.
 
-    with patch("handoff.data.handoffs.date") as mock_date:
-        mock_date.today.return_value = ref
-        mock_date.side_effect = lambda *a, **k: real_date(*a, **k)
-        yield
+    When ``force`` is false, an already-seeded DB is left unchanged.
+    """
+    resolved_path = Path(db_path).expanduser().resolve()
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    effective_date = reference_date or date.today()
+
+    if force and resolved_path.exists():
+        resolved_path.unlink()
+
+    engine = _build_engine(resolved_path)
+    try:
+        with _patch_data_session_context(engine) as data:
+            if not force and data.list_projects(include_archived=True):
+                return resolved_path
+            project_ids = _seed_projects(data)
+            _seed_handoffs(data, project_ids=project_ids, reference_date=effective_date)
+            return resolved_path
+    finally:
+        close_all_sessions()
+        engine.dispose()

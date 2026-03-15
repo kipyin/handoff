@@ -10,7 +10,6 @@ import streamlit as st
 
 from handoff.core.models import Project
 from handoff.core.rulebook import BuiltInSection
-from handoff.instrumentation import time_action
 from handoff.interfaces.streamlit.pages.now_forms import _render_add_form, _render_item
 from handoff.interfaces.streamlit.pages.now_helpers import (
     _build_project_options,
@@ -98,39 +97,35 @@ def render_now_page() -> None:
             key="now_include_archived_projects",
         )
     )
-    with time_action("now_render"):
-        projects = list_projects(include_archived=include_archived_projects)
-        if not projects:
-            if include_archived_projects:
-                st.info("No projects yet. Create one on the Projects page.")
+    projects = list_projects(include_archived=include_archived_projects)
+    if not projects:
+        if include_archived_projects:
+            st.info("No projects yet. Create one on the Projects page.")
+        else:
+            all_projects = list_projects(include_archived=True)
+            if all_projects:
+                st.info(
+                    "No active projects. Turn on 'Include archived projects' to view archived work."
+                )
             else:
-                all_projects = list_projects(include_archived=True)
-                if all_projects:
-                    st.info(
-                        "No active projects. Turn on 'Include archived projects' "
-                        "to view archived work."
-                    )
-                else:
-                    st.info("No projects yet. Create one on the Projects page.")
-            return
+                st.info("No projects yet. Create one on the Projects page.")
+        return
 
-        pitchmen = list_pitchmen_with_open_handoffs(
-            include_archived_projects=include_archived_projects
-        )
-        project_options = _build_project_options(projects)
-        project_ids, pitchman_names, search_text = _render_filters(
-            project_options=project_options,
-            pitchmen=pitchmen,
-            key_prefix="now",
-        )
-        snapshot = get_now_snapshot(
-            include_archived_projects=include_archived_projects,
-            project_ids=project_ids,
-            pitchman_names=pitchman_names,
-            search_text=search_text,
-            projects=projects,
-            pitchmen=pitchmen,
-        )
+    pitchmen = list_pitchmen_with_open_handoffs(include_archived_projects=include_archived_projects)
+    project_options = _build_project_options(projects)
+    project_ids, pitchman_names, search_text = _render_filters(
+        project_options=project_options,
+        pitchmen=pitchmen,
+        key_prefix="now",
+    )
+    snapshot = get_now_snapshot(
+        include_archived_projects=include_archived_projects,
+        project_ids=project_ids,
+        pitchman_names=pitchman_names,
+        search_text=search_text,
+        projects=projects,
+        pitchmen=pitchmen,
+    )
 
     add_expanded = st.session_state.get(add_key, False)
     if add_expanded:

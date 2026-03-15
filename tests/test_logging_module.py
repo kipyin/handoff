@@ -61,19 +61,16 @@ def test_log_application_action_includes_db_path_and_details(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import handoff.bootstrap.logging as log_mod
-    import handoff.db as db_mod
 
-    db_path = Path("/tmp/handoff.db")
-    monkeypatch.setattr(db_mod, "get_db_path", lambda: db_path)
     messages: list[str] = []
     monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
 
-    log_mod.log_application_action("data_export", format="json")
+    log_mod.log_application_action("data_export", db_path="/tmp/handoff.db", format="json")
 
     assert len(messages) == 1
     message = messages[0]
     assert message.startswith("application action=data_export")
-    assert f"db_path={db_path}" in message
+    assert "db_path=/tmp/handoff.db" in message
     assert "format=json" in message
 
 
@@ -81,12 +78,7 @@ def test_log_application_action_falls_back_to_unknown_db_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import handoff.bootstrap.logging as log_mod
-    import handoff.db as db_mod
 
-    def _raise() -> Path:
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(db_mod, "get_db_path", _raise)
     messages: list[str] = []
     monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
 
@@ -95,3 +87,72 @@ def test_log_application_action_falls_back_to_unknown_db_path(
     assert len(messages) == 1
     assert "action=app_update" in messages[0]
     assert "db_path=(unknown)" in messages[0]
+
+
+def test_log_application_action_explicit_db_path_overrides_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """log_application_action with explicit db_path uses it instead of (unknown)."""
+    import handoff.bootstrap.logging as log_mod
+
+    messages: list[str] = []
+    monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
+
+    log_mod.log_application_action("data_import", db_path="/explicit/path.db", count=42)
+
+    assert len(messages) == 1
+    message = messages[0]
+    assert "db_path=/explicit/path.db" in message
+    assert "count=42" in message
+    assert "(unknown)" not in message
+
+
+def test_log_application_action_explicit_db_path_none_becomes_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """log_application_action with db_path=None explicitly logs (unknown)."""
+    import handoff.bootstrap.logging as log_mod
+
+    messages: list[str] = []
+    monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
+
+    log_mod.log_application_action("data_backup", db_path=None)
+
+    assert len(messages) == 1
+    assert "db_path=(unknown)" in messages[0]
+
+
+def test_log_application_action_exception_handling_is_silent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """log_application_action swallows exceptions from logger and never raises."""
+    import handoff.bootstrap.logging as log_mod
+
+    def failing_log(msg: str) -> None:
+        raise RuntimeError("Logging failed!")
+
+    monkeypatch.setattr(log_mod.logger, "info", failing_log)
+
+    # Should not raise despite logger failure.
+    log_mod.log_application_action(
+        "data_export",
+        db_path="/tmp/test.db",
+        result="success",
+    )
+
+
+def test_log_application_action_with_empty_details(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """log_application_action with no details kwargs still logs action and db_path."""
+    import handoff.bootstrap.logging as log_mod
+
+    messages: list[str] = []
+    monkeypatch.setattr(log_mod.logger, "info", lambda message: messages.append(message))
+
+    log_mod.log_application_action("app_startup", db_path="/home/user/.local/handoff.db")
+
+    assert len(messages) == 1
+    message = messages[0]
+    assert message.startswith("application action=app_startup")
+    assert "db_path=/home/user/.local/handoff.db" in message

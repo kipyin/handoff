@@ -6,6 +6,8 @@ from datetime import date
 
 import streamlit as st
 
+from handoff.bootstrap.logging import log_application_action
+from handoff.db import get_db_path
 from handoff.services.dashboard_service import (
     get_cycle_time_by_project,
     get_dashboard_metrics,
@@ -14,7 +16,6 @@ from handoff.services.dashboard_service import (
     get_open_aging_profile,
     get_recent_activity,
 )
-from handoff.services.settings_service import log_application_action
 
 
 def render_dashboard_page() -> None:
@@ -105,7 +106,7 @@ def render_dashboard_page() -> None:
                 mime="text/csv",
                 key="dashboard_export_csv",
             ):
-                log_application_action("metrics_export", format="csv")
+                log_application_action("metrics_export", db_path=str(get_db_path()), format="csv")
         with col_json:
             if st.download_button(
                 "Download JSON",
@@ -114,6 +115,6 @@ def render_dashboard_page() -> None:
                 mime="application/json",
                 key="dashboard_export_json",
             ):
-                log_application_action("metrics_export", format="json")
+                log_application_action("metrics_export", db_path=str(get_db_path()), format="json")
     else:
         st.caption("No concluded handoffs in the last 12 weeks to export.")

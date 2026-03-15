@@ -1,8 +1,8 @@
-"""UAT tests against a seeded demo database.
+"""UAT tests for the seeded demo database workflow.
 
-Uses a fixed reference date so handoffs land in predictable Now buckets.
-Exercises the checklist: Now sections, Conclude, Reopen, Add handoff,
-Archived toggle, Dashboard.
+Each test exercises one item from the PR-5 checklist using the ``seeded_uat_db``
+fixture which provides a deterministically seeded DB with a pinned reference date
+of 2026-03-09 (Monday).
 """
 
 from __future__ import annotations
@@ -14,166 +14,335 @@ from pathlib import Path
 import pytest
 from streamlit.testing.v1 import AppTest
 
-import handoff.data as data
-import handoff.db as db
 from scripts.seed_demo import seed_demo_db
 
 APP_TEST_TIMEOUT = 15
-WORKSPACE = Path(__file__).resolve().parents[1]
-REFERENCE_DATE = date(2026, 3, 1)
-
-
-def _patch_date_today(monkeypatch: pytest.MonkeyPatch, ref: date) -> None:
-    """Patch date.today() in modules used by the Now/Dashboard UI."""
-    from datetime import date as real_date
-
-    class FixedDate(real_date):
-        @classmethod
-        def today(cls) -> date:
-            return ref
-
-    for mod_name in (
-        "handoff.data.handoffs",
-        "handoff.data.queries",
-        "handoff.services.handoff_service",
-        "handoff.dates",
-        "handoff.interfaces.streamlit.pages.now_helpers",
-        "handoff.interfaces.streamlit.pages.now_forms",
-        "handoff.interfaces.streamlit.pages.dashboard",
-    ):
-        mod = __import__(mod_name, fromlist=[""])
-        monkeypatch.setattr(mod, "date", FixedDate)
 
 
 def _reload_db_for_test(db_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Point handoff.db at a test DB path and reload."""
+    """Point handoff.db at a test DB path and reload so the engine is recreated."""
     monkeypatch.setenv("HANDOFF_DB_PATH", str(db_path))
+
+    import handoff.db as db
+
     db.dispose_db()
     importlib.reload(db)
-    importlib.reload(__import__("handoff.interfaces.streamlit.ui", fromlist=[""]))
-    importlib.reload(__import__("handoff.ui", fromlist=[""]))
+    import handoff.interfaces.streamlit.ui as streamlit_ui
+
+    importlib.reload(streamlit_ui)
+
+
+def _patch_uat_date(monkeypatch: pytest.MonkeyPatch, fixed_date_class: type[date]) -> None:
+    """Patch date.today() in the modules that drive seeded UAT behaviour.
+
+    Keep this list in sync with any new Now-page or supporting modules that call
+    ``date.today()`` directly; seeded UAT tests rely on a fixed reference date.
+
+    Note: ``now_forms`` is intentionally excluded. Its ``isinstance(value, date)``
+    form-validation guards are incompatible with the FixedDate subclass, and the
+    form rendering date defaults do not affect section-placement correctness.
+    """
+    import handoff.data.handoffs as data_handoffs
+    import handoff.data.queries as data_queries
+    import handoff.dates as handoff_dates
+    import handoff.interfaces.streamlit.pages.now_helpers as now_helpers
+    import handoff.services.handoff_service as handoff_service
+
+    for module in (
+        data_handoffs,
+        data_queries,
+        handoff_dates,
+        now_helpers,
+        handoff_service,
+    ):
+        monkeypatch.setattr(module, "date", fixed_date_class)
 
 
 @pytest.fixture
 def seeded_uat_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Set up a temp DB, seed it with reference_date, and patch date.today()."""
-    db_path = tmp_path / "uat_seeded.db"
+    """Create a seeded demo DB and pin date.today() for deterministic UAT tests."""
+    db_path = tmp_path / "seeded-uat.db"
+    reference_date = date(2026, 3, 9)
+
+    class FixedDate(date):
+        @classmethod
+        def today(cls) -> date:
+            return reference_date
+
+    seed_demo_db(db_path, reference_date=reference_date)
     _reload_db_for_test(db_path, monkeypatch)
-    seed_demo_db(db_path, force=True, reference_date=REFERENCE_DATE)
-    _patch_date_today(monkeypatch, REFERENCE_DATE)
+    _patch_uat_date(monkeypatch, FixedDate)
     return db_path
 
 
 def _now_page_entry() -> None:
-    import handoff.ui as ui
+    """Single-page entrypoint for the seeded Now page."""
     from handoff.interfaces.streamlit.pages.now import render_now_page
+    from handoff.interfaces.streamlit.ui import setup
+    from handoff.version import __version__
 
-    ui.setup("2026.2.24")
+    setup(__version__)
     render_now_page()
 
 
 def _dashboard_page_entry() -> None:
-    import handoff.ui as ui
+    """Single-page entrypoint for the seeded Dashboard page."""
+    import handoff.interfaces.streamlit.ui as ui
     from handoff.interfaces.streamlit.pages.dashboard import render_dashboard_page
+    from handoff.version import __version__
 
-    ui.setup("2026.2.24")
+    ui.setup(__version__)
     render_dashboard_page()
 
 
-def test_uat_now_sections_render_with_seeded_items(seeded_uat_db: Path) -> None:
-    """Risk, Action required, Upcoming, Concluded all render with expected seeded items."""
-    db.init_db()
+# ---------------------------------------------------------------------------
+# Checklist item 1: Now sections present with expected seeded items
+# ---------------------------------------------------------------------------
+
+
+def test_now_page_renders_with_seeded_uat_db(seeded_uat_db: Path) -> None:
+    """Seeded demo data should render the Now page without errors."""
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=APP_TEST_TIMEOUT)
+
     assert len(at.exception) == 0
+    markdown_texts = [getattr(markdown, "value", "") for markdown in at.get("markdown")]
+    expander_labels = [getattr(expander, "label", "") for expander in at.get("expander")]
 
-    markdown_texts = [getattr(m, "value", str(m)) for m in at.get("markdown")]
-    all_text = " ".join(mt or "" for mt in markdown_texts)
-    assert "Risk" in all_text
-    assert "Action" in all_text or "Action required" in all_text
-    assert "Upcoming" in all_text
-    assert "Concluded" in all_text
-
-    expander_labels = [getattr(e, "label", str(e)) for e in at.get("expander")]
-    all_labels = " ".join(expander_labels)
-    assert "Overdue deliverable" in all_labels or "Due today" in all_labels
-    assert "Concluded task" in all_labels
+    assert any("Risk" in text for text in markdown_texts)
+    assert any("Action required" in text for text in markdown_texts)
+    assert any("Upcoming" in text for text in markdown_texts)
+    assert any("Concluded" in text for text in markdown_texts)
+    assert any("Overdue deliverable" in label for label in expander_labels)
 
 
-def test_uat_conclude_moves_handoff_to_concluded(seeded_uat_db: Path) -> None:
-    """Conclude a specific handoff via UI; verify it moves to Concluded."""
+def _partition_expanders_by_section(at: AppTest) -> dict[str, list[str]]:
+    """Group expander labels by their section header from the element tree.
+
+    Walks the main block's children in document order; when a markdown node
+    matches a known section header (**Risk**, **Action required**, etc.), subsequent
+    expanders are attributed to that section until the next header.
+    """
+    sections: dict[str, list[str]] = {}
+    current_section: str | None = None
+    section_headers = ("**Risk**", "**Action required**", "**Upcoming**", "**Concluded**")
+
+    main = at._tree[0]
+    for child in main.children.values():
+        if type(child).__name__ == "Markdown":
+            val = getattr(child, "value", "") or ""
+            for header in section_headers:
+                if header in val:
+                    current_section = header.strip("*")
+                    sections.setdefault(current_section, [])
+                    break
+        elif type(child).__name__ == "Expander" and current_section:
+            label = getattr(child, "label", "") or ""
+            sections.setdefault(current_section, []).append(label)
+    return sections
+
+
+def test_now_sections_contain_expected_seeded_items(seeded_uat_db: Path) -> None:
+    """Each Now section shows the correct seeded handoffs from the demo DB.
+
+    Validates per-section placement: items must appear under the correct section
+    header in the element tree, not just anywhere on the page.
+    """
+    at = AppTest.from_function(_now_page_entry)
+    at.run(timeout=APP_TEST_TIMEOUT)
+
+    assert len(at.exception) == 0
+    by_section = _partition_expanders_by_section(at)
+
+    # Risk: both overdue and due-today items must be in the Risk section.
+    risk_labels = by_section.get("Risk", [])
+    assert any("Overdue deliverable" in lbl for lbl in risk_labels), (
+        "Expected 'Overdue deliverable' in Risk section"
+    )
+    assert any("Due today" in lbl for lbl in risk_labels), "Expected 'Due today' in Risk section"
+
+    # Action required: action item must be in the Action required section.
+    action_labels = by_section.get("Action required", [])
+    assert any("Action required item" in lbl for lbl in action_labels), (
+        "Expected 'Action required item' in Action required section"
+    )
+
+    # Upcoming: at least the plain upcoming task in the Upcoming section.
+    upcoming_labels = by_section.get("Upcoming", [])
+    assert any("Upcoming task" in lbl for lbl in upcoming_labels), (
+        "Expected 'Upcoming task' in Upcoming section"
+    )
+
+    # Concluded: concluded task must be in the Concluded section.
+    concluded_labels = by_section.get("Concluded", [])
+    assert any("Concluded task" in lbl for lbl in concluded_labels), (
+        "Expected 'Concluded task' in Concluded section"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Checklist item 2: Conclude a handoff via UI
+# ---------------------------------------------------------------------------
+
+
+def test_now_uat_conclude_moves_handoff_to_concluded(seeded_uat_db: Path) -> None:
+    """Conclude the 'Action required item' via UI and verify it is no longer open."""
+    import handoff.data as data
+    import handoff.db as db
+
     db.init_db()
-    projects = data.list_projects(include_archived=False)
-    acme = next((p for p in projects if p.name == "Acme Corp"), None)
-    assert acme is not None
-    handoffs = data.query_handoffs(project_ids=[acme.id], include_concluded=False)
-    action_item = next((h for h in handoffs if h.need_back == "Action required item"), None)
-    assert action_item is not None and action_item.id is not None
+    all_open = data.query_handoffs(include_concluded=False)
+    action_h = next((h for h in all_open if h.need_back == "Action required item"), None)
+    assert action_h is not None, "Expected 'Action required item' in open handoffs"
+    assert action_h.id is not None
+    handoff_id = action_h.id
 
     at = AppTest.from_function(_now_page_entry)
-    at.session_state[f"now_action_check_in_mode_{action_item.id}"] = "concluded"
+    # Pre-set check-in mode to avoid button-group set_value ambiguity.
+    at.session_state[f"now_action_check_in_mode_{handoff_id}"] = "concluded"
     at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     save_buttons = [b for b in at.button if getattr(b, "label", None) == "Save conclude check-in"]
-    assert save_buttons
+    assert save_buttons, "Expected 'Save conclude check-in' button"
     save_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
 
     updated = next(
-        (
-            h
-            for h in data.query_handoffs(project_ids=[acme.id], include_concluded=True)
-            if h.id == action_item.id
-        ),
+        (h for h in data.query_handoffs(include_concluded=True) if h.id == handoff_id),
         None,
     )
-    assert updated is not None and not data.handoff_is_open(updated)
+    assert updated is not None
+    assert not data.handoff_is_open(updated), "Handoff should be concluded after UI conclude flow"
 
 
-def test_uat_reopen_flow_available(seeded_uat_db: Path) -> None:
-    """Concluded section shows Reopen button for handoffs.
+# ---------------------------------------------------------------------------
+# Checklist item 3: Reopen a concluded handoff
+# ---------------------------------------------------------------------------
 
-    Full reopen flow is covered by test_app_integration.
-    """
+
+def test_now_uat_reopen_moves_handoff_out_of_concluded(seeded_uat_db: Path) -> None:
+    """Reopen the 'Concluded task' via UI and verify it returns to open sections."""
+    import handoff.data as data
+    import handoff.db as db
+
     db.init_db()
-    concluded = [h.need_back for h in data.query_concluded_handoffs(project_ids=None)]
-    assert "Concluded task" in concluded
+    concluded = data.query_concluded_handoffs()
+    concluded_h = next((h for h in concluded if h.need_back == "Concluded task"), None)
+    assert concluded_h is not None, "Expected 'Concluded task' in concluded handoffs"
+    assert concluded_h.id is not None
+    handoff_id = concluded_h.id
+
+    # Pre-set the reopen mode. The next-check date will be populated by the
+    # date_input widget's default value (add_business_days(today, 1)).
+    at = AppTest.from_function(_now_page_entry)
+    mode_key = f"now_concluded_reopen_mode_{handoff_id}"
+    at.session_state[mode_key] = "reopen"
+    at.run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.exception) == 0
+
+    save_reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Save reopen"]
+    assert save_reopen_buttons, "Expected 'Save reopen' button"
+    save_reopen_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.exception) == 0
+
+    updated = next(
+        (h for h in data.query_handoffs(include_concluded=True) if h.id == handoff_id),
+        None,
+    )
+    assert updated is not None
+    assert data.handoff_is_open(updated), "Handoff should be open after reopen flow"
+
+    still_concluded = [h.need_back for h in data.query_concluded_handoffs()]
+    assert "Concluded task" not in still_concluded, (
+        "Reopened handoff should not remain in concluded list"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Checklist item 4: Add handoff via form
+# ---------------------------------------------------------------------------
+
+
+def test_now_uat_add_handoff_persists_and_is_placed(seeded_uat_db: Path) -> None:
+    """Adding a handoff via the Now page form persists it to the database."""
+    import handoff.data as data
+    import handoff.db as db
+
+    db.init_db()
 
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=APP_TEST_TIMEOUT)
-    reopen_buttons = [b for b in at.button if getattr(b, "label", None) == "Reopen"]
-    assert reopen_buttons, "Expected Reopen button in Concluded section"
     assert len(at.exception) == 0
 
+    add_buttons = [b for b in at.button if "Add handoff" in getattr(b, "label", "")]
+    assert add_buttons, "Expected 'Add handoff' trigger button"
+    add_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.exception) == 0
 
-def test_uat_add_handoff_form_available(seeded_uat_db: Path) -> None:
-    """Now page renders without error; add-handoff flow in test_app_integration."""
-    db.init_db()
+    need_back_inputs = [
+        ti
+        for ti in at.text_input
+        if getattr(ti, "key", None) == "now_add_need" or getattr(ti, "label", None) == "Need back *"
+    ]
+    assert need_back_inputs, "Expected 'Need back' input in add form"
+    need_back_inputs[0].input("UAT new handoff").run(timeout=APP_TEST_TIMEOUT)
+
+    submit_buttons = [b for b in at.button if getattr(b, "label", None) == "Add"]
+    assert submit_buttons, "Expected 'Add' submit button"
+    submit_buttons[0].click().run(timeout=APP_TEST_TIMEOUT)
+    assert len(at.exception) == 0
+
+    all_handoffs = data.query_handoffs(include_concluded=True)
+    created = next((h for h in all_handoffs if h.need_back == "UAT new handoff"), None)
+    assert created is not None, "Newly added handoff should be persisted in the database"
+
+
+# ---------------------------------------------------------------------------
+# Checklist item 5: Archived toggle shows archived project items
+# ---------------------------------------------------------------------------
+
+
+def test_now_uat_archived_toggle_reveals_archived_items(seeded_uat_db: Path) -> None:
+    """Toggling 'Include archived projects' makes the archived handoff visible."""
     at = AppTest.from_function(_now_page_entry)
     at.run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
-    assert len(at.get("subheader")) >= 1 or len(at.get("expander")) >= 1
 
+    # Archived handoff must not be visible before toggle.
+    expander_labels_before = [getattr(e, "label", "") for e in at.get("expander")]
+    assert not any("Archived project follow-up" in lbl for lbl in expander_labels_before), (
+        "Archived handoff should be hidden before toggling Include archived projects"
+    )
 
-def test_uat_archived_toggle_shows_archived_items(seeded_uat_db: Path) -> None:
-    """Enable Include archived projects; verify archived items appear."""
-    db.init_db()
-    at = AppTest.from_function(_now_page_entry)
-    at.run(timeout=APP_TEST_TIMEOUT)
-    assert len(at.toggle) >= 1
-    at.toggle[0].set_value(True).run(timeout=APP_TEST_TIMEOUT)
+    # Toggle the archived-projects control (checkbox or toggle widget).
+    archived_controls = [
+        w
+        for w in list(at.checkbox) + list(at.toggle)
+        if "archived" in getattr(w, "label", "").lower()
+    ]
+    assert archived_controls, "Expected 'Include archived projects' toggle/checkbox"
+    archived_controls[0].set_value(True).run(timeout=APP_TEST_TIMEOUT)
     assert len(at.exception) == 0
-    labels = [getattr(e, "label", str(e)) for e in at.get("expander")]
-    all_labels = " ".join(labels)
-    assert "Archived project handoff" in all_labels or "Archived Project" in all_labels
+
+    expander_labels_after = [getattr(e, "label", "") for e in at.get("expander")]
+    assert any("Archived project follow-up" in lbl for lbl in expander_labels_after), (
+        "Archived handoff should appear after enabling Include archived projects"
+    )
 
 
-def test_uat_dashboard_renders_with_seeded_data(seeded_uat_db: Path) -> None:
-    """Dashboard renders without error with seeded data."""
-    db.init_db()
+# ---------------------------------------------------------------------------
+# Checklist item 6: Dashboard renders without error with seeded data
+# ---------------------------------------------------------------------------
+
+
+def test_dashboard_renders_with_seeded_uat_db(seeded_uat_db: Path) -> None:
+    """Dashboard page renders without errors and shows key metrics for seeded data."""
     at = AppTest.from_function(_dashboard_page_entry)
     at.run(timeout=APP_TEST_TIMEOUT)
+
     assert len(at.exception) == 0
     assert len(at.get("subheader")) >= 1
-    assert len(at.get("metric")) >= 4
+    metric_labels = [getattr(m, "label", None) for m in at.metric]
+    assert "At risk now" in metric_labels
+    assert "Open handoffs" in metric_labels

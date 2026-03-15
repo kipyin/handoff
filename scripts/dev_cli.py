@@ -1,16 +1,24 @@
-"""Typer-based CLI entrypoint for local development and build tasks."""
+"""Typer-based CLI for development and build tasks.
+
+Use via: uv run handoff-dev check | test | ci | build | ...
+"""
 
 from __future__ import annotations
 
 from enum import StrEnum
+from pathlib import Path
 
 import typer
 from rich.console import Console
+
+from handoff.db import get_demo_db_path
 
 from . import ROOT
 from . import build_full as build_full_module
 from . import build_patch as build_patch_module
 from . import bump_version as bump_version_module
+from . import capture_screenshots as capture_screenshots_module
+from . import seed_demo as seed_demo_module
 from . import sizecheck as sizecheck_module
 from .subprocess_utils import run_cmd
 
@@ -94,49 +102,11 @@ def _ci_run(extra_args: list[str] | None = None) -> None:
     test(extra_args=extra_args)
 
 
-@app.command("cli")
-def cli_command() -> None:
-    """Run the handoff CLI (stub for future implementation)."""
-    console.print(
-        "[bold red]handoff cli is not implemented yet.[/bold red]\n"
-        "This subcommand is reserved for a future interactive CLI interface."
-    )
-    raise typer.Exit(code=1)
-
-
-@app.command()
-def run(
-    extra_args: list[str] = EXTRA_ARGS_ARG,
-    demo: bool = typer.Option(False, "--demo", help="Run against demo DB; seeds if empty."),
-    db_path: str | None = typer.Option(None, "--db-path", help="Database path (with --demo)."),
-) -> None:
-    """Run the Streamlit app (applies Streamlit options from handoff.bootstrap.config)."""
-    extra_args = list(extra_args) if extra_args else []
-    env = None
-    if demo:
-        from pathlib import Path
-
-        from handoff.db import get_demo_db_path
-
-        from .seed_demo import seed_demo_db
-
-        path = Path(db_path) if db_path else get_demo_db_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        seed_demo_db(path, force=False)
-        env = {**dict(__import__("os").environ), "HANDOFF_DB_PATH": str(path.resolve())}
-    run_cmd(
-        ["uv", "run", "python", "-m", "handoff", *extra_args],
-        cwd=ROOT,
-        description="Starting Streamlit app...",
-        env=env,
-    )
-
-
-@app.callback(invoke_without_command=True)
-def main_callback(ctx: typer.Context) -> None:
-    """Default entrypoint so `uv run handoff` behaves like `uv run handoff run`."""
-    if ctx.invoked_subcommand is None:
-        run(extra_args=list(ctx.args))
+def _resolve_demo_db_path(db_path: str | None) -> Path:
+    """Return the explicit demo DB path or the default demo location."""
+    if db_path:
+        return Path(db_path).expanduser().resolve()
+    return get_demo_db_path()
 
 
 @app.command()
@@ -279,24 +249,6 @@ def bump(
     console.print(f"Bumped version to {version}", style="bold green")
 
 
-@app.command("seed-demo")
-def seed_demo(
-    db_path: str | None = typer.Option(None, "--db-path", help="Custom demo DB path."),
-    force: bool = typer.Option(False, "--force", help="Re-seed even if DB already has data."),
-) -> None:
-    """Seed the demo database with representative projects and handoffs."""
-    from pathlib import Path
-
-    from handoff.db import get_demo_db_path
-
-    from .seed_demo import seed_demo_db
-
-    path = Path(db_path) if db_path else get_demo_db_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    count = seed_demo_db(path, force=force)
-    console.print(f"Seeded {count} handoffs to {path}", style="bold green")
-
-
 @app.command("db-path")
 def db_path() -> None:
     """Print the resolved SQLite database path."""
@@ -305,8 +257,29 @@ def db_path() -> None:
     console.print(str(get_db_path()))
 
 
+@app.command("capture-screenshots")
+def capture_screenshots() -> None:
+    """Capture README screenshots (Now, Projects, Dashboard) using a seeded demo DB."""
+    capture_screenshots_module.main()
+
+
+@app.command("seed-demo")
+def seed_demo(
+    db_path: str | None = typer.Option(
+        None,
+        "--db-path",
+        help="Override the database path. Defaults to the demo DB path.",
+    ),
+    force: bool = typer.Option(False, "--force", help="Replace any existing demo DB."),
+) -> None:
+    """Create or refresh a demo database with representative seed data."""
+    resolved_path = _resolve_demo_db_path(db_path)
+    seed_demo_module.seed_demo_db(resolved_path, force=force)
+    console.print(f"Demo database ready at {resolved_path}", style="bold green")
+
+
 def main() -> None:
-    """Entrypoint for `python -m scripts.cli`."""
+    """Entrypoint for `uv run handoff-dev`."""
     app()
 
 

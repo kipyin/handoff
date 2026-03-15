@@ -23,3 +23,4 @@ dist/
 *.swp
 *.swo
 .aider*
+.DS_Store

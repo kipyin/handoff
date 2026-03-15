@@ -1,7 +1,7 @@
 """In-app update panel and patch application helpers.
 
 Patches for PyArmor-obfuscated distributions must be built with
-uv run handoff build-patch from the obfuscated build output.
+uv run handoff-dev build --patch from the obfuscated build output.
 """
 
 import re
@@ -21,7 +21,13 @@ def _log_app_action(action: str, **details: Any) -> None:
     """Log an application-level action (backup, update, restore). Delegates to bootstrap.logging."""
     import handoff.bootstrap.logging as _logging
 
-    _logging.log_application_action(action, **details)
+    try:
+        from handoff.db import get_db_path
+
+        db_path: str | None = str(get_db_path())
+    except Exception:
+        db_path = None
+    _logging.log_application_action(action, db_path=db_path, **details)
 
 
 ALLOWED_PREFIXES = ("app.py", "src/", "README.md", "RELEASE_NOTES.md")

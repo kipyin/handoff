@@ -1,12 +1,12 @@
 """Regression tests for app.py and module import path restructuring.
 
-This module verifies that app.py can correctly import from the relocated Streamlit UI
-interfaces after PR #166 (project structure restructure PR4). Tests ensure that:
+This module verifies that app.py can correctly import from the Streamlit UI
+interfaces. Tests ensure that:
 
-1. app.py imports from the new paths (handoff.interfaces.streamlit)
-2. The now_page is importable from the new path
+1. app.py imports from handoff.interfaces.streamlit
+2. The now_page is importable from the canonical path
 3. All five pages load without circular import issues
-4. Integration tests using the compatibility shim continue to work
+4. Integration test entry functions use handoff.interfaces.streamlit.ui
 """
 
 from __future__ import annotations
@@ -71,10 +71,10 @@ def test_no_circular_imports_from_app_imports() -> None:
     # If we get here, all imports succeeded without circular dependency issues
 
 
-def test_integration_entry_functions_use_compatibility_shim() -> None:
-    """Integration test entry functions can use handoff.ui (compatibility shim)."""
+def test_integration_entry_functions_use_streamlit_ui() -> None:
+    """Integration test entry functions use handoff.interfaces.streamlit.ui."""
     # This mirrors the pattern used in test_app_integration.py
-    import handoff.ui as ui
+    import handoff.interfaces.streamlit.ui as ui
     from handoff.interfaces.streamlit.pages.projects import render_projects_page
 
     # Both should be callable
