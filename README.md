@@ -34,6 +34,31 @@ uv run handoff
 You get a local, single-user handoff tracker backed by SQLite, with a unified
 view across projects and pitchmen, plus an in-app update flow.
 
+## Try with demo data
+
+To explore Handoff with realistic sample data before entering your own:
+
+```bash
+uv run handoff run --demo
+```
+
+This opens the app against a local demo database — completely separate from any
+production data. The demo includes projects, handoffs in every Now section
+(Risk, Action required, Upcoming, Concluded), and edge cases such as a missing
+pitchman, long text, and markdown notes.
+
+To reset or re-seed the demo data at any time:
+
+```bash
+uv run handoff seed-demo --force
+```
+
+To use a one-off path instead of the default demo location:
+
+```bash
+uv run handoff run --demo --db-path /tmp/my-demo.db
+```
+
 ## Who is this for?
 
 Handoff is designed for a single person managing multiple projects and follow-up

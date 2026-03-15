@@ -5,7 +5,6 @@ Use via: uv run handoff-dev check | test | ci | build | ...
 
 from __future__ import annotations
 
-import sqlite3
 from enum import StrEnum
 from pathlib import Path
 
@@ -108,26 +107,6 @@ def _resolve_demo_db_path(db_path: str | None) -> Path:
     if db_path:
         return Path(db_path).expanduser().resolve()
     return get_demo_db_path()
-
-
-def _db_has_projects(db_path: Path) -> bool:
-    """Return True when the SQLite DB already has at least one project row."""
-    if not db_path.exists():
-        return False
-
-    try:
-        with sqlite3.connect(db_path) as conn:
-            table_exists = conn.execute(
-                "SELECT 1 FROM sqlite_master WHERE type=? AND name=?",
-                ("table", "project"),
-            ).fetchone()
-            if table_exists is None:
-                return False
-            row = conn.execute("SELECT COUNT(*) FROM project").fetchone()
-    except sqlite3.Error:
-        return False
-
-    return bool(row and row[0] > 0)
 
 
 @app.command()
