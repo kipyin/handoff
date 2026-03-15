@@ -363,3 +363,27 @@ def test_cli_command_stub_does_not_accept_subcommands() -> None:
     result = RUNNER.invoke(app_cli.app, ["cli", "subcommand"])
 
     assert result.exit_code != 0
+
+
+def test_seed_demo_with_temp_path(tmp_path, monkeypatch) -> None:
+    """`handoff-dev seed-demo --db-path PATH` should seed the DB and print confirmation."""
+    db_path = tmp_path / "demo.db"
+    result = RUNNER.invoke(dev_cli.app, ["seed-demo", "--db-path", str(db_path)])
+
+    assert result.exit_code == 0
+    assert "Demo database ready" in result.stdout
+    assert str(db_path) in result.stdout
+    assert db_path.exists()
+
+
+def test_run_demo_passes_env_to_subprocess(monkeypatch) -> None:
+    """`handoff run --demo` should pass HANDOFF_DB_PATH to the handoff subprocess."""
+    calls = _capture_launch_streamlit(monkeypatch)
+
+    RUNNER.invoke(app_cli.app, ["run", "--demo"])
+
+    assert len(calls) == 1
+    assert "python" in str(calls[0]["args"]) and "handoff" in str(calls[0]["args"])
+    env = calls[0]["env"]
+    assert env is not None
+    assert "HANDOFF_DB_PATH" in env
