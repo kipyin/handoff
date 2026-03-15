@@ -12,21 +12,23 @@ import scripts.build_full as build_full_module
 import scripts.build_patch as build_patch_module
 
 
-def test_copy_docs_copies_readme_and_release_notes(
+def test_copy_docs_includes_readme_release_notes_and_screenshots(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_copy_docs copies README and release notes into the app build directory."""
+    """_copy_docs copies README, release notes, and docs/screenshots to the app build."""
     root = tmp_path
     readme = root / "README.md"
     release_notes = root / "RELEASE_NOTES.md"
     readme.write_text("readme", encoding="utf-8")
     release_notes.write_text("notes", encoding="utf-8")
+    docs_screenshots = root / "docs" / "screenshots"
+    docs_screenshots.mkdir(parents=True, exist_ok=True)
+    (docs_screenshots / "now-page.png").write_bytes(b"fake-png")
 
     app_build_dir = root / "build" / "handoff"
     app_build_dir.mkdir(parents=True, exist_ok=True)
 
-    # Mock shutil.copy2 to avoid disk I/O
     mock_copy = MagicMock()
     monkeypatch.setattr("shutil.copy2", mock_copy)
     monkeypatch.setattr(build_full_module, "ROOT", root)
@@ -34,8 +36,8 @@ def test_copy_docs_copies_readme_and_release_notes(
 
     build_full_module._copy_docs()
 
-    # Verify the calls instead of checking the filesystem
     assert mock_copy.call_count == 2
+    assert (app_build_dir / "docs" / "screenshots" / "now-page.png").exists()
 
 
 def test_make_zip_includes_docs_and_core_files(

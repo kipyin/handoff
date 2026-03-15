@@ -18,6 +18,7 @@ from . import ROOT
 from . import build_full as build_full_module
 from . import build_patch as build_patch_module
 from . import bump_version as bump_version_module
+from . import capture_screenshots as capture_screenshots_module
 from . import seed_demo as seed_demo_module
 from . import sizecheck as sizecheck_module
 from .subprocess_utils import run_cmd
@@ -275,6 +276,12 @@ def db_path() -> None:
     from handoff.db import get_db_path
 
     console.print(str(get_db_path()))
+
+
+@app.command("capture-screenshots")
+def capture_screenshots() -> None:
+    """Capture README screenshots (Now, Projects, Dashboard) using a seeded demo DB."""
+    capture_screenshots_module.main()
 
 
 @app.command("seed-demo")

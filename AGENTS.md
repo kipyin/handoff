@@ -63,6 +63,7 @@ The goal is not maximal abstraction or maximal cleverness. The goal is code that
 | Build patch zip | `uv run handoff-dev build --patch` |
 | Build macOS tar.gz | `uv run handoff-dev build --full --platform mac` |
 | Build dry-run (CI) | `uv run handoff-dev build --full --dry-run` or `--patch --dry-run` |
+| Capture screenshots | `uv run handoff-dev capture-screenshots` (optional) |
 
 ---
 
@@ -147,6 +148,7 @@ Extract and run `./handoff.sh`. Future work may add a signed `.app` bundle.
 - **SQLite DB location.** Via `platformdirs`; override with `HANDOFF_DB_PATH` for testing.
 - **No login required.** Single-user, local-only. No `.env`, no API keys.
 - **Throw-away DB for dev.** `HANDOFF_DB_PATH=/tmp/handoff-dev.db uv run handoff run`.
+- **Capture screenshots.** Run `uv run playwright install chromium` once before first use of `capture-screenshots`.
 
 ---
 

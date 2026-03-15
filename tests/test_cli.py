@@ -300,6 +300,17 @@ def test_seed_demo_cli_seeds_database_at_requested_path(tmp_path: Path) -> None:
     assert "Demo database ready at" in result.stdout
 
 
+def test_handoff_no_subcommand_defaults_to_run(monkeypatch) -> None:
+    """`handoff` with no subcommand should invoke run with defaults (no TypeError)."""
+    calls = _capture_launch_streamlit(monkeypatch)
+
+    result = RUNNER.invoke(app_cli.app, [])
+
+    assert result.exit_code == 0
+    assert len(calls) == 1
+    assert calls[0]["env"] is None
+
+
 def test_run_db_path_sets_env_for_subprocess(tmp_path: Path, monkeypatch) -> None:
     """`handoff run --db-path PATH` should pass HANDOFF_DB_PATH without requiring --demo."""
     db_path = tmp_path / "custom.db"

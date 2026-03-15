@@ -205,16 +205,19 @@ def _copy_app_code() -> None:
 
 
 def _copy_docs() -> None:
-    """Copy top-level documentation files into the build directory.
+    """Copy top-level documentation files and docs/ folder into the build directory.
 
-    Includes README and release notes so they ship with the embedded
-    distribution zip.
+    Includes README, release notes, and docs/screenshots so they ship with the
+    embedded distribution zip and README image paths resolve.
     """
     print("Copying documentation files...")
     for filename in ("README.md", "RELEASE_NOTES.md"):
         src = ROOT / filename
         if src.exists():
             shutil.copy2(src, APP_BUILD_DIR / filename)
+    docs_src = ROOT / "docs"
+    if docs_src.exists():
+        shutil.copytree(docs_src, APP_BUILD_DIR / "docs", dirs_exist_ok=True)
 
 
 def _run_pyarmor_gen(pyarmor_cmd: list[str], *, cwd: Path) -> None:

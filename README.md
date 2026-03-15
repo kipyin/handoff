@@ -4,6 +4,23 @@ Handoff helps you see who is on the hook across all your projects. It is a local
 handoff tracker for juggling follow-ups across different engagements (projects).
 The app is designed for personal use and runs locally with SQLite.
 
+![Now page](docs/screenshots/now-page.png)
+
+## Core concepts
+
+- **Handoff** – A tracked item with `need_back`, `pitchman`, next check, deadline; remains open until the latest check-in is `concluded`.
+- **Check-in lifecycle** – Append-only trail: `on_track`, `delayed`, `concluded`; no mutation of history.
+- **Now board** – Main workflow split into Risk, Action required, Upcoming, and Concluded.
+- **Pitchman** – Who owns the handoff; first-class for filtering (e.g. "what do I need back from Alice?").
+
+```mermaid
+flowchart LR
+    Open[Handoff Open] -->|on_track| Open
+    Open -->|delayed| Open
+    Open -->|concluded| Concluded[Concluded]
+    Concluded -->|reopen| Open
+```
+
 ## Quickstart
 
 - **Prerequisites**: Python 3.13+ and [uv](https://docs.astral.sh/uv/).
@@ -47,10 +64,6 @@ multi-project handoff follow-up:
 - **Streamlit-native UX**: The UI is optimized for quick inline edits,
   check-ins, filtering, and follow-up updates.
 
-If you find yourself stitching together multiple sheets or constantly
-re-filtering to answer "what must ship this week across all projects?", this app
-aims to make that view a single click instead.
-
 ## Limitations and non-goals
 
 To keep the app simple and robust, some things are intentionally out of scope:
@@ -63,16 +76,19 @@ To keep the app simple and robust, some things are intentionally out of scope:
 
 ## Features
 
-1. **Projects** - Create and manage engagements/projects on the Projects page,
-   including archive/unarchive.
-2. **Handoffs + check-ins** - Each handoff tracks:
+1. **Projects** – Create and manage engagements/projects, including archive/unarchive.
+
+   ![Projects](docs/screenshots/projects-page.png)
+
+2. **Handoffs + check-ins** – Each handoff tracks:
    - Need back (`need_back`)
    - Who owns it (`pitchman`)
    - Next check (planning date)
    - Deadline (optional)
    - Context notes (optional, markdown-friendly)
    - Check-in trail (`on_track`, `delayed`, `concluded`) with optional notes
-3. **Now page** - Main control tower with four sections:
+
+3. **Now page** – Main control tower (see hero image above) with four sections:
    - **Risk**: deadline near and delayed
    - **Action required**: next check due/overdue
    - **Upcoming**: open and not in Risk/Action
@@ -82,10 +98,14 @@ To keep the app simple and robust, some things are intentionally out of scope:
    restore the original behavior. You can add/edit handoffs, check in early or
    when due, conclude, and reopen from Concluded (append-only history). Filters:
    Project, Who, Search, and "Include archived projects".
-4. **Dashboard** - PM-operational metrics focused on execution reliability:
+
+4. **Dashboard** – PM-operational metrics focused on execution reliability:
    at-risk now, missed check-in, open aging profile, on-time close trend, cycle
    time by project (p50/p90), and reopen rate.
-5. **Updates and backups** - System Settings lets you apply code-only patch zips
+
+   ![Dashboard](docs/screenshots/dashboard.png)
+
+5. **Updates and backups** – System Settings lets you apply code-only patch zips
    and restore from backups created before each update.
 
 ## Where your data lives
@@ -106,18 +126,6 @@ the app.
 `app.py` is intentionally kept thin and delegates version handling to
 `src/handoff/version.py`, which exposes a single `__version__` constant used by
 the UI and tooling (for example the updater panel and build scripts).
-
-## Setup
-
-Requires Python 3.13+ and [uv](https://docs.astral.sh/uv/).
-
-```bash
-# Install dependencies (creates .venv and installs packages)
-uv sync
-
-# Run the app
-uv run handoff
-```
 
 ## Logging and debugging
 
