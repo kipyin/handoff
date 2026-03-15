@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import builtins
 import sys
-from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -59,10 +58,10 @@ def test_log_application_action_with_multiple_details(
 
     monkeypatch.setattr("handoff.bootstrap.logging.logger.info", mock_logger_info)
 
-    test_path = Path("/test/path/db.db")
+    test_path = "/test/path/db.db"
     log_application_action(
         "data_export",
-        db_path=str(test_path),
+        db_path=test_path,
         format="json",
         rows=42,
         destination="backup.json",
@@ -149,9 +148,12 @@ def test_log_application_action_message_format(
 
     monkeypatch.setattr("handoff.bootstrap.logging.logger.info", mock_logger_info)
 
-    expected_path = Path("/home/user/.local/share/handoff/handoff.db")
+    expected_path = "/home/user/.local/share/handoff/handoff.db"
     log_application_action(
-        "app_update", db_path=str(expected_path), version="2026.3.13", status="success"
+        "app_update",
+        db_path=expected_path,
+        version="2026.3.13",
+        status="success",
     )
 
     assert len(messages) == 1

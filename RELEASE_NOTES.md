@@ -25,6 +25,17 @@ Apply tags in this order. Use the first tag that matches.
   - Ruff/formatting cleanup, pyright fixes
   Rule of thumb: Internal only, no user-visible behavior change? → [Optional].
 
+## 2026.3.13 [Recommended]
+
+- **Feature**
+  - **Demo mode:** `handoff run --demo` and `handoff seed-demo` for seeded demo database and onboarding/trials.
+- **Improvement**
+  - **README:** Screenshots and core concept explanations for clearer onboarding.
+- **Internal**
+  - Template readiness refactoring (PR1–PR3).
+  - Bootstrap logging decoupling and related test coverage.
+  - UAT test cases for seeded demo database checklist.
+
 ## 2026.3.12 [Optional]
 
 - **Internal**
