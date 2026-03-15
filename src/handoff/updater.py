@@ -6,6 +6,7 @@ uv run handoff build-patch from the obfuscated build output.
 
 import re
 import shutil
+import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -128,10 +129,19 @@ def _backup_existing_files(paths: list[str], app_root: Path, backup_root: Path) 
 
 
 def _reset_update_staging_dir(app_root: Path) -> Path:
-    """Return a clean update staging directory under the app root."""
+    """Return a clean update staging directory under the app root.
+
+    Raises:
+        OSError: If the existing staging directory cannot be removed
+            (e.g. permission or locking issues).
+    """
     staging = app_root / UPDATE_STAGING_DIR
     if staging.exists():
-        shutil.rmtree(staging, ignore_errors=True)
+        try:
+            shutil.rmtree(staging)
+        except OSError as e:
+            logger.error("Could not remove stale update staging dir {}: {}", staging, e)
+            raise
     staging.mkdir(parents=True, exist_ok=True)
     return staging
 
@@ -198,12 +208,21 @@ def stage_patch_with_backup(
         if not members:
             return "No applicable files found in patch zip."
 
-        staging = _reset_update_staging_dir(app_root)
-        extracted, extract_failed = _extract_zip_to_dir(zf, members, staging)
-        if not extracted:
-            return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
-        if extract_failed:
-            logger.warning("Some files could not be staged: {}", extract_failed)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_staging = Path(tmpdir)
+            extracted, extract_failed = _extract_zip_to_dir(zf, members, tmp_staging)
+            if not extracted:
+                return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+            if extract_failed:
+                logger.warning("Some files could not be staged: {}", extract_failed)
+
+            staging = _reset_update_staging_dir(app_root)
+            for path in tmp_staging.rglob("*"):
+                if path.is_file():
+                    rel = path.relative_to(tmp_staging)
+                    dest = staging / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(path, dest)
 
     logger.info("Patch unzipped to {} containing: {}", staging, extracted)
 
@@ -270,12 +289,21 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
         if not members:
             return "No applicable files found in patch zip."
 
-        staging = _reset_update_staging_dir(app_root)
-        extracted, extract_failed = _extract_zip_to_dir(zf, members, staging)
-        if not extracted:
-            return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
-        if extract_failed:
-            logger.warning("Some files could not be staged: {}", extract_failed)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_staging = Path(tmpdir)
+            extracted, extract_failed = _extract_zip_to_dir(zf, members, tmp_staging)
+            if not extracted:
+                return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+            if extract_failed:
+                logger.warning("Some files could not be staged: {}", extract_failed)
+
+            staging = _reset_update_staging_dir(app_root)
+            for path in tmp_staging.rglob("*"):
+                if path.is_file():
+                    rel = path.relative_to(tmp_staging)
+                    dest = staging / rel
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(path, dest)
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)
@@ -519,10 +547,7 @@ def stage_restore_from_snapshot(
     logger.info("Restore from snapshot: {}", snapshot)
     _log_app_action("app_restore", snapshot=str(snapshot), staged="true")
 
-    staging = app_root / UPDATE_STAGING_DIR
-    if staging.exists():
-        shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir(parents=True, exist_ok=True)
+    staging = _reset_update_staging_dir(app_root)
 
     staged: list[str] = []
     for src in snapshot.rglob("*"):
