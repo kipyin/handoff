@@ -370,11 +370,11 @@ def test_cli_command_stub_does_not_accept_subcommands() -> None:
     assert result.exit_code != 0
 
 
-def test_resolve_demo_db_path_uses_provided_path() -> None:
+def test_resolve_demo_db_path_uses_provided_path(tmp_path: Path) -> None:
     """_resolve_demo_db_path should return expanded/resolved provided path."""
-    # Test with absolute path
-    result = app_cli._resolve_demo_db_path("/tmp/test.db")
-    assert result == Path("/tmp/test.db").resolve()
+    absolute_path = tmp_path / "test.db"
+    result = app_cli._resolve_demo_db_path(str(absolute_path))
+    assert result == absolute_path.resolve()
 
     # Test with relative path
     result = app_cli._resolve_demo_db_path("test.db")
@@ -446,15 +446,22 @@ def test_db_has_projects_handles_corrupt_db_gracefully(tmp_path: Path, monkeypat
 
 
 def test_run_without_demo_or_db_path_passes_no_env(monkeypatch) -> None:
-    """`handoff run` without flags should not set HANDOFF_DB_PATH env var."""
-    calls = _capture_launch_streamlit(monkeypatch)
+    """`handoff run` without flags should not set HANDOFF_DB_PATH in subprocess env."""
+    monkeypatch.delenv("HANDOFF_DB_PATH", raising=False)
+    run_calls: list[dict[str, object]] = []
+
+    def mock_run(cmd, **kwargs) -> None:
+        run_calls.append({"cmd": cmd, "kwargs": kwargs})
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
 
     result = RUNNER.invoke(app_cli.app, ["run"])
 
     assert result.exit_code == 0
-    assert len(calls) == 1
-    # When no demo/db_path, env should be None (inherit from parent)
-    assert calls[0]["env"] is None
+    assert len(run_calls) == 1
+    subprocess_env = run_calls[0]["kwargs"].get("env")
+    assert subprocess_env is not None
+    assert "HANDOFF_DB_PATH" not in subprocess_env
 
 
 def test_run_demo_without_db_path_uses_default_demo_location(tmp_path: Path, monkeypatch) -> None:
@@ -576,15 +583,14 @@ def test_main_invokes_app_callback(monkeypatch) -> None:
 
 
 def test_main_callback_without_subcommand_invokes_run(monkeypatch) -> None:
-    """main_callback without subcommand should invoke run() command."""
+    """main_callback without subcommand should invoke run() (default entrypoint)."""
     calls = _capture_launch_streamlit(monkeypatch)
 
-    # Invoke with no arguments - should trigger the callback with no subcommand
-    result = RUNNER.invoke(app_cli.app, ["run"])
+    # Invoke with no arguments - triggers callback when ctx.invoked_subcommand is None
+    result = RUNNER.invoke(app_cli.app, [])
 
     assert result.exit_code == 0
     assert len(calls) == 1
-    # Should have called _launch_streamlit via run()
     assert calls[0]["args"] == [sys.executable, "-m", "handoff"]
 
 
@@ -619,7 +625,7 @@ def test_launch_streamlit_with_no_env_inherits_parent(monkeypatch) -> None:
 
 
 def test_launch_streamlit_with_env_uses_provided(monkeypatch) -> None:
-    """_launch_streamlit with env dict should use and extend that dict."""
+    """_launch_streamlit with env dict should use a copy of it (no mutation)."""
     run_calls: list[dict[str, object]] = []
 
     def mock_run(cmd, **kwargs) -> None:
@@ -632,7 +638,6 @@ def test_launch_streamlit_with_env_uses_provided(monkeypatch) -> None:
 
     assert len(run_calls) == 1
     assert run_calls[0]["kwargs"]["env"]["CUSTOM_VAR"] == "custom_value"
-    # Should not mutate input env
     assert "HANDOFF_DB_PATH" not in custom_env
 
 
