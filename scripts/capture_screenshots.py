@@ -116,7 +116,11 @@ def main() -> None:
                 browser.close()
         finally:
             proc.terminate()
-            proc.wait(timeout=10)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
     finally:
         if TEMP_DB.exists():
             TEMP_DB.unlink()

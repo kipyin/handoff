@@ -12,11 +12,11 @@ import scripts.build_full as build_full_module
 import scripts.build_patch as build_patch_module
 
 
-def test_copy_docs_copies_readme_and_release_notes(
+def test_copy_docs_includes_readme_release_notes_and_screenshots(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """_copy_docs copies README, release notes, and docs/ into the app build directory."""
+    """_copy_docs copies README, release notes, and docs/screenshots to the app build."""
     root = tmp_path
     readme = root / "README.md"
     release_notes = root / "RELEASE_NOTES.md"
