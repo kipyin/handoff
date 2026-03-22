@@ -152,6 +152,29 @@ def _reset_update_staging_dir(app_root: Path) -> Path:
     return staging
 
 
+def _copy_tree_files(source_root: Path, dest_root: Path) -> tuple[list[str], list[str]]:
+    """Copy files from *source_root* to *dest_root*, preserving relative paths.
+
+    Returns:
+        (copied, failed) — relative POSIX paths that succeeded or failed.
+    """
+    copied: list[str] = []
+    failed: list[str] = []
+    for path in source_root.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(source_root)
+        dest = dest_root / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(path, dest)
+            copied.append(rel.as_posix())
+        except (PermissionError, OSError) as e:
+            logger.warning("Could not stage {} to {}: {}", rel, dest, e)
+            failed.append(rel.as_posix())
+    return copied, failed
+
+
 def _get_app_root() -> Path:
     """Compatibility wrapper returning the application root directory."""
     return get_app_root()
@@ -223,12 +246,13 @@ def stage_patch_with_backup(
                 logger.warning("Some files could not be staged: {}", extract_failed)
 
             staging = _reset_update_staging_dir(app_root)
-            for path in tmp_staging.rglob("*"):
-                if path.is_file():
-                    rel = path.relative_to(tmp_staging)
-                    dest = staging / rel
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(path, dest)
+            copied, staging_failed = _copy_tree_files(tmp_staging, staging)
+            if not copied:
+                return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+            if staging_failed:
+                logger.warning("Some files could not be staged: {}", staging_failed)
+                extract_failed.extend(staging_failed)
+            extracted = copied
 
     logger.info("Patch unzipped to {} containing: {}", staging, extracted)
 
@@ -304,12 +328,13 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
                 logger.warning("Some files could not be staged: {}", extract_failed)
 
             staging = _reset_update_staging_dir(app_root)
-            for path in tmp_staging.rglob("*"):
-                if path.is_file():
-                    rel = path.relative_to(tmp_staging)
-                    dest = staging / rel
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(path, dest)
+            copied, staging_failed = _copy_tree_files(tmp_staging, staging)
+            if not copied:
+                return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+            if staging_failed:
+                logger.warning("Some files could not be staged: {}", staging_failed)
+                extract_failed.extend(staging_failed)
+            extracted = copied
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)

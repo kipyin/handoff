@@ -6,6 +6,7 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
+import handoff.updater as updater_module
 from handoff.updater import (
     _backup_dir_name,
     _can_apply_patch,
@@ -179,6 +180,30 @@ def test_extract_patch_to_staging_replaces_existing_staging_contents(tmp_path: P
     assert not stale_file.exists()
 
 
+def test_extract_patch_to_staging_warns_when_staging_copy_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A per-file copy failure into update/ is reported instead of raising."""
+    app_root = tmp_path
+    original_copy2 = updater_module.shutil.copy2
+
+    def flaky_copy2(src, dst, *args, **kwargs):
+        destination = Path(dst)
+        if destination.is_relative_to(app_root / "update") and destination.name == "app.py":
+            raise PermissionError("locked app.py")
+        return original_copy2(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("handoff.updater.shutil.copy2", flaky_copy2)
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"new app", "README.md": b"new readme"})
+
+    message = extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+
+    assert "Warning: 1 file(s) could not be staged." in message
+    assert not (app_root / "update" / "app.py").exists()
+    assert (app_root / "update" / "README.md").read_text(encoding="utf-8") == "new readme"
+
+
 def test_stage_patch_with_backup_creates_backup_and_staging_leaves_app_root_unchanged(
     tmp_path: Path,
     monkeypatch,
@@ -251,6 +276,35 @@ def test_stage_patch_with_backup_replaces_existing_staging_contents(
 
     assert (app_root / "update" / "app.py").read_text(encoding="utf-8") == "fresh"
     assert not stale_file.exists()
+
+
+def test_stage_patch_with_backup_warns_when_staging_copy_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A per-file copy failure while staging patch files should not crash."""
+    app_root = tmp_path
+    original_copy2 = updater_module.shutil.copy2
+
+    def flaky_copy2(src, dst, *args, **kwargs):
+        destination = Path(dst)
+        if destination.is_relative_to(app_root / "update") and destination.name == "app.py":
+            raise PermissionError("locked app.py")
+        return original_copy2(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("handoff.updater.shutil.copy2", flaky_copy2)
+    monkeypatch.setattr("handoff.updater._log_app_action", lambda *_a, **_k: None)
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"fresh", "README.md": b"patched"})
+
+    message = stage_patch_with_backup(
+        BytesIO(zip_bytes),
+        app_root=app_root,
+        app_version="2026.3.1",
+    )
+
+    assert "Warning: 1 file(s) could not be staged." in message
+    assert not (app_root / "update" / "app.py").exists()
+    assert (app_root / "update" / "README.md").read_text(encoding="utf-8") == "patched"
 
 
 def test_extract_patch_to_staging_no_applicable_files(tmp_path: Path) -> None:
