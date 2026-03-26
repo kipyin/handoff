@@ -50,6 +50,8 @@ class TestLaunchers:
         # We check for the core parts of the update and execution logic
         assert 'if exist "%SCRIPT_DIR%update\\*"' in content
         assert 'xcopy /E /Y "%SCRIPT_DIR%update\\*" "%SCRIPT_DIR%"' in content
+        assert "if errorlevel 1 (" in content
+        assert "exit /b 1" in content
         assert "python\\python.exe" in content
         assert "PYTHONPATH" in content
         assert "PYTHONHOME" in content
