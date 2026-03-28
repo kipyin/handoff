@@ -175,16 +175,17 @@ def _replace_update_staging_dir(app_root: Path, source_dir: Path) -> Path:
 
     try:
         shutil.copytree(source_dir, staging_next, copy_function=shutil.copy2)
-    except OSError as e:
-        logger.error("Could not prepare staging temp dir {}: {}", staging_next, e)
-        raise
 
-    try:
         if staging.exists():
             shutil.rmtree(staging)
         staging_next.replace(staging)
     except OSError as e:
-        logger.error("Could not replace update staging dir {}: {}", staging, e)
+        logger.error(
+            "Could not replace update staging dir {} via temp {}: {}",
+            staging,
+            staging_next,
+            e,
+        )
         raise
     finally:
         if staging_next.exists():
