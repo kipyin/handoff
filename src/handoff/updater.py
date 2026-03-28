@@ -152,6 +152,47 @@ def _reset_update_staging_dir(app_root: Path) -> Path:
     return staging
 
 
+def _replace_update_staging_dir(app_root: Path, source_dir: Path) -> Path:
+    """Replace ``app_root/update`` from ``source_dir`` without partial writes.
+
+    The source tree is first copied into a sibling temporary directory. Only
+    after that copy succeeds do we remove/replace ``update/``. This prevents a
+    failed staging attempt from leaving a partially-copied update that would be
+    applied by the launcher on next app start.
+
+    Raises:
+        OSError: If preparing or replacing the staging directory fails.
+    """
+    staging = app_root / UPDATE_STAGING_DIR
+    staging_next = app_root / f"{UPDATE_STAGING_DIR}.next"
+
+    if staging_next.exists():
+        try:
+            shutil.rmtree(staging_next)
+        except OSError as e:
+            logger.error("Could not remove stale staging temp dir {}: {}", staging_next, e)
+            raise
+
+    try:
+        shutil.copytree(source_dir, staging_next, copy_function=shutil.copy2)
+    except OSError as e:
+        logger.error("Could not prepare staging temp dir {}: {}", staging_next, e)
+        raise
+
+    try:
+        if staging.exists():
+            shutil.rmtree(staging)
+        staging_next.replace(staging)
+    except OSError as e:
+        logger.error("Could not replace update staging dir {}: {}", staging, e)
+        raise
+    finally:
+        if staging_next.exists():
+            shutil.rmtree(staging_next, ignore_errors=True)
+
+    return staging
+
+
 def _get_app_root() -> Path:
     """Compatibility wrapper returning the application root directory."""
     return get_app_root()
@@ -222,13 +263,7 @@ def stage_patch_with_backup(
             if extract_failed:
                 logger.warning("Some files could not be staged: {}", extract_failed)
 
-            staging = _reset_update_staging_dir(app_root)
-            for path in tmp_staging.rglob("*"):
-                if path.is_file():
-                    rel = path.relative_to(tmp_staging)
-                    dest = staging / rel
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(path, dest)
+            staging = _replace_update_staging_dir(app_root, tmp_staging)
 
     logger.info("Patch unzipped to {} containing: {}", staging, extracted)
 
@@ -303,13 +338,7 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
             if extract_failed:
                 logger.warning("Some files could not be staged: {}", extract_failed)
 
-            staging = _reset_update_staging_dir(app_root)
-            for path in tmp_staging.rglob("*"):
-                if path.is_file():
-                    rel = path.relative_to(tmp_staging)
-                    dest = staging / rel
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(path, dest)
+            staging = _replace_update_staging_dir(app_root, tmp_staging)
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)

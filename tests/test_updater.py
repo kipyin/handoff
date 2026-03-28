@@ -6,6 +6,8 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
 from handoff.updater import (
     _backup_dir_name,
     _can_apply_patch,
@@ -251,6 +253,73 @@ def test_stage_patch_with_backup_replaces_existing_staging_contents(
 
     assert (app_root / "update" / "app.py").read_text(encoding="utf-8") == "fresh"
     assert not stale_file.exists()
+
+
+def test_extract_patch_to_staging_failure_keeps_existing_staging_contents(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """If staging replacement fails, preserve previously staged update files."""
+    app_root = tmp_path
+    staging = app_root / "update"
+    (staging / "app.py").parent.mkdir(parents=True, exist_ok=True)
+    (staging / "app.py").write_text("old staged app", encoding="utf-8")
+    (staging / "src").mkdir(parents=True, exist_ok=True)
+    (staging / "src" / "module.py").write_text("old staged src", encoding="utf-8")
+
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"new app", "src/module.py": b"new src"})
+    original_copy2 = __import__("handoff.updater", fromlist=[""]).shutil.copy2
+
+    def fail_copy_to_staging_next(src, dst, *args, **kwargs):
+        dst_path = Path(dst)
+        if dst_path.parent.name == "update.next":
+            raise OSError("simulated copy failure")
+        return original_copy2(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("handoff.updater.shutil.copy2", fail_copy_to_staging_next)
+
+    with pytest.raises(OSError, match="simulated copy failure"):
+        extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+
+    assert (staging / "app.py").read_text(encoding="utf-8") == "old staged app"
+    assert (staging / "src" / "module.py").read_text(encoding="utf-8") == "old staged src"
+    assert not (app_root / "update.next").exists()
+
+
+def test_stage_patch_with_backup_failure_keeps_existing_staging_contents(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """If staging replacement fails, keep old staged update unchanged."""
+    app_root = tmp_path
+    staging = app_root / "update"
+    (staging / "app.py").parent.mkdir(parents=True, exist_ok=True)
+    (staging / "app.py").write_text("old staged app", encoding="utf-8")
+    (staging / "src").mkdir(parents=True, exist_ok=True)
+    (staging / "src" / "module.py").write_text("old staged src", encoding="utf-8")
+
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"fresh"})
+    monkeypatch.setattr("handoff.updater._log_app_action", lambda *_a, **_k: None)
+    original_copy2 = __import__("handoff.updater", fromlist=[""]).shutil.copy2
+
+    def fail_copy_to_staging_next(src, dst, *args, **kwargs):
+        dst_path = Path(dst)
+        if dst_path.parent.name == "update.next":
+            raise OSError("simulated copy failure")
+        return original_copy2(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("handoff.updater.shutil.copy2", fail_copy_to_staging_next)
+
+    with pytest.raises(OSError, match="simulated copy failure"):
+        stage_patch_with_backup(
+            BytesIO(zip_bytes),
+            app_root=app_root,
+            app_version="2026.3.1",
+        )
+
+    assert (staging / "app.py").read_text(encoding="utf-8") == "old staged app"
+    assert (staging / "src" / "module.py").read_text(encoding="utf-8") == "old staged src"
+    assert not (app_root / "update.next").exists()
 
 
 def test_extract_patch_to_staging_no_applicable_files(tmp_path: Path) -> None:
