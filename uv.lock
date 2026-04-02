@@ -268,8 +268,10 @@ source = { editable = "." }
 dependencies = [
     { name = "loguru" },
     { name = "platformdirs" },
+    { name = "rich" },
     { name = "sqlmodel" },
     { name = "streamlit" },
+    { name = "typer" },
 ]
 
 [package.dev-dependencies]
@@ -279,17 +281,17 @@ dev = [
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
-    { name = "rich" },
     { name = "ruff" },
-    { name = "typer" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "platformdirs", specifier = ">=4.0.0" },
+    { name = "rich", specifier = ">=13.7.0" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "streamlit", specifier = ">=1.52.0" },
+    { name = "typer", specifier = ">=0.12.3" },
 ]
 
 [package.metadata.requires-dev]
@@ -299,9 +301,7 @@ dev = [
     { name = "pyright", specifier = ">=1.1.408" },
     { name = "pytest", specifier = ">=8.0.0" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "rich", specifier = ">=13.7.0" },
     { name = "ruff", specifier = ">=0.8.0" },
-    { name = "typer", specifier = ">=0.12.3" },
 ]
 
 [[package]]
