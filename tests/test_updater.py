@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -253,6 +254,35 @@ def test_stage_patch_with_backup_replaces_existing_staging_contents(
     assert not stale_file.exists()
 
 
+def test_stage_patch_with_backup_cleans_staging_on_partial_copy_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Partial staging copy failures should not leave a mixed update/ tree behind."""
+    app_root = tmp_path
+    (app_root / "app.py").write_text("old app", encoding="utf-8")
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"new app", "src/module.py": b"new src"})
+    real_copy2 = shutil.copy2
+
+    def flaky_copy2(src, dst, *args, **kwargs):
+        if Path(dst).as_posix().endswith("update/src/module.py"):
+            raise OSError("simulated partial copy failure")
+        return real_copy2(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("handoff.updater.shutil.copy2", flaky_copy2)
+
+    message = stage_patch_with_backup(
+        BytesIO(zip_bytes),
+        app_root=app_root,
+        app_version="2026.3.1",
+    )
+
+    assert message == "Failed to stage patch to ./update."
+    assert not (app_root / "update").exists()
+    assert not (app_root / "backup").exists()
+    assert (app_root / "app.py").read_text(encoding="utf-8") == "old app"
+
+
 def test_extract_patch_to_staging_no_applicable_files(tmp_path: Path) -> None:
     """extract_patch_to_staging returns message when zip has no allowed paths."""
     app_root = tmp_path
@@ -349,6 +379,33 @@ def test_stage_restore_from_snapshot_populates_update_and_leaves_app_root_unchan
     assert logged == [
         ("app_restore", {"snapshot": str(snapshot), "staged": "true"}),
     ]
+
+
+def test_stage_restore_from_snapshot_cleans_staging_on_partial_copy_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Restore staging should clean update/ when any file copy fails."""
+    app_root = tmp_path
+    snapshot = app_root / "backup" / "20260101-120000"
+    snapshot.mkdir(parents=True)
+    (snapshot / "app.py").write_text("from backup", encoding="utf-8")
+    (snapshot / "src").mkdir()
+    (snapshot / "src" / "module.py").write_text("from backup src", encoding="utf-8")
+
+    real_copy2 = shutil.copy2
+
+    def flaky_copy2(src, dst, *args, **kwargs):
+        if Path(dst).as_posix().endswith("update/src/module.py"):
+            raise OSError("simulated partial copy failure")
+        return real_copy2(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr("handoff.updater.shutil.copy2", flaky_copy2)
+
+    message = stage_restore_from_snapshot(snapshot, app_root=app_root)
+
+    assert message == "Failed to stage backup to ./update."
+    assert not (app_root / "update").exists()
 
 
 def test_restore_backup_snapshot_copies_files_and_clears_pycache(

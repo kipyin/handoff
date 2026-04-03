@@ -112,6 +112,33 @@ def _extract_zip_to_dir(
     return extracted, failed
 
 
+def _copy_tree_files(src_root: Path, dest_root: Path) -> tuple[list[str], list[str]]:
+    """Copy files from *src_root* into *dest_root*, preserving relative paths.
+
+    Continues past per-file failures so callers can decide whether to keep or
+    discard partial outputs.
+
+    Returns:
+        (copied, failed) — lists of relative POSIX paths.
+    """
+    copied: list[str] = []
+    failed: list[str] = []
+    for src in src_root.rglob("*"):
+        if not src.is_file():
+            continue
+        rel = src.relative_to(src_root)
+        rel_name = rel.as_posix()
+        dest = dest_root / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(src, dest)
+            copied.append(rel_name)
+        except (PermissionError, OSError) as e:
+            logger.warning("Could not copy {} to {}: {}", src, dest, e)
+            failed.append(rel_name)
+    return copied, failed
+
+
 def _backup_existing_files(paths: list[str], app_root: Path, backup_root: Path) -> list[str]:
     """Copy files from *app_root* into *backup_root* for each path that exists.
 
@@ -222,13 +249,20 @@ def stage_patch_with_backup(
             if extract_failed:
                 logger.warning("Some files could not be staged: {}", extract_failed)
 
-            staging = _reset_update_staging_dir(app_root)
-            for path in tmp_staging.rglob("*"):
-                if path.is_file():
-                    rel = path.relative_to(tmp_staging)
-                    dest = staging / rel
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(path, dest)
+            try:
+                staging = _reset_update_staging_dir(app_root)
+            except OSError:
+                return f"Failed to prepare ./{UPDATE_STAGING_DIR}."
+            copied, copy_failed = _copy_tree_files(tmp_staging, staging)
+            if not copied:
+                shutil.rmtree(staging, ignore_errors=True)
+                return f"Failed to stage patch to ./{UPDATE_STAGING_DIR}."
+            if copy_failed:
+                logger.warning(
+                    "Staging copy failed for {} file(s): {}", len(copy_failed), copy_failed
+                )
+                shutil.rmtree(staging, ignore_errors=True)
+                return f"Failed to stage patch to ./{UPDATE_STAGING_DIR}."
 
     logger.info("Patch unzipped to {} containing: {}", staging, extracted)
 
@@ -303,13 +337,20 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
             if extract_failed:
                 logger.warning("Some files could not be staged: {}", extract_failed)
 
-            staging = _reset_update_staging_dir(app_root)
-            for path in tmp_staging.rglob("*"):
-                if path.is_file():
-                    rel = path.relative_to(tmp_staging)
-                    dest = staging / rel
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(path, dest)
+            try:
+                staging = _reset_update_staging_dir(app_root)
+            except OSError:
+                return f"Failed to prepare ./{UPDATE_STAGING_DIR}."
+            copied, copy_failed = _copy_tree_files(tmp_staging, staging)
+            if not copied:
+                shutil.rmtree(staging, ignore_errors=True)
+                return f"Failed to stage patch to ./{UPDATE_STAGING_DIR}."
+            if copy_failed:
+                logger.warning(
+                    "Staging copy failed for {} file(s): {}", len(copy_failed), copy_failed
+                )
+                shutil.rmtree(staging, ignore_errors=True)
+                return f"Failed to stage patch to ./{UPDATE_STAGING_DIR}."
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)
@@ -553,20 +594,19 @@ def stage_restore_from_snapshot(
     logger.info("Restore from snapshot: {}", snapshot)
     _log_app_action("app_restore", snapshot=str(snapshot), staged="true")
 
-    staging = _reset_update_staging_dir(app_root)
+    try:
+        staging = _reset_update_staging_dir(app_root)
+    except OSError:
+        return f"Failed to prepare ./{UPDATE_STAGING_DIR}."
 
-    staged: list[str] = []
-    for src in snapshot.rglob("*"):
-        if src.is_dir():
-            continue
-        rel = src.relative_to(snapshot)
-        dest = staging / rel
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            shutil.copy2(src, dest)
-            staged.append(rel.as_posix())
-        except (PermissionError, OSError) as e:
-            logger.warning("Could not stage {} from snapshot: {}", rel, e)
+    staged, stage_failed = _copy_tree_files(snapshot, staging)
+    if not staged:
+        shutil.rmtree(staging, ignore_errors=True)
+        return f"Failed to stage backup to ./{UPDATE_STAGING_DIR}."
+    if stage_failed:
+        logger.warning("Restore staging failed for {} file(s): {}", len(stage_failed), stage_failed)
+        shutil.rmtree(staging, ignore_errors=True)
+        return f"Failed to stage backup to ./{UPDATE_STAGING_DIR}."
 
     logger.info("Staged {} files to {}: {}", len(staged), staging, staged)
     logger.info("Everything is in place and ready to restore. Run handoff.bat again to apply.")
