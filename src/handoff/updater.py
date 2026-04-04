@@ -112,6 +112,48 @@ def _extract_zip_to_dir(
     return extracted, failed
 
 
+def _copy_tree_files(source_dir: Path, target_dir: Path) -> tuple[list[str], list[str]]:
+    """Copy files from source_dir into target_dir, preserving sub-paths.
+
+    Continues past per-file failures so callers can report partial results.
+
+    Returns:
+        (copied, failed) — relative file paths that succeeded or failed.
+    """
+    source_root = source_dir.resolve()
+    target_root = target_dir.resolve()
+    copied: list[str] = []
+    failed: list[str] = []
+
+    for source in source_dir.rglob("*"):
+        if not source.is_file():
+            continue
+        if not source.resolve().is_relative_to(source_root):
+            rel_name = source.name
+            logger.warning("Path escapes source dir, skipping: {}", rel_name)
+            failed.append(rel_name)
+            continue
+
+        relative_path = source.relative_to(source_dir)
+        dest = target_dir / relative_path
+        if not dest.resolve().is_relative_to(target_root):
+            rel_name = relative_path.as_posix()
+            logger.warning("Path escapes target dir, skipping: {}", rel_name)
+            failed.append(rel_name)
+            continue
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        rel_name = relative_path.as_posix()
+        try:
+            shutil.copy2(source, dest)
+            copied.append(rel_name)
+        except (PermissionError, OSError) as e:
+            logger.warning("Could not stage {} to {}: {}", rel_name, dest, e)
+            failed.append(rel_name)
+
+    return copied, failed
+
+
 def _backup_existing_files(paths: list[str], app_root: Path, backup_root: Path) -> list[str]:
     """Copy files from *app_root* into *backup_root* for each path that exists.
 
@@ -219,16 +261,15 @@ def stage_patch_with_backup(
             extracted, extract_failed = _extract_zip_to_dir(zf, members, tmp_staging)
             if not extracted:
                 return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
-            if extract_failed:
-                logger.warning("Some files could not be staged: {}", extract_failed)
 
             staging = _reset_update_staging_dir(app_root)
-            for path in tmp_staging.rglob("*"):
-                if path.is_file():
-                    rel = path.relative_to(tmp_staging)
-                    dest = staging / rel
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(path, dest)
+            copied, copy_failed = _copy_tree_files(tmp_staging, staging)
+            if not copied:
+                return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+            extracted = copied
+            extract_failed.extend(copy_failed)
+            if extract_failed:
+                logger.warning("Some files could not be staged: {}", extract_failed)
 
     logger.info("Patch unzipped to {} containing: {}", staging, extracted)
 
@@ -300,16 +341,15 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
             extracted, extract_failed = _extract_zip_to_dir(zf, members, tmp_staging)
             if not extracted:
                 return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
-            if extract_failed:
-                logger.warning("Some files could not be staged: {}", extract_failed)
 
             staging = _reset_update_staging_dir(app_root)
-            for path in tmp_staging.rglob("*"):
-                if path.is_file():
-                    rel = path.relative_to(tmp_staging)
-                    dest = staging / rel
-                    dest.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(path, dest)
+            copied, copy_failed = _copy_tree_files(tmp_staging, staging)
+            if not copied:
+                return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+            extracted = copied
+            extract_failed.extend(copy_failed)
+            if extract_failed:
+                logger.warning("Some files could not be staged: {}", extract_failed)
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import zipfile
 from io import BytesIO
 from pathlib import Path
+from shutil import copy2 as real_copy2
 
 from handoff.updater import (
     _backup_dir_name,
@@ -251,6 +252,74 @@ def test_stage_patch_with_backup_replaces_existing_staging_contents(
 
     assert (app_root / "update" / "app.py").read_text(encoding="utf-8") == "fresh"
     assert not stale_file.exists()
+
+
+def test_extract_patch_to_staging_handles_staging_copy_failure_without_crash(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """A staging copy failure should return a clean error instead of raising."""
+    app_root = tmp_path
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"new app"})
+
+    def fail_copy2(_src, _dest, *_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("handoff.updater.shutil.copy2", fail_copy2)
+
+    message = extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+
+    assert message == "Failed to extract patch to ./update."
+    assert not (app_root / "update" / "app.py").exists()
+
+
+def test_stage_patch_with_backup_handles_staging_copy_failure_without_crash(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Patch staging failure should abort cleanly before backup/sentinel writes."""
+    app_root = tmp_path
+    (app_root / "app.py").write_text("old app", encoding="utf-8")
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"new app"})
+
+    def fail_copy2(_src, _dest, *_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("handoff.updater.shutil.copy2", fail_copy2)
+
+    message = stage_patch_with_backup(
+        BytesIO(zip_bytes),
+        app_root=app_root,
+        app_version="2026.3.1",
+    )
+
+    assert message == "Failed to extract patch to ./update."
+    assert not (app_root / "backup").exists()
+    assert not (app_root / ".last_update_backup").exists()
+    assert (app_root / "app.py").read_text(encoding="utf-8") == "old app"
+
+
+def test_extract_patch_to_staging_partial_copy_failure_keeps_successful_files(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """One failed staged file should not crash or discard successfully staged files."""
+    app_root = tmp_path
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"new app", "src/module.py": b"new src"})
+
+    def fail_module_copy(src, dest, *_args, **_kwargs):
+        if Path(src).name == "module.py":
+            raise OSError("locked")
+        return real_copy2(src, dest)
+
+    monkeypatch.setattr("handoff.updater.shutil.copy2", fail_module_copy)
+
+    message = extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+
+    assert message.startswith("Update files are ready.")
+    assert "Warning: 1 file(s) could not be staged." in message
+    assert (app_root / "update" / "app.py").read_text(encoding="utf-8") == "new app"
+    assert not (app_root / "update" / "src" / "module.py").exists()
 
 
 def test_extract_patch_to_staging_no_applicable_files(tmp_path: Path) -> None:
