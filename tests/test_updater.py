@@ -6,6 +6,8 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
+import pytest
+
 from handoff.updater import (
     _backup_dir_name,
     _can_apply_patch,
@@ -251,6 +253,61 @@ def test_stage_patch_with_backup_replaces_existing_staging_contents(
 
     assert (app_root / "update" / "app.py").read_text(encoding="utf-8") == "fresh"
     assert not stale_file.exists()
+
+
+def test_stage_patch_with_backup_does_not_leave_partial_staging_on_copy_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Copy failure during staging leaves previous update/ intact."""
+    app_root = tmp_path
+    staging = app_root / "update"
+    (staging / "existing.py").parent.mkdir(parents=True, exist_ok=True)
+    (staging / "existing.py").write_text("stable", encoding="utf-8")
+
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"fresh"})
+
+    def _raise_copytree(_src, _dst, **_kwargs):
+        raise OSError("simulated copytree failure")
+
+    monkeypatch.setattr("handoff.updater.shutil.copytree", _raise_copytree)
+
+    with pytest.raises(OSError, match="simulated copytree failure"):
+        stage_patch_with_backup(
+            BytesIO(zip_bytes),
+            app_root=app_root,
+            app_version="2026.3.1",
+        )
+
+    assert (staging / "existing.py").read_text(encoding="utf-8") == "stable"
+    assert not (app_root / "update.tmp").exists()
+
+
+def test_extract_patch_to_staging_does_not_leave_partial_staging_on_copy_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Copy failure during plain staging leaves previous update/ intact."""
+    app_root = tmp_path
+    staging = app_root / "update"
+    (staging / "existing.py").parent.mkdir(parents=True, exist_ok=True)
+    (staging / "existing.py").write_text("stable", encoding="utf-8")
+
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"fresh"})
+
+    def _raise_copytree(_src, _dst, **_kwargs):
+        raise OSError("simulated copytree failure")
+
+    monkeypatch.setattr("handoff.updater.shutil.copytree", _raise_copytree)
+
+    with pytest.raises(OSError, match="simulated copytree failure"):
+        extract_patch_to_staging(
+            BytesIO(zip_bytes),
+            app_root=app_root,
+        )
+
+    assert (staging / "existing.py").read_text(encoding="utf-8") == "stable"
+    assert not (app_root / "update.tmp").exists()
 
 
 def test_extract_patch_to_staging_no_applicable_files(tmp_path: Path) -> None:
