@@ -35,6 +35,10 @@ def test_build_full_dry_run_creates_build_structure(
     assert (app_dir / "src" / "handoff").exists()
     # Windows dry-run writes handoff.bat
     assert (app_dir / "handoff.bat").exists()
+    launcher = (app_dir / "handoff.bat").read_text(encoding="utf-8")
+    assert "if errorlevel 2 (" in launcher
+    assert "Staged files remain in .\\update. Close running apps and retry." in launcher
+    assert "exit /b 1" in launcher
 
 
 def test_build_full_dry_run_mac_creates_sh_launcher(
