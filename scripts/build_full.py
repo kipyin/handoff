@@ -328,6 +328,10 @@ def _write_handoff_bat() -> None:
         if exist "%SCRIPT_DIR%update\*" (
             echo Applying update...
             xcopy /E /Y "%SCRIPT_DIR%update\*" "%SCRIPT_DIR%" >nul
+            if errorlevel 1 (
+                echo Update failed. Staged files remain in update\ for retry.
+                exit /b 1
+            )
             rmdir /s /q "%SCRIPT_DIR%update" 2>nul
             echo Update applied.
         )
