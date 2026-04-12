@@ -64,7 +64,7 @@ if "Handoff" not in globals():
             back_populates="handoff",
             sa_relationship_kwargs={
                 "cascade": "all, delete-orphan",
-                "order_by": "CheckIn.check_in_date, CheckIn.created_at",
+                "order_by": "CheckIn.check_in_date, CheckIn.created_at, CheckIn.id",
             },
         )
 
