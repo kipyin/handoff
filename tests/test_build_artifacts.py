@@ -231,3 +231,22 @@ def test_obfuscate_raises_runtime_error_for_non_license_pyarmor_failure(
 
     with pytest.raises(RuntimeError, match="PyArmor failed while obfuscating application code"):
         build_full_module._obfuscate_app_code_with_pyarmor()
+
+
+def test_write_handoff_bat_keeps_staging_on_xcopy_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Generated handoff.bat preserves update/ when xcopy fails."""
+    app_build_dir = tmp_path / "build" / "handoff"
+    app_build_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(build_full_module, "APP_BUILD_DIR", app_build_dir)
+
+    build_full_module._write_handoff_bat()
+    content = (app_build_dir / "handoff.bat").read_text(encoding="utf-8")
+
+    assert 'xcopy /E /Y "%SCRIPT_DIR%update\\*" "%SCRIPT_DIR%" >nul' in content
+    assert "if errorlevel 1 (" in content
+    assert "Update failed. Staged files are still in .\\update\\ for retry." in content
+    assert "Close running apps and run handoff.bat again." in content
+    assert "exit /b 1" in content
