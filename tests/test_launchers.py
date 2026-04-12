@@ -66,7 +66,6 @@ class TestLaunchers:
         assert xcopy_index != -1 and guard_index != -1 and exit_index != -1 and remove_index != -1
         assert xcopy_index < guard_index < exit_index < remove_index
         assert "Update failed. Staged files are still in .\\update\\ for retry." in content
-        assert "exit /b 1" in content
         assert "python\\python.exe" in content
         assert "PYTHONPATH" in content
         assert "PYTHONHOME" in content
