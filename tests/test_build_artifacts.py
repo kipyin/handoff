@@ -245,8 +245,21 @@ def test_write_handoff_bat_keeps_staging_on_xcopy_failure(
     build_full_module._write_handoff_bat()
     content = (app_build_dir / "handoff.bat").read_text(encoding="utf-8")
 
-    assert 'xcopy /E /Y "%SCRIPT_DIR%update\\*" "%SCRIPT_DIR%" >nul' in content
-    assert "if errorlevel 1 (" in content
+    xcopy_line = 'xcopy /E /Y "%SCRIPT_DIR%update\\*" "%SCRIPT_DIR%" >nul'
+    guard_line = "if %XCOPY_EXIT% GEQ 2 ("
+    exit_line = "exit /b %XCOPY_EXIT%"
+    remove_update_line = 'rmdir /s /q "%SCRIPT_DIR%update" 2>nul'
+
+    assert xcopy_line in content
+    assert "set XCOPY_EXIT=%ERRORLEVEL%" in content
+    assert guard_line in content
     assert "Update failed. Staged files are still in .\\update\\ for retry." in content
     assert "Close running apps and run handoff.bat again." in content
-    assert "exit /b 1" in content
+    assert exit_line in content
+
+    xcopy_index = content.find(xcopy_line)
+    guard_index = content.find(guard_line)
+    exit_index = content.find(exit_line)
+    remove_index = content.find(remove_update_line)
+    assert xcopy_index != -1 and guard_index != -1 and exit_index != -1 and remove_index != -1
+    assert xcopy_index < guard_index < exit_index < remove_index
