@@ -16,17 +16,17 @@ ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
 
 
-def _runtime_dependency_names() -> set[str]:
-    """Return normalized package names from [project].dependencies."""
+def _runtime_dependency_specs() -> dict[str, str]:
+    """Map normalized package name to full requirement line from [project].dependencies."""
     with PYPROJECT.open("rb") as fp:
         data = tomllib.load(fp)
     deps = data["project"].get("dependencies", [])
-    names: set[str] = set()
+    specs: dict[str, str] = {}
     for spec in deps:
-        match = re.match(r"^[A-Za-z0-9_.-]+", spec)
+        match = re.match(r"^([A-Za-z0-9_.-]+)", spec)
         if match:
-            names.add(match.group(0).lower())
-    return names
+            specs[match.group(1).lower()] = spec.strip()
+    return specs
 
 
 def test_cli_module_exports_main_and_app() -> None:
@@ -53,6 +53,10 @@ def test_cli_command_stub_via_invoke() -> None:
 
 def test_app_cli_runtime_dependencies_include_typer_and_rich() -> None:
     """Runtime deps must include CLI modules imported by handoff entrypoint."""
-    runtime_deps = _runtime_dependency_names()
-    assert "typer" in runtime_deps
-    assert "rich" in runtime_deps
+    specs = _runtime_dependency_specs()
+    typer_spec = specs.get("typer")
+    rich_spec = specs.get("rich")
+    assert typer_spec is not None, "typer must be a runtime dependency"
+    assert rich_spec is not None, "rich must be a runtime dependency"
+    assert re.search(r">=\s*0\.12\.3", typer_spec), typer_spec
+    assert re.search(r">=\s*13\.7\.0", rich_spec), rich_spec

@@ -277,7 +277,7 @@ def test_stage_patch_with_backup_cleans_staging_on_partial_copy_failure(
         app_version="2026.3.1",
     )
 
-    assert message == "Failed to stage patch to ./update."
+    assert message == "Failed to copy patch into ./update."
     assert not (app_root / "update").exists()
     assert not (app_root / "backup").exists()
     assert (app_root / "app.py").read_text(encoding="utf-8") == "old app"

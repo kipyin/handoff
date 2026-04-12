@@ -134,7 +134,7 @@ def _copy_tree_files(src_root: Path, dest_root: Path) -> tuple[list[str], list[s
             shutil.copy2(src, dest)
             copied.append(rel_name)
         except (PermissionError, OSError) as e:
-            logger.warning("Could not copy {} to {}: {}", src, dest, e)
+            logger.warning("Could not copy {} to {}: {}", rel_name, dest, e)
             failed.append(rel_name)
     return copied, failed
 
@@ -245,9 +245,11 @@ def stage_patch_with_backup(
             tmp_staging = Path(tmpdir)
             extracted, extract_failed = _extract_zip_to_dir(zf, members, tmp_staging)
             if not extracted:
-                return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+                return "Failed to extract patch from zip."
             if extract_failed:
-                logger.warning("Some files could not be staged: {}", extract_failed)
+                logger.warning(
+                    "Some files could not be extracted from the patch: {}", extract_failed
+                )
 
             try:
                 staging = _reset_update_staging_dir(app_root)
@@ -256,13 +258,13 @@ def stage_patch_with_backup(
             copied, copy_failed = _copy_tree_files(tmp_staging, staging)
             if not copied:
                 shutil.rmtree(staging, ignore_errors=True)
-                return f"Failed to stage patch to ./{UPDATE_STAGING_DIR}."
+                return f"Failed to copy patch into ./{UPDATE_STAGING_DIR}."
             if copy_failed:
                 logger.warning(
                     "Staging copy failed for {} file(s): {}", len(copy_failed), copy_failed
                 )
                 shutil.rmtree(staging, ignore_errors=True)
-                return f"Failed to stage patch to ./{UPDATE_STAGING_DIR}."
+                return f"Failed to copy patch into ./{UPDATE_STAGING_DIR}."
 
     logger.info("Patch unzipped to {} containing: {}", staging, extracted)
 
@@ -299,7 +301,11 @@ def stage_patch_with_backup(
         msg = "Update files are ready. Close in 2s. Run handoff.bat again to complete the update."
 
     if extract_failed:
-        msg += f" Warning: {len(extract_failed)} file(s) could not be staged."
+        msg += f" Warning: {len(extract_failed)} file(s) could not be extracted from the patch."
+    if copy_failed:
+        msg += (
+            f" Warning: {len(copy_failed)} file(s) could not be copied into ./{UPDATE_STAGING_DIR}."
+        )
     return msg
 
 
@@ -333,9 +339,11 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
             tmp_staging = Path(tmpdir)
             extracted, extract_failed = _extract_zip_to_dir(zf, members, tmp_staging)
             if not extracted:
-                return f"Failed to extract patch to ./{UPDATE_STAGING_DIR}."
+                return "Failed to extract patch from zip."
             if extract_failed:
-                logger.warning("Some files could not be staged: {}", extract_failed)
+                logger.warning(
+                    "Some files could not be extracted from the patch: {}", extract_failed
+                )
 
             try:
                 staging = _reset_update_staging_dir(app_root)
@@ -344,13 +352,13 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
             copied, copy_failed = _copy_tree_files(tmp_staging, staging)
             if not copied:
                 shutil.rmtree(staging, ignore_errors=True)
-                return f"Failed to stage patch to ./{UPDATE_STAGING_DIR}."
+                return f"Failed to copy patch into ./{UPDATE_STAGING_DIR}."
             if copy_failed:
                 logger.warning(
                     "Staging copy failed for {} file(s): {}", len(copy_failed), copy_failed
                 )
                 shutil.rmtree(staging, ignore_errors=True)
-                return f"Failed to stage patch to ./{UPDATE_STAGING_DIR}."
+                return f"Failed to copy patch into ./{UPDATE_STAGING_DIR}."
 
     if target_version:
         logger.info("Staged patch for version {} in {}", target_version, staging)
@@ -367,7 +375,7 @@ def extract_patch_to_staging(file_like: BinaryIO, app_root: Path | None = None) 
         )
 
     if extract_failed:
-        msg += f" Warning: {len(extract_failed)} file(s) could not be staged."
+        msg += f" Warning: {len(extract_failed)} file(s) could not be extracted from the patch."
     return msg
 
 
