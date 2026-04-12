@@ -168,6 +168,50 @@ class TestRenderUpdatePanel:
         assert shutdown["called"]
         st_mock.success.assert_called_once_with("Update staged.")
 
+    def test_apply_button_staging_error_shows_error_without_shutdown(
+        self,
+        monkeypatch,
+        tmp_path: Path,
+    ) -> None:
+        """Exceptions from stage_patch_with_backup should not crash or trigger shutdown."""
+        patch_file = SimpleNamespace(name="patch.zip", seek=lambda _: None)
+        st_mock = self._make_st_mock()
+        st_mock.file_uploader.return_value = patch_file
+        st_mock.button.return_value = True
+
+        shutdown = {"called": False}
+
+        def mock_stage(*_args, **_kwargs):
+            raise OSError("permission denied")
+
+        def mock_shutdown(*_args):
+            shutdown["called"] = True
+
+        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.update_ui.get_patch_version", lambda _f: "2026.4.0"
+        )
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.update_ui._parse_version",
+            lambda v: tuple(int(x) for x in v.split(".")),
+        )
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.update_ui._can_apply_patch", lambda _pv, _av, _aa: True
+        )
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.update_ui.stage_patch_with_backup", mock_stage
+        )
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.update_ui._schedule_shutdown", mock_shutdown
+        )
+
+        render_update_panel("2026.3.1")
+
+        assert not shutdown["called"]
+        st_mock.error.assert_called_once()
+        assert "Failed to stage update" in st_mock.error.call_args[0][0]
+
     def test_sentinel_file_shown_and_removed(self, monkeypatch, tmp_path: Path) -> None:
         """Sentinel file triggers info message and is removed."""
         sentinel = tmp_path / ".last_update_backup"
@@ -241,3 +285,42 @@ class TestRenderUpdatePanel:
         assert restored["called"]
         assert shutdown["called"]
         st_mock.success.assert_called_with("Restore staged.")
+
+    def test_restore_button_staging_error_shows_error_without_shutdown(
+        self,
+        monkeypatch,
+        tmp_path: Path,
+    ) -> None:
+        """Exceptions from stage_restore_from_snapshot should not crash or trigger shutdown."""
+        backup_dir = tmp_path / "backup"
+        backup_dir.mkdir()
+        snapshot_dir = backup_dir / "20260301-120000"
+        snapshot_dir.mkdir()
+
+        st_mock = self._make_st_mock()
+        st_mock.file_uploader.return_value = None
+        st_mock.selectbox.return_value = 0
+        st_mock.button.return_value = True
+
+        shutdown = {"called": False}
+
+        def mock_restore(*_args, **_kwargs):
+            raise OSError("permission denied")
+
+        def mock_shutdown(*_args):
+            shutdown["called"] = True
+
+        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.st", st_mock)
+        monkeypatch.setattr("handoff.interfaces.streamlit.update_ui.get_app_root", lambda: tmp_path)
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.update_ui.stage_restore_from_snapshot", mock_restore
+        )
+        monkeypatch.setattr(
+            "handoff.interfaces.streamlit.update_ui._schedule_shutdown", mock_shutdown
+        )
+
+        render_update_panel("2026.3.1")
+
+        assert not shutdown["called"]
+        st_mock.error.assert_called_once()
+        assert "Failed to stage restore" in st_mock.error.call_args[0][0]

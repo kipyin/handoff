@@ -7,6 +7,7 @@ import threading
 from contextlib import suppress
 
 import streamlit as st
+from loguru import logger
 
 from handoff.bootstrap.paths import get_app_root
 from handoff.updater import (
@@ -72,14 +73,19 @@ def render_update_panel(app_version: str) -> None:
         can_apply = _can_apply_patch(patch_version, app_version, apply_anyway)
         if st.button("Apply and Restart", key="settings_apply_patch", disabled=not can_apply):
             patch_file.seek(0)
-            msg = stage_patch_with_backup(
-                patch_file,
-                app_root=app_root,
-                app_version=app_version,
-                upload_name=patch_file.name,
-            )
-            st.success(msg)
-            _schedule_shutdown(2.0)
+            try:
+                msg = stage_patch_with_backup(
+                    patch_file,
+                    app_root=app_root,
+                    app_version=app_version,
+                    upload_name=patch_file.name,
+                )
+            except Exception as exc:
+                logger.exception("Failed to stage patch update.")
+                st.error(f"Failed to stage update: {exc}")
+            else:
+                st.success(msg)
+                _schedule_shutdown(2.0)
 
     sentinel = app_root / LAST_UPDATE_BACKUP_FILE
     if sentinel.exists():
@@ -112,6 +118,11 @@ def render_update_panel(app_version: str) -> None:
     )
     if selected is not None and st.button("Restore and Restart", key="settings_restore_backup"):
         snapshot_path = snapshots[selected]
-        msg = stage_restore_from_snapshot(snapshot_path, app_root=app_root)
-        st.success(msg)
-        _schedule_shutdown()
+        try:
+            msg = stage_restore_from_snapshot(snapshot_path, app_root=app_root)
+        except Exception as exc:
+            logger.exception("Failed to stage restore snapshot.")
+            st.error(f"Failed to stage restore: {exc}")
+        else:
+            st.success(msg)
+            _schedule_shutdown()
