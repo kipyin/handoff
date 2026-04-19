@@ -9,7 +9,7 @@ dependencies = [
     "sqlmodel>=0.0.22",
     "loguru>=0.7.3",
     "platformdirs>=4.0.0",
-    "typer>=0.12.3",
+    "typer>=0.24.1",
     "rich>=15.0.0",
 ]
 
