@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import shutil
+import tempfile
 import zipfile
 from io import BytesIO
 from pathlib import Path
+
+from loguru import logger
 
 from handoff.updater import (
     _backup_dir_name,
@@ -601,3 +604,219 @@ def test_apply_patch_zip_skips_traversal_paths(tmp_path: Path) -> None:
     assert (app_root / "app.py").read_text(encoding="utf-8") == "new"
     assert not (app_root / "escape.txt").exists()
     assert not (app_root.parent / "escape.txt").exists()
+
+
+# --- Test coverage for PR #219 message clarity and path handling ---
+
+
+def test_stage_patch_copy_failure_posix_path_logging(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Copy failures log relative POSIX paths, not absolute paths."""
+    app_root = tmp_path
+    (app_root / "app.py").write_text("old app", encoding="utf-8")
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"new app", "src/nested/file.py": b"content"})
+    
+    real_copy2 = shutil.copy2
+    logged_errors = []
+    
+    def failing_copy2(src, dst, *args, **kwargs):
+        dst_path = Path(dst)
+        if "nested" in dst_path.as_posix():
+            raise OSError("simulated copy failure")
+        return real_copy2(src, dst, *args, **kwargs)
+    
+    monkeypatch.setattr("handoff.updater.shutil.copy2", failing_copy2)
+    
+    # Monkeypatch logger to capture calls
+    original_warning = logger.warning
+    def capture_warning(msg, *args, **kwargs):
+        logged_errors.append((msg, args))
+        return original_warning(msg, *args, **kwargs)
+    
+    monkeypatch.setattr("handoff.updater.logger.warning", capture_warning)
+    
+    message = stage_patch_with_backup(
+        BytesIO(zip_bytes),
+        app_root=app_root,
+        app_version="2026.3.1",
+    )
+    
+    # Message should indicate copy failure
+    assert "Failed to copy patch into ./update." == message
+    # Verify that POSIX path was logged (relative, not absolute)
+    assert any("src/nested/file.py" in str(args) for msg, args in logged_errors)
+
+
+def test_extract_patch_to_staging_partial_extract_failure_message(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """extract_patch_to_staging reports extract-specific failures in message."""
+    app_root = tmp_path
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"content1", "src/file.py": b"content2"})
+    
+    from handoff.updater import _extract_zip_to_dir
+    
+    real_extract_zip_to_dir = _extract_zip_to_dir
+    
+    def partial_extract(zf, members, target_dir):
+        # Return only first file extracted, mark second as failed
+        extracted, failed = real_extract_zip_to_dir(zf, members[:1], target_dir)
+        failed.extend(members[1:])
+        return extracted, failed
+    
+    monkeypatch.setattr(
+        "handoff.updater._extract_zip_to_dir",
+        partial_extract,
+    )
+    
+    message = extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+    
+    # Should warn about extract failures specifically
+    assert "extracted from the patch" in message
+    assert "1 file(s) could not be extracted" in message
+
+
+def test_stage_patch_distinguishes_extract_vs_copy_failures(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """stage_patch_with_backup shows separate warnings for extract and copy failures."""
+    app_root = tmp_path
+    (app_root / "app.py").write_text("old app", encoding="utf-8")
+    zip_bytes = _build_patch_zip_bytes(
+        {
+            "app.py": b"content1",
+            "src/file1.py": b"content2",
+            "README.md": b"content3",
+        }
+    )
+    
+    from handoff.updater import _extract_zip_to_dir, _copy_tree_files
+    
+    real_extract = _extract_zip_to_dir
+    real_copy = _copy_tree_files
+    
+    def partial_extract(zf, members, target_dir):
+        # Fail to extract one file
+        extracted, failed = real_extract(zf, members[:2], target_dir)
+        failed.extend(members[2:])
+        return extracted, failed
+    
+    def partial_copy(src_root, dest_root):
+        # Simulate copy failure for one file
+        copied, failed = real_copy(src_root, dest_root)
+        if len(copied) > 1:
+            # Mark second copied file as failed
+            failed = failed + [copied[1]]
+            copied = copied[:1]
+        return copied, failed
+    
+    monkeypatch.setattr("handoff.updater._extract_zip_to_dir", partial_extract)
+    monkeypatch.setattr("handoff.updater._copy_tree_files", partial_copy)
+    
+    logged_messages = []
+    original_warning = logger.warning
+    def capture_warning(msg, *args, **kwargs):
+        logged_messages.append(msg)
+        return original_warning(msg, *args, **kwargs)
+    
+    monkeypatch.setattr("handoff.updater.logger.warning", capture_warning)
+    
+    message = stage_patch_with_backup(
+        BytesIO(zip_bytes),
+        app_root=app_root,
+        app_version="2026.3.1",
+    )
+    
+    # Should warn about extract failure
+    assert any("extracted from the patch" in msg for msg in logged_messages)
+    # Should warn about copy failure
+    assert any("Staging copy failed" in msg or "copied into" in msg for msg in logged_messages)
+
+
+def test_extract_patch_to_staging_extract_only_failure_message(
+    tmp_path: Path,
+) -> None:
+    """extract_patch_to_staging returns extract-specific message on failure."""
+    app_root = tmp_path
+    
+    # Zip with no allowed paths - will have empty members list
+    zip_bytes = _build_patch_zip_bytes({"other/disallowed.txt": b"content"})
+    
+    message = extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+    
+    assert "No applicable files found in patch zip." in message
+    assert not (app_root / "update").exists()
+
+
+def test_stage_patch_copy_failure_cleans_and_reports_copy_message(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """Copy failures clean up partial update dir and report copy-specific message."""
+    app_root = tmp_path
+    (app_root / "app.py").write_text("old app", encoding="utf-8")
+    zip_bytes = _build_patch_zip_bytes({"app.py": b"new app", "src/module.py": b"new src"})
+    
+    real_copy2 = shutil.copy2
+    
+    def flaky_copy2(src, dst, *args, **kwargs):
+        if Path(dst).as_posix().endswith("update/src/module.py"):
+            raise OSError("simulated copy failure")
+        return real_copy2(src, dst, *args, **kwargs)
+    
+    monkeypatch.setattr("handoff.updater.shutil.copy2", flaky_copy2)
+    
+    message = stage_patch_with_backup(
+        BytesIO(zip_bytes),
+        app_root=app_root,
+        app_version="2026.3.1",
+    )
+    
+    # Message should distinguish this as a copy failure
+    assert message == "Failed to copy patch into ./update."
+    # Staging should be cleaned up
+    assert not (app_root / "update").exists()
+    # Backup should be cleaned up too since patch failed
+    assert not (app_root / "backup").exists()
+    # Original unchanged
+    assert (app_root / "app.py").read_text(encoding="utf-8") == "old app"
+
+
+def test_extract_patch_to_staging_partial_copy_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """extract_patch_to_staging reports copy failure in message and cleans staging."""
+    app_root = tmp_path
+    zip_bytes = _build_patch_zip_bytes(
+        {
+            "app.py": b"content1",
+            "src/file1.py": b"content2",
+            "src/file2.py": b"content3",
+        }
+    )
+    
+    from handoff.updater import _copy_tree_files
+    
+    real_copy = _copy_tree_files
+    
+    def partial_copy(src_root, dest_root):
+        # Successfully copy only first file
+        copied, failed = real_copy(src_root, dest_root)
+        if len(copied) > 1:
+            failed.extend(copied[1:])
+            copied = copied[:1]
+        return copied, failed
+    
+    monkeypatch.setattr("handoff.updater._copy_tree_files", partial_copy)
+    
+    message = extract_patch_to_staging(BytesIO(zip_bytes), app_root=app_root)
+    
+    # Message should report copy failure (either in error message or warning)
+    assert "Failed to copy patch into ./update." in message or "file(s) could not be copied" in message
+    # Staging should be cleaned up on failure
+    assert not (app_root / "update").exists()
