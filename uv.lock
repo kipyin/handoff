@@ -291,7 +291,7 @@ requires-dist = [
     { name = "rich", specifier = ">=15.0.0" },
     { name = "sqlmodel", specifier = ">=0.0.22" },
     { name = "streamlit", specifier = ">=1.56.0" },
-    { name = "typer", specifier = ">=0.24.1" },
+    { name = "typer", specifier = ">=0.27.1" },
 ]
 
 [package.metadata.requires-dev]
