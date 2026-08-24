@@ -96,12 +96,12 @@ def create_handoff(
 def update_handoff(
     handoff_id: int,
     *,
-    project_id: int | None | _Unset = _UNSET,
-    need_back: str | None | _Unset = _UNSET,
-    next_check: date | None | _Unset = _UNSET,
-    deadline: date | None | _Unset = _UNSET,
-    pitchman: str | list[str] | None | _Unset = _UNSET,
-    notes: str | None | _Unset = _UNSET,
+    project_id: int | _Unset | None = _UNSET,
+    need_back: str | _Unset | None = _UNSET,
+    next_check: date | _Unset | None = _UNSET,
+    deadline: date | _Unset | None = _UNSET,
+    pitchman: str | list[str] | _Unset | None = _UNSET,
+    notes: str | _Unset | None = _UNSET,
 ) -> Handoff | None:
     """Update a handoff by id. Only provided fields are updated.
 
