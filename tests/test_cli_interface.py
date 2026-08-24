@@ -58,5 +58,5 @@ def test_app_cli_runtime_dependencies_include_typer_and_rich() -> None:
     rich_spec = specs.get("rich")
     assert typer_spec is not None, "typer must be a runtime dependency"
     assert rich_spec is not None, "rich must be a runtime dependency"
-    assert re.search(r">=\s*0\.24\.1", typer_spec), typer_spec
+    assert re.search(r">=\s*0\.27\.1", typer_spec), typer_spec
     assert re.search(r">=\s*15\.0\.0", rich_spec), rich_spec
