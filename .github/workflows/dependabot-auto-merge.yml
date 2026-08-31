@@ -1,0 +1,72 @@
+# Squash-merge Dependabot PRs after the CI workflow is green.
+# Human PRs (including drafts) are never merged by this workflow.
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+  checks: read
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]' && github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Dependabot metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for CI
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          echo "Waiting for CI workflow on ${SHA}..."
+          run_id=""
+          for _ in $(seq 1 40); do
+            run_id="$(gh run list \
+              --repo "${REPO}" \
+              --workflow ci.yml \
+              --commit "${SHA}" \
+              --event pull_request \
+              --json databaseId \
+              --jq '.[0].databaseId // empty')"
+            if [ -n "${run_id}" ]; then
+              break
+            fi
+            sleep 15
+          done
+          if [ -z "${run_id}" ]; then
+            echo "No CI run found for ${SHA}; refusing to merge."
+            exit 1
+          fi
+          echo "Watching CI run ${run_id}"
+          gh run watch "${run_id}" --exit-status --repo "${REPO}"
+
+      - name: Squash-merge Dependabot PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          head_sha="$(gh pr view "${PR_URL}" --json headRefOid --jq .headRefOid)"
+          if [ "${head_sha}" != "${EXPECTED_SHA}" ]; then
+            echo "PR HEAD moved from ${EXPECTED_SHA} to ${head_sha}; not merging this run."
+            exit 0
+          fi
+          # --auto waits for required checks when branch protection exists.
+          # main is currently unprotected, so we already waited for CI above.
+          # If allow_auto_merge is still off, fall back to squash-merge now.
+          if ! gh pr merge --auto --squash "${PR_URL}"; then
+            echo "Auto-merge not available; squash-merging after green CI."
+            gh pr merge --squash "${PR_URL}"
+          fi
