@@ -25,7 +25,7 @@ jobs:
       - name: Wait for CI
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
+          GH_REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
@@ -33,7 +33,6 @@ jobs:
           run_id=""
           for _ in $(seq 1 40); do
             run_id="$(gh run list \
-              --repo "${REPO}" \
               --workflow ci.yml \
               --commit "${SHA}" \
               --event pull_request \
@@ -49,24 +48,21 @@ jobs:
             exit 1
           fi
           echo "Watching CI run ${run_id}"
-          gh run watch "${run_id}" --exit-status --repo "${REPO}"
+          gh run watch "${run_id}" --exit-status
 
       - name: Squash-merge Dependabot PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          head_sha="$(gh pr view "${PR_URL}" --json headRefOid --jq .headRefOid)"
-          if [ "${head_sha}" != "${EXPECTED_SHA}" ]; then
-            echo "PR HEAD moved from ${EXPECTED_SHA} to ${head_sha}; not merging this run."
-            exit 0
-          fi
           # --auto waits for required checks when branch protection exists.
           # main is currently unprotected, so we already waited for CI above.
+          # --match-head-commit refuses to merge if Dependabot pushed again.
           # If allow_auto_merge is still off, fall back to squash-merge now.
-          if ! gh pr merge --auto --squash "${PR_URL}"; then
+          if ! gh pr merge --auto --squash --match-head-commit "${EXPECTED_SHA}" "${PR_URL}"; then
             echo "Auto-merge not available; squash-merging after green CI."
-            gh pr merge --squash "${PR_URL}"
+            gh pr merge --squash --match-head-commit "${EXPECTED_SHA}" "${PR_URL}"
           fi
