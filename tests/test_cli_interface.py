@@ -51,6 +51,13 @@ def test_cli_command_stub_via_invoke() -> None:
     assert "not implemented" in result.stdout.lower()
 
 
+def _minimum_version(spec: str) -> tuple[int, ...]:
+    """Return the declared >= lower bound as a comparable version tuple."""
+    match = re.search(r">=\s*([0-9]+(?:\.[0-9]+)*)", spec)
+    assert match is not None, f"expected a >= lower bound in {spec!r}"
+    return tuple(int(part) for part in match.group(1).split("."))
+
+
 def test_app_cli_runtime_dependencies_include_typer_and_rich() -> None:
     """Runtime deps must include CLI modules imported by handoff entrypoint."""
     specs = _runtime_dependency_specs()
@@ -58,5 +65,7 @@ def test_app_cli_runtime_dependencies_include_typer_and_rich() -> None:
     rich_spec = specs.get("rich")
     assert typer_spec is not None, "typer must be a runtime dependency"
     assert rich_spec is not None, "rich must be a runtime dependency"
-    assert re.search(r">=\s*0\.27\.1", typer_spec), typer_spec
-    assert re.search(r">=\s*15\.0\.0", rich_spec), rich_spec
+    # Compare the declared floor, not an exact pin, so Dependabot lower-bound
+    # bumps do not break this guarantee check.
+    assert _minimum_version(typer_spec) >= (0, 27, 1), typer_spec
+    assert _minimum_version(rich_spec) >= (15, 0, 0), rich_spec
