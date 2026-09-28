@@ -3,10 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from handoff.core.models import CheckIn, CheckInType, Handoff, Project
+
+
+def _parse_backup_datetime(raw: object) -> datetime:
+    """Parse ISO datetimes from backup JSON; treat naive values as UTC."""
+    text = str(raw).replace("Z", "+00:00")
+    dt = datetime.fromisoformat(text)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 def _require_model_id(value: int | None, *, label: str) -> int:
@@ -31,7 +40,7 @@ class BackupProjectRecord:
         return cls(
             id=int(raw["id"]),
             name=str(raw["name"]),
-            created_at=datetime.fromisoformat(str(raw["created_at"])),
+            created_at=_parse_backup_datetime(raw["created_at"]),
             is_archived=bool(raw.get("is_archived", False)),
         )
 
@@ -83,7 +92,7 @@ class BackupHandoffRecord:
             ),
             deadline=date.fromisoformat(str(raw["deadline"])) if raw.get("deadline") else None,
             notes=str(notes) if notes is not None else None,
-            created_at=datetime.fromisoformat(str(raw["created_at"])),
+            created_at=_parse_backup_datetime(raw["created_at"]),
         )
 
     @classmethod
@@ -135,7 +144,7 @@ class BackupCheckInRecord:
             check_in_date=date.fromisoformat(str(raw["check_in_date"])),
             note=str(note) if note is not None else None,
             check_in_type=CheckInType(str(raw["check_in_type"])),
-            created_at=datetime.fromisoformat(str(raw["created_at"])),
+            created_at=_parse_backup_datetime(raw["created_at"]),
         )
 
     @classmethod
@@ -172,7 +181,7 @@ def _legacy_todo_to_handoff_record(raw: dict[str, Any]) -> BackupHandoffRecord:
         next_check=(date.fromisoformat(str(raw["next_check"])) if raw.get("next_check") else None),
         deadline=date.fromisoformat(str(raw["deadline"])) if raw.get("deadline") else None,
         notes=str(raw["notes"]) if raw.get("notes") is not None else None,
-        created_at=datetime.fromisoformat(str(raw["created_at"])),
+        created_at=_parse_backup_datetime(raw["created_at"]),
     )
 
 
@@ -185,10 +194,10 @@ def _legacy_todo_to_check_in(
         return None
     completed_at_str = raw.get("completed_at")
     if completed_at_str:
-        created_at = datetime.fromisoformat(str(completed_at_str))
+        created_at = _parse_backup_datetime(completed_at_str)
         ci_date = created_at.date()
     else:
-        created_at = datetime.fromisoformat(str(raw["created_at"]))
+        created_at = _parse_backup_datetime(raw["created_at"])
         ci_date = created_at.date()
     note = "canceled" if status == "canceled" else None
     return BackupCheckInRecord(
