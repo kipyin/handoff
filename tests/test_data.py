@@ -3,7 +3,7 @@
 import dataclasses
 import importlib
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -867,7 +867,7 @@ def test_latest_check_in_tie_breaks_by_id_in_python_and_sql(session, monkeypatch
     session.commit()
     session.refresh(p)
 
-    same_ts = datetime(2026, 3, 9, 10, 0, 0)
+    same_ts = datetime(2026, 3, 9, 10, 0, 0, tzinfo=UTC)
 
     latest_open = Handoff(project_id=p.id, need_back="Latest open by id")
     latest_concluded = Handoff(project_id=p.id, need_back="Latest concluded by id")
@@ -988,7 +988,7 @@ def test_query_open_handoffs_for_now_filters_and_orders(session, monkeypatch) ->
         pitchman="Alice",
         next_check=date(2026, 3, 10),
         deadline=date(2026, 3, 20),
-        created_at=datetime(2026, 3, 1, 9, 0, 0),
+        created_at=datetime(2026, 3, 1, 9, 0, 0, tzinfo=UTC),
     )
     second = Handoff(
         project_id=active.id,
@@ -996,7 +996,7 @@ def test_query_open_handoffs_for_now_filters_and_orders(session, monkeypatch) ->
         pitchman="Alice",
         next_check=date(2026, 3, 10),
         deadline=date(2026, 3, 21),
-        created_at=datetime(2026, 3, 1, 8, 0, 0),
+        created_at=datetime(2026, 3, 1, 8, 0, 0, tzinfo=UTC),
     )
     no_next = Handoff(
         project_id=active.id,
@@ -1004,28 +1004,28 @@ def test_query_open_handoffs_for_now_filters_and_orders(session, monkeypatch) ->
         pitchman="Alice",
         next_check=None,
         deadline=None,
-        created_at=datetime(2026, 3, 1, 7, 0, 0),
+        created_at=datetime(2026, 3, 1, 7, 0, 0, tzinfo=UTC),
     )
     closed = Handoff(
         project_id=active.id,
         need_back="Closed item",
         pitchman="Alice",
         next_check=date(2026, 3, 9),
-        created_at=datetime(2026, 3, 1, 6, 0, 0),
+        created_at=datetime(2026, 3, 1, 6, 0, 0, tzinfo=UTC),
     )
     other_pitchman = Handoff(
         project_id=active.id,
         need_back="Other pitchman",
         pitchman="Bob",
         next_check=date(2026, 3, 9),
-        created_at=datetime(2026, 3, 1, 5, 0, 0),
+        created_at=datetime(2026, 3, 1, 5, 0, 0, tzinfo=UTC),
     )
     archived_item = Handoff(
         project_id=archived.id,
         need_back="Archived item",
         pitchman="Alice",
         next_check=date(2026, 3, 9),
-        created_at=datetime(2026, 3, 1, 4, 0, 0),
+        created_at=datetime(2026, 3, 1, 4, 0, 0, tzinfo=UTC),
     )
     session.add_all([first, second, no_next, closed, other_pitchman, archived_item])
     session.commit()
@@ -1518,17 +1518,17 @@ def test_query_concluded_handoffs_orders_by_close_date_not_created_at(session, m
     created_middle_closed_latest = Handoff(
         project_id=project.id,
         need_back="Close latest",
-        created_at=datetime(2026, 1, 2, 12, 0, 0),
+        created_at=datetime(2026, 1, 2, 12, 0, 0, tzinfo=UTC),
     )
     created_first_closed_middle = Handoff(
         project_id=project.id,
         need_back="Close middle",
-        created_at=datetime(2026, 1, 1, 12, 0, 0),
+        created_at=datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
     )
     created_last_closed_earliest = Handoff(
         project_id=project.id,
         need_back="Close earliest",
-        created_at=datetime(2026, 1, 3, 12, 0, 0),
+        created_at=datetime(2026, 1, 3, 12, 0, 0, tzinfo=UTC),
     )
     session.add_all(
         [

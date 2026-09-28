@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -36,7 +36,7 @@ class TestBackupProjectRecord:
         record = BackupProjectRecord.from_dict(raw)
         assert record.id == 1
         assert record.name == "Work"
-        assert record.created_at == datetime(2026, 1, 15, 10, 30)
+        assert record.created_at == datetime(2026, 1, 15, 10, 30, tzinfo=UTC)
         assert record.is_archived is True
 
         d = record.to_dict()
@@ -102,7 +102,7 @@ class TestBackupHandoffRecord:
             next_check=date(2026, 5, 15),
             deadline=date(2026, 6, 1),
             notes="Done!",
-            created_at=datetime(2026, 5, 1),
+            created_at=datetime(2026, 5, 1, tzinfo=UTC),
         )
         d = record.to_dict()
         assert d["deadline"] == "2026-06-01"
